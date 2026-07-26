@@ -23,12 +23,14 @@ public class DynamicBSPData extends DynamicData {
     private final BSPNode rootNode;
     private final int generation;
     private final UpdatedQuadsList updatedQuadsList; // TODO: delete reference after mesh task is done since this won't be needed anymore after that
+    private final boolean neededQuadSplitting;
 
     private DynamicBSPData(SectionPos sectionPos, int inputQuadCount, BSPResult result, Vector3dc initialCameraPos, int generation) {
         super(sectionPos, inputQuadCount, result, initialCameraPos);
         this.rootNode = result.getRootNode();
         this.generation = generation;
         this.updatedQuadsList = result.getUpdatedQuadsList();
+        this.neededQuadSplitting = this.updatedQuadsList != null;
 
         if (this.updatedQuadsList != null) {
             this.indexQuadCount = this.updatedQuadsList.getIndexQuadCount();
@@ -69,20 +71,29 @@ public class DynamicBSPData extends DynamicData {
         return this.updatedQuadsList;
     }
 
+    @Override
+    public boolean meshesWereModified() {
+        return this.neededQuadSplitting;
+    }
+
     public static DynamicBSPData fromMesh(CombinedCameraPos cameraPos, TQuad[] quads, SectionPos sectionPos,
                                           TranslucentData oldData, QuadSplittingMode quadSplittingMode) {
         BSPNode oldRoot = null;
         int generation = 0;
         boolean prepareNodeReuse = false;
+        boolean allowNodeReuse = false;
         if (oldData instanceof DynamicBSPData oldBSPData) {
             generation = oldBSPData.generation + 1;
             oldRoot = oldBSPData.rootNode;
 
+            // disallow making use of node reuse if quad splitting ended up being needed when the tree was originally built
+            allowNodeReuse = !oldBSPData.neededQuadSplitting;
+
             // only enable partial updates after a certain number of generations
             // (times the section has been built)
-            prepareNodeReuse = generation >= NODE_REUSE_MIN_GENERATION;
+            prepareNodeReuse = allowNodeReuse && generation >= NODE_REUSE_MIN_GENERATION;
         }
-        var result = BSPNode.buildBSP(quads, sectionPos, oldRoot, prepareNodeReuse, quadSplittingMode);
+        var result = BSPNode.buildBSP(quads, sectionPos, oldRoot, prepareNodeReuse, allowNodeReuse, quadSplittingMode);
 
         var dynamicData = new DynamicBSPData(sectionPos, quads.length, result, cameraPos.getAbsoluteCameraPos(), generation);
 
