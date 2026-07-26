@@ -13,11 +13,7 @@ import re.lilith.kalia.texture.TextureTable;
 
 public class KaliaAccess {
     public static RenderDevice device() {
-        RenderDevice device = KaliaEngine.INSTANCE.getDevice();
-        if (device == null) {
-            throw new IllegalStateException("Kalia is not running; Sodium must not render.");
-        }
-        return device;
+        return KaliaEngine.INSTANCE.getDevice();
     }
 
     public static PassContext pass() {
