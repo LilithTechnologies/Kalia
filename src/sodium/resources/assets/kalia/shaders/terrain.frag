@@ -1,8 +1,5 @@
 #version 450
 
-// Ported from Graphite's terrain.slang (+ helpers.chunk_material, helpers.fog).
-// Push-constant layout must stay byte-identical to terrain.vert and DefaultShaderInterface.
-
 layout(location = 0) in vec4 v_color;
 layout(location = 1) in vec2 v_uv;
 layout(location = 2) in vec2 v_fragDistance;
@@ -36,8 +33,6 @@ const uint MATERIAL_USE_MIP_OFFSET = 0u;
 #define FOG_EXP2     1
 #define FOG_DENSITY  pc.fogDensity_pad.x
 
-// The OpenGL 2.1 fixed-function fog stage (3.10), same as Kalia's core shaders so terrain fogs
-// identically to everything drawn around it. Returns how much of the fragment survives.
 float fogFactor(float viewDistance) {
     int mode = FOG_MODE;
     if (mode == FOG_EXP) {
@@ -64,7 +59,6 @@ void main() {
         return;
     }
 
-    // y is the spherical distance, which is what the game asks fog to measure.
     float factor = clamp(fogFactor(v_fragDistance.y), 0.0, 1.0);
     vec3 fogColor = clamp(vec3(pc.fogColorRG, pc.fogColorB_Mode.x), 0.0, 1.0);
     out_color = vec4(mix(fogColor, color.rgb, factor), color.a);

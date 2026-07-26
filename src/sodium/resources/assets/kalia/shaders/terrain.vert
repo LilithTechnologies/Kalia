@@ -1,10 +1,5 @@
 #version 450
 
-// Ported from Graphite's terrain.slang (+ helpers.chunk_vertex, helpers.fog).
-// The push-constant block is scalar-packed by DefaultShaderInterface; the member order below
-// lands every field on its documented offset under std430 without needing scalar block layout.
-// fogColor is split into two vec2s for exactly that reason - a vec4 would align up to 160.
-
 layout(location = 0) in uvec2 in_position;
 layout(location = 1) in vec4 in_color;
 layout(location = 2) in uvec2 in_texCoord;
