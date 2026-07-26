@@ -36,6 +36,7 @@ dependencies {
 
     modImplementation(libs.legacy.lwjgl3)
     modImplementation(libs.fabric.loader)
+    modImplementation(libs.fabric.language.kotlin)
 
     ploceus.dependOsl("0.17.0")
 
