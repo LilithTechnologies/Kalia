@@ -1,0 +1,577 @@
+package net.caffeinemc.mods.sodium.client.render.chunk;
+
+import net.caffeinemc.mods.sodium.client.SodiumClientMod;
+import net.caffeinemc.mods.sodium.client.render.chunk.compile.estimation.MeshResultSize;
+import net.caffeinemc.mods.sodium.client.render.chunk.compile.executor.ChunkJob;
+import net.caffeinemc.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
+import net.caffeinemc.mods.sodium.client.render.chunk.occlusion.GraphDirection;
+import net.caffeinemc.mods.sodium.client.render.chunk.occlusion.GraphDirectionSet;
+import net.caffeinemc.mods.sodium.client.render.chunk.occlusion.VisibilityEncoding;
+import net.caffeinemc.mods.sodium.client.render.chunk.region.RenderRegion;
+import net.caffeinemc.mods.sodium.client.render.chunk.translucent_sorting.data.TranslucentData;
+import net.caffeinemc.mods.sodium.legacy.compat.mojang.minecraft.math.SectionPos;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.client.texture.Sprite;
+import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.MathHelper;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+/**
+ * The render state object for a chunk section. This contains all the graphics state for each render pass along with
+ * data about the render in the chunk visibility graph.
+ */
+public class RenderSection {
+    // Render Region State
+    private final RenderRegion region;
+    private final int sectionIndex;
+
+    // Chunk Section State
+    private final int chunkX, chunkY, chunkZ;
+
+    // Occlusion Culling State
+    private long visibilityData = VisibilityEncoding.NULL;
+
+    private int incomingDirections;
+    private int lastVisibleFrame = -1;
+    private long allowedAngles; // 60-bit packed quantized min/max allowed angles, 0-9 minXY, 10-19 maxXY, etc.
+
+    private int adjacentMask;
+    public RenderSection
+            adjacentDown,
+            adjacentUp,
+            adjacentNorth,
+            adjacentSouth,
+            adjacentWest,
+            adjacentEast;
+
+
+    // Rendering State
+    private boolean built = false; // merge with the flags?
+    private int flags = RenderSectionFlags.NONE;
+    private BlockEntity @Nullable [] globalBlockEntities;
+    private BlockEntity @Nullable [] culledBlockEntities;
+    private Sprite @Nullable [] animatedSprites;
+    @Nullable
+    private TranslucentData translucentData;
+
+    // Pending Update State
+    @Nullable
+    private ChunkJob runningJob = null;
+    private long lastMeshResultSize = MeshResultSize.NO_DATA;
+
+    private int pendingUpdateType;
+    private long pendingUpdateSince;
+
+    private int lastUploadFrame = -1;
+    private int lastSubmittedFrame = -1;
+
+    // Lifetime state
+    private boolean disposed;
+    private int fadeTime;
+
+    public RenderSection(RenderRegion region, int chunkX, int chunkY, int chunkZ) {
+        this.chunkX = chunkX;
+        this.chunkY = chunkY;
+        this.chunkZ = chunkZ;
+
+        int rX = this.getChunkX() & RenderRegion.REGION_WIDTH_M;
+        int rY = this.getChunkY() & RenderRegion.REGION_HEIGHT_M;
+        int rZ = this.getChunkZ() & RenderRegion.REGION_LENGTH_M;
+
+        this.sectionIndex = LocalSectionIndex.pack(rX, rY, rZ);
+
+        this.region = region;
+    }
+
+    public RenderSection getAdjacent(int direction) {
+        return switch (direction) {
+            case GraphDirection.DOWN -> this.adjacentDown;
+            case GraphDirection.UP -> this.adjacentUp;
+            case GraphDirection.NORTH -> this.adjacentNorth;
+            case GraphDirection.SOUTH -> this.adjacentSouth;
+            case GraphDirection.WEST -> this.adjacentWest;
+            case GraphDirection.EAST -> this.adjacentEast;
+            default -> null;
+        };
+    }
+
+    public void setAdjacentNode(int direction, RenderSection node) {
+        if (node == null) {
+            this.adjacentMask &= ~GraphDirectionSet.of(direction);
+        } else {
+            this.adjacentMask |= GraphDirectionSet.of(direction);
+        }
+
+        switch (direction) {
+            case GraphDirection.DOWN -> this.adjacentDown = node;
+            case GraphDirection.UP -> this.adjacentUp = node;
+            case GraphDirection.NORTH -> this.adjacentNorth = node;
+            case GraphDirection.SOUTH -> this.adjacentSouth = node;
+            case GraphDirection.WEST -> this.adjacentWest = node;
+            case GraphDirection.EAST -> this.adjacentEast = node;
+            default -> {
+            }
+        }
+    }
+
+    public int getAdjacentMask() {
+        return this.adjacentMask;
+    }
+
+    public TranslucentData getTranslucentData() {
+        return this.translucentData;
+    }
+
+    public void setTranslucentData(TranslucentData translucentData) {
+        if (translucentData == null) {
+            throw new IllegalArgumentException("new translucentData cannot be null");
+        }
+
+        this.translucentData = translucentData;
+    }
+
+    /**
+     * Deletes all data attached to this render and drops any pending tasks. This should be used when the render falls
+     * out of view or otherwise needs to be destroyed. After the render has been destroyed, the object can no longer
+     * be used.
+     */
+    public void delete() {
+        if (this.runningJob != null) {
+            this.runningJob.setCancelled();
+            this.runningJob = null;
+        }
+
+        this.clearRenderState();
+        this.disposed = true;
+    }
+
+    public boolean setInfo(@Nullable BuiltSectionInfo info) {
+        if (info != null) {
+            return this.setRenderState(info);
+        } else {
+            return this.clearRenderState();
+        }
+    }
+
+    private boolean setRenderState(@NotNull BuiltSectionInfo info) {
+        var prevBuilt = this.built;
+        var prevFlags = this.flags;
+        var prevVisibilityData = this.visibilityData;
+
+        this.built = true;
+        this.flags = info.flags;
+        this.visibilityData = info.visibilityData;
+
+        this.globalBlockEntities = info.globalBlockEntities;
+        this.culledBlockEntities = info.culledBlockEntities;
+        this.animatedSprites = info.animatedSprites;
+
+        // the section is marked as having received graph-relevant changes if it's build state, flags, or connectedness has changed.
+        // the entities and sprites don't need to be checked since whether they exist is encoded in the flags.
+        return !prevBuilt || prevFlags != this.flags || prevVisibilityData != this.visibilityData;
+    }
+
+    private boolean clearRenderState() {
+        var wasBuilt = this.built;
+
+        this.built = false;
+        this.flags = RenderSectionFlags.NONE;
+        this.visibilityData = VisibilityEncoding.NULL;
+        this.globalBlockEntities = null;
+        this.culledBlockEntities = null;
+        this.animatedSprites = null;
+
+        // changes to data if it moves from built to not built don't matter, so only build state changes matter
+        return wasBuilt;
+    }
+
+    public void setLastMeshResultSize(long size) {
+        this.lastMeshResultSize = size;
+    }
+
+    public long getLastMeshResultSize() {
+        return this.lastMeshResultSize;
+    }
+
+    /**
+     * Returns the chunk section position which this render refers to in the level.
+     */
+    public SectionPos getPosition() {
+        return SectionPos.of(this.chunkX, this.chunkY, this.chunkZ);
+    }
+
+    /**
+     * @return The x-coordinate of the origin position of this chunk render
+     */
+    public int getOriginX() {
+        return this.chunkX << 4;
+    }
+
+    /**
+     * @return The y-coordinate of the origin position of this chunk render
+     */
+    public int getOriginY() {
+        return this.chunkY << 4;
+    }
+
+    /**
+     * @return The z-coordinate of the origin position of this chunk render
+     */
+    public int getOriginZ() {
+        return this.chunkZ << 4;
+    }
+
+    /**
+     * @return The squared distance from the center of this chunk in the level to the center of the block position
+     * given by {@param pos}
+     */
+    public float getSquaredDistance(BlockPos pos) {
+        return this.getSquaredDistance(pos.getX() + 0.5f, pos.getY() + 0.5f, pos.getZ() + 0.5f);
+    }
+
+    /**
+     * @return The squared distance from the center of this chunk to the given block position
+     */
+    public float getSquaredDistance(float x, float y, float z) {
+        float xDist = x - this.getCenterX();
+        float yDist = y - this.getCenterY();
+        float zDist = z - this.getCenterZ();
+
+        return (xDist * xDist) + (yDist * yDist) + (zDist * zDist);
+    }
+
+    /**
+     * @return The x-coordinate of the center position of this chunk render
+     */
+    public int getCenterX() {
+        return this.getOriginX() + 8;
+    }
+
+    /**
+     * @return The y-coordinate of the center position of this chunk render
+     */
+    public int getCenterY() {
+        return this.getOriginY() + 8;
+    }
+
+    /**
+     * @return The z-coordinate of the center position of this chunk render
+     */
+    public int getCenterZ() {
+        return this.getOriginZ() + 8;
+    }
+
+    public int getChunkX() {
+        return this.chunkX;
+    }
+
+    public int getChunkY() {
+        return this.chunkY;
+    }
+
+    public int getChunkZ() {
+        return this.chunkZ;
+    }
+
+    public boolean isDisposed() {
+        return this.disposed;
+    }
+
+    @Override
+    public String toString() {
+        return String.format("RenderSection at chunk (%d, %d, %d) from (%d, %d, %d) to (%d, %d, %d)",
+                this.chunkX, this.chunkY, this.chunkZ,
+                this.getOriginX(), this.getOriginY(), this.getOriginZ(),
+                this.getOriginX() + 15, this.getOriginY() + 15, this.getOriginZ() + 15);
+    }
+
+    public boolean isBuilt() {
+        return this.built;
+    }
+
+    public int getSectionIndex() {
+        return this.sectionIndex;
+    }
+
+    public RenderRegion getRegion() {
+        return this.region;
+    }
+
+    public void setLastVisibleFrame(int frame) {
+        this.lastVisibleFrame = frame;
+    }
+
+    public int getLastVisibleFrame() {
+        return this.lastVisibleFrame;
+    }
+
+    public int getIncomingDirections() {
+        return this.incomingDirections;
+    }
+
+    public void addIncomingDirections(int directions) {
+        this.incomingDirections |= directions;
+    }
+
+    public void setIncomingDirections(int directions) {
+        this.incomingDirections = directions;
+    }
+
+    private static final int ANGLE_BITS = 10;
+    private static final int ANGLE_MASK = (1 << ANGLE_BITS) - 1;
+    private static final long ANGLES_MIN_MASK =
+            (long) ANGLE_MASK * (1 | (1L << (ANGLE_BITS * 2)) | (1L << (ANGLE_BITS * 4)));
+    private static final long ANGLES_MAX_MASK =
+            (long) ANGLE_MASK * ((1L << ANGLE_BITS) | (1L << (ANGLE_BITS * 3)) | (1L << (ANGLE_BITS * 5)));
+    private static final int LUT_DIM = 32;
+    private static final int LUT_SHIFT = 5; // (1 << 5) = 32
+
+    /**
+     * Lookup table for 20-bit packed (maxAngle(10)<<10) | minAngle(10).
+     * Indexed by [rise + run * 32], where rise/run are integers in [0, 31].
+     */
+    private static final int[] ANGLE_LUT = new int[LUT_DIM * LUT_DIM];
+
+    static {
+        for (int run = 0; run < LUT_DIM; run++) {
+            for (int rise = 0; rise < LUT_DIM; rise++) {
+                ANGLE_LUT[rise + run * LUT_DIM] = generateAngles(rise, run);
+            }
+        }
+    }
+
+    private static int generateAngles(int rise, int run) {
+        double minAngle = Math.atan2(rise - 1, run + 1);
+        double maxAngle = Math.atan2(rise + 1, run - 1);
+
+        // Quantize angles to 10-bit range [0, 1023]
+        int minQuant = (int) (Math.max(0.0, minAngle) * (ANGLE_MASK / (Math.PI / 2.0)));
+        int maxQuant = (int) (Math.min(Math.PI / 2.0, maxAngle) * (ANGLE_MASK / (Math.PI / 2.0)));
+
+        return (minQuant & ANGLE_MASK) | ((maxQuant & ANGLE_MASK) << ANGLE_BITS);
+    }
+
+    public void setOriginAngles() {
+        this.allowedAngles = ANGLES_MAX_MASK;
+    }
+
+    /**
+     * Intersects the allowed angles from the 'other' section with the base angles
+     * subtended by this section.
+     *
+     * @param origin The origin of the visibility check.
+     * @param other  The parent/previous section from which visibility is being propagated.
+     * @param frame  The current frame number.
+     * @return false if this section is guaranteed not visible, true otherwise.
+     */
+    public boolean intersectSlopes(SectionPos origin, RenderSection other, int frame) {
+        if (origin.getY() > 256) return true; // values over 256 appear to break culling
+
+        var dx = Math.abs(origin.getX() - this.getChunkX());
+        var dy = Math.abs(origin.getY() - this.getChunkY());
+        var dz = Math.abs(origin.getZ() - this.getChunkZ());
+
+        // Shift each plane's pair independently to preserve ratios
+        long baseAngles = lookupLut(dx, dy)
+                | ((long) lookupLut(dz, dx) << (2 * ANGLE_BITS))
+                | ((long) lookupLut(dy, dz) << (4 * ANGLE_BITS));
+
+        long pathAngles = parallel_unsigned_max_min(other.allowedAngles, baseAngles);
+
+        // Check if max < min for any plane, which means the path is occluded.
+        long borrows = parallel_unsigned_lt_msbs((pathAngles & ANGLES_MAX_MASK) >> ANGLE_BITS, pathAngles & ANGLES_MIN_MASK);
+        if (borrows != 0) {
+            return false;
+        }
+
+        if (this.lastVisibleFrame == frame) {
+            // This section has been visited before *this frame*.
+            // Union the angles: [min(oldMin, newMin), max(oldMax, newMax)]
+            pathAngles = parallel_unsigned_min_max(pathAngles, this.allowedAngles);
+        }
+        this.allowedAngles = pathAngles;
+
+        return true;
+    }
+
+    private static int lookupLut(int rise, int run) {
+        // Scale this pair down together
+        int shift = 32 - Integer.numberOfLeadingZeros(Math.max(rise, run) | 1);
+        if (shift > LUT_SHIFT) {
+            int s = shift - LUT_SHIFT;
+            rise >>= s;
+            run >>= s;
+        }
+        // Clamp to LUT bounds just in case
+        rise = Math.min(rise, LUT_DIM - 1);
+        run = Math.min(run, LUT_DIM - 1);
+        return ANGLE_LUT[rise + run * LUT_DIM];
+    }
+
+    /**
+     * Performs a parallel unsigned less-than comparison (a < b) for 6 10-bit lanes.
+     *
+     * @param a 6 packed 10-bit values
+     * @param b 6 packed 10-bit values
+     * @return A long with the MSB of each lane (bit 9, 19, 29, ...) set if a_k < b_k.
+     * <p>
+     * Based on `vhaddu8(~a, b)` (LTU_VARIANT 0) from:
+     * <a href="https://stackoverflow.com/a/68717720/3694">Stackoverflow</a>
+     * Citing Peter L. Montgomery's observation
+     * <a href="https://groups.google.com/d/msg/comp.arch/gXFuGZtZKag/_5yrz2zDbe4J">comp.arch, 2000/02/11</a>:
+     * (A+B)/2 = (A AND B) + (A XOR B)/2.
+     * The MSB of (A+B)/2 is the same as the carry-out of (A+B),
+     * and `vhaddu(~a, b)` calculates `(~a+b)/2`, which sets the MSB if `b > a`.
+     */
+    private static long parallel_unsigned_lt_msbs(long a, long b) {
+        // MSB (sign bit) for each 10-bit lane
+        final long LANE_MSB = 1L << (ANGLE_BITS - 1);
+        final long LANE_MSB_MASK = (LANE_MSB << (ANGLE_BITS * 0)) |
+                (LANE_MSB << (ANGLE_BITS * 1)) |
+                (LANE_MSB << (ANGLE_BITS * 2)) |
+                (LANE_MSB << (ANGLE_BITS * 3)) |
+                (LANE_MSB << (ANGLE_BITS * 4)) |
+                (LANE_MSB << (ANGLE_BITS * 5));
+        // All bits *except* the MSB for each 10-bit lane
+        final long LANE_NON_MSB_MASK = ((1L << (ANGLE_BITS * 6)) - 1) ^ LANE_MSB_MASK;
+
+        long vhaddu_result = (~a & b) + (((~a ^ b) >>> 1) & LANE_NON_MSB_MASK);
+        // Return just the MSBs, which are set if a_k < b_k
+        return vhaddu_result & LANE_MSB_MASK;
+    }
+
+    /**
+     * Creates a 30-bit mask (0x3FF per field) where a field is all 1s
+     * if a_k < b_k, and 0 otherwise.
+     */
+    private static long parallel_unsigned_borrow_mask(long a, long b) {
+        // 'msbs' has bits 9, 19, 29, ... set if a_k < b_k
+        long msbs = parallel_unsigned_lt_msbs(a, b);
+
+        // Implements sign_to_mask for 10-bit lanes.
+        // (a + a - (a >> 9)) adapted from 8-bit (a + a - (a >> 7))
+        // This expands the MSB of each lane to fill the entire lane (0x200 -> 0x3FF)
+        return msbs + msbs - (msbs >>> 9);
+    }
+
+    /**
+     * Performs 6 parallel 10-bit *unsigned* min/max operations.
+     *
+     * @param a 6 packed 10-bit values
+     * @param b 6 packed 10-bit values
+     * @return 6 packed 10-bit values containing min(a_0, b_0), max(a_1, b_1), min(a_2, b_2) ..
+     */
+    private static long parallel_unsigned_min_max(long a, long b) {
+        long mask = parallel_unsigned_borrow_mask(a, b);  // all bits set where a < b
+        mask ^= ANGLES_MAX_MASK;  // flip masks for max angles to make it a min operation
+        return (a & mask) | (b & ~mask);  // select based on mask
+    }
+
+    /**
+     * Performs 6 parallel 10-bit *unsigned* min/max operations.
+     *
+     * @param a 6 packed 10-bit values
+     * @param b 6 packed 10-bit values
+     * @return 6 packed 10-bit values containing max(a_0, b_0), min(a_1, b_1), max(a_2, b_2) ..
+     */
+    private static long parallel_unsigned_max_min(long a, long b) {
+        long mask = parallel_unsigned_borrow_mask(a, b);  // all bits set where a < b
+        mask ^= ANGLES_MIN_MASK;  // flip masks for min angles to make it a max operation
+        return (a & mask) | (b & ~mask);  // select based on mask
+    }
+
+    /**
+     * Returns a bitfield containing the {@link RenderSectionFlags} for this built section.
+     */
+    public int getFlags() {
+        return this.flags;
+    }
+
+    /**
+     * Returns the occlusion culling data which determines this chunk's connectedness on the visibility graph.
+     */
+    public long getVisibilityData() {
+        return this.visibilityData;
+    }
+
+    /**
+     * Returns the collection of animated sprites contained by this rendered chunk section.
+     */
+    public Sprite @Nullable [] getAnimatedSprites() {
+        return this.animatedSprites;
+    }
+
+    /**
+     * Returns the collection of block entities contained by this rendered chunk.
+     */
+    public BlockEntity @Nullable [] getCulledBlockEntities() {
+        return this.culledBlockEntities;
+    }
+
+    /**
+     * Returns the collection of block entities contained by this rendered chunk, which are not part of its culling
+     * volume. These entities should always be rendered regardless of the render being visible in the frustum.
+     */
+    public BlockEntity @Nullable [] getGlobalBlockEntities() {
+        return this.globalBlockEntities;
+    }
+
+    public @Nullable ChunkJob getRunningJob() {
+        return this.runningJob;
+    }
+
+    public void setRunningJob(@Nullable ChunkJob token) {
+        this.runningJob = token;
+    }
+
+    public int getPendingUpdate() {
+        return this.pendingUpdateType;
+    }
+
+    public long getPendingUpdateSince() {
+        return this.pendingUpdateSince;
+    }
+
+    public void setPendingUpdate(int type, long now) {
+        this.pendingUpdateType = type;
+        this.pendingUpdateSince = now;
+    }
+
+    public void clearPendingUpdate() {
+        this.pendingUpdateType = 0;
+    }
+
+    public void prepareTrigger(boolean isDirectTrigger) {
+        if (this.translucentData != null) {
+            this.translucentData.prepareTrigger(isDirectTrigger);
+        }
+    }
+
+    public int getLastUploadFrame() {
+        return this.lastUploadFrame;
+    }
+
+    public void setLastUploadFrame(int lastSortFrame) {
+        this.lastUploadFrame = lastSortFrame;
+    }
+
+    public int getLastSubmittedFrame() {
+        return this.lastSubmittedFrame;
+    }
+
+    public void setLastSubmittedFrame(int lastSubmittedFrame) {
+        this.lastSubmittedFrame = lastSubmittedFrame;
+    }
+
+    public float getCurrentVisibility() {
+        int currentTime = Math.toIntExact(System.currentTimeMillis() - region.getCreationTime());
+        int fadeTime = currentTime - this.fadeTime;
+        float elapsed = (float) fadeTime;
+        return MathHelper.clamp(elapsed / ((float) (SodiumClientMod.options().quality.chunkSectionFadeInTime * 1000)), 0.0f, 1.0f);
+    }
+
+    public void setFadeTime(int relativeBuiltTime) {
+        this.fadeTime = relativeBuiltTime;
+    }
+}

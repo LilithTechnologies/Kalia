@@ -1,0 +1,39 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "re.lilith.kalia.mixins",
+  "compatibilityLevel": "JAVA_21",
+  "verbose": true,
+  "mixins": [
+    "gl.MixinGL15",
+    "gl.MixinGL20",
+    "gl.MixinGLContext",
+    "gl.MixinProject",
+    "sdl.MixinSDLDisplay"
+  ],
+  "client": [
+    "access.BufferBuilderAccess",
+    "gl.MixinGL11_Compat",
+    "gl.MixinGL11_DisplayLists",
+    "gl.MixinGL11_FFP",
+    "gl.MixinGL11_ImmediateMode",
+    "gl.MixinGL11_PipelineState",
+    "gl.MixinGL11_Textures",
+    "gl.MixinGL13",
+    "gl.MixinGL14",
+    "gl.MixinGL30",
+    "gl.MixinGlStateManager",
+    "gl.MixinGLX",
+    "render.MixinBufferUploader",
+    "render.MixinCamera",
+    "render.MixinLivingEntityRenderer",
+    "render.MixinMinecraftClient",
+    "render.MixinTextRenderer",
+    "render.MixinTitleScreen",
+    "render.MixinVertexBuffer",
+    "render.MixinWorldRenderer"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

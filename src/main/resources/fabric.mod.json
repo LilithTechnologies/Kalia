@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "kalia",
+  "version": "2026.1",
+  "name": "Kalia",
+  "description": "Cross-backend, high-performance rendering engine for MC",
+  "authors": [
+    "Lilith Technologies, LLC"
+  ],
+  "contact": {
+    "sources": "https://github.com/LilithTechnologies/Kalia"
+  },
+  "environment": "client",
+  "entrypoints": {
+    "preLaunch": [
+      "re.lilith.kalia.KaliaPreLaunch"
+    ],
+    "client": [
+      "re.lilith.kalia.KaliaMod",
+      "net.caffeinemc.mods.sodium.fabric.SodiumFabricMod"
+    ]
+  },
+  "mixins": [
+    "kalia.mixins.json",
+    "radium.mixins.json"
+  ],
+  "accessWidener": "kalia.accesswidener",
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "~1.8.9"
+  },
+  "suggests": {
+    "osl": "*",
+    "fabric-language-kotlin": "*"
+  }
+}
