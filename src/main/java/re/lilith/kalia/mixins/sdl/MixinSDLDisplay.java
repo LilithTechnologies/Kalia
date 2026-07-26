@@ -4,6 +4,7 @@ import io.github.moehreag.legacylwjgl3.SDLPlatforms;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.LWJGLException;
+import org.lwjgl.PointerBuffer;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.opengl.GL;
@@ -11,9 +12,12 @@ import org.lwjgl.opengl.PixelFormat;
 import org.lwjgl.opengl.SDLDisplay;
 import org.lwjgl.sdl.SDLPlatform;
 import org.lwjgl.sdl.SDLVideo;
+import org.lwjgl.sdl.SDL_Event;
+import org.lwjgl.system.Callback;
 import org.lwjgl.system.Configuration;
 import org.lwjgl.system.MemoryStack;
 import org.lwjgl.system.MemoryUtil;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
@@ -23,13 +27,20 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 
+import static org.lwjgl.sdl.SDLInit.*;
+import static org.lwjgl.sdl.SDLInit.SDL_INIT_VIDEO;
+import static org.lwjgl.sdl.SDLInit.SDL_Quit;
 import static org.lwjgl.sdl.SDLProperties.*;
 import static org.lwjgl.sdl.SDLProperties.SDL_DestroyProperties;
 import static org.lwjgl.sdl.SDLProperties.SDL_SetBooleanProperty;
+import static org.lwjgl.sdl.SDLStdinc.nSDL_GetMemoryFunctions;
 import static org.lwjgl.sdl.SDLVideo.*;
 import static org.lwjgl.sdl.SDLVideo.SDL_ShowWindow;
 import static org.lwjgl.system.MemoryStack.stackPush;
+import static org.lwjgl.system.MemoryUtil.memAddress;
+import static org.lwjgl.system.MemoryUtil.memFree;
 
+// todo: stop spamming overwrite
 @Mixin(SDLDisplay.class)
 public abstract class MixinSDLDisplay {
     @Shadow
@@ -91,6 +102,10 @@ public abstract class MixinSDLDisplay {
 
     @Shadow
     public abstract int setIcon(@NotNull ByteBuffer[] icons);
+
+    @Shadow
+    @Final
+    private SDL_Event event;
 
     @Redirect(method = "update", at = @At(value = "INVOKE", target = "Lorg/lwjgl/sdl/SDLVideo;SDL_GL_SwapWindow(J)Z"))
     boolean impl$update(long window) {
@@ -161,6 +176,46 @@ public abstract class MixinSDLDisplay {
         checkSdlError(SDL_ShowWindow(handle));
         if (cached_icons != null) {
             setIcon(cached_icons);
+        }
+    }
+    /**
+     * @reason Do not destroy OpenGL
+     * @author Lunasa
+     */
+    @Overwrite
+    public void destroy() {
+        // free callbacks
+        Keyboard.destroy();
+        Mouse.destroy();
+//        memFree(GL.getCapabilities().getAddressBuffer());
+//        GL.setCapabilities(null);
+//        GL.destroy();
+        if (glContext != 0) {
+            SDL_GL_DestroyContext(glContext);
+            glContext = 0;
+        }
+        if (handle != 0) {
+            SDL_DestroyWindow(handle);
+            handle = 0;
+        }
+        if (SDL_WasInit(SDL_INIT_VIDEO) != 0) {
+            SDL_QuitSubSystem(SDL_INIT_VIDEO);
+        }
+        event.free();
+        SDL_Quit();
+        try (MemoryStack stack = stackPush()) {
+            PointerBuffer funcs = stack.mallocPointer(4);
+
+            nSDL_GetMemoryFunctions(
+                    memAddress(funcs, 0),
+                    memAddress(funcs, 1),
+                    memAddress(funcs, 2),
+                    memAddress(funcs, 3)
+            );
+
+            for (int i = 0; i < 4; i++) {
+                Callback.free(funcs.get(i));
+            }
         }
     }
 }
