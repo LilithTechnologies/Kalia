@@ -1,22 +1,17 @@
-package re.lilith.kalia.mixins.sdl;
+package re.lilith.kalia.mixins.lwjgl;
 
-import io.github.moehreag.legacylwjgl3.SDLPlatforms;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.LWJGLException;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.GL;
 import org.lwjgl.opengl.PixelFormat;
 import org.lwjgl.opengl.SDLDisplay;
-import org.lwjgl.sdl.SDLPlatform;
-import org.lwjgl.sdl.SDLVideo;
 import org.lwjgl.sdl.SDL_Event;
 import org.lwjgl.system.Callback;
 import org.lwjgl.system.Configuration;
 import org.lwjgl.system.MemoryStack;
-import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;

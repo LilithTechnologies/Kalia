@@ -1,5 +1,6 @@
 accessWidener v1	named
 
+# TODO: make this an accessor
 accessible field net/minecraft/client/render/BufferBuilder buffer Ljava/nio/ByteBuffer;
 
 # Sodium reads the fixed-function camera matrices straight out of Frustum's own buffers.

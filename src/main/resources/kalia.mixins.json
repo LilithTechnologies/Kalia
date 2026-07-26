@@ -9,7 +9,8 @@
     "gl.MixinGL20",
     "gl.MixinGLContext",
     "gl.MixinProject",
-    "sdl.MixinSDLDisplay"
+    "lwjgl.MixinDisplay",
+    "lwjgl.MixinSDLDisplay"
   ],
   "client": [
     "access.BufferBuilderAccess",
