@@ -1,3 +1,12 @@
 package re.lilith.kalia.renderer.device
 
-enum class WindowSystem { SDL, GLFW }
+/**
+ * Identifies the window system integration used by a platform surface.
+ *
+ * @author Lunasa
+ * @since 1.0.0
+ */
+enum class WindowSystem {
+    SDL
+    ;
+}

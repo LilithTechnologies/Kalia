@@ -1,11 +1,10 @@
 package re.lilith.kalia.renderer.format
 
-
 /**
- * Layout of one vertex buffer binding.
+ * Describes the memory layout of a single vertex buffer binding.
  *
- * Build these once and reuse them: backends key their pipeline caches on identity first
- * and structural equality second, so shared instances avoid rehashing on every draw.
+ * @author Lunasa
+ * @since 1.0.0
  */
 class VertexFormat private constructor(
     val attributes: List<VertexAttribute>,

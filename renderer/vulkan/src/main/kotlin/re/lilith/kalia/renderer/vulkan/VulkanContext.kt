@@ -45,7 +45,7 @@ internal class VulkanContext private constructor(
     }
 
     val capabilities: DeviceCapabilities = DeviceCapabilities(
-        backend = BackendId.VULKAN,
+        backend = BackendId.Vulkan,
         adapterName = physicalDevice.properties.name,
         driverVersion = physicalDevice.properties.driverVersion.toString(),
         apiVersion = physicalDevice.properties.apiVersion.toString(),

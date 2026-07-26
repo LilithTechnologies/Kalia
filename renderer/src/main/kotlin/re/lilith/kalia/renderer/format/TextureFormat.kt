@@ -1,12 +1,20 @@
 package re.lilith.kalia.renderer.format
 
 /**
- * Texture and render-target formats that the engine is able to guarantee
+ * A texture format defines the memory layout, precision, and intended usage
+ * of texture data. Formats may represent color data, depth values, or
+ * combined depth-stencil attachments.
+ *
+ * @author Lunasa
+ * @since 1.0.0
  */
 enum class TextureFormat(
     val bytesPerPixel: Int,
     val aspect: FormatAspect,
 ) {
+    // im not writing docs for all ts
+    // you know what it is
+
     R8(1, FormatAspect.COLOR),
     RG8(2, FormatAspect.COLOR),
     RGBA8(4, FormatAspect.COLOR),

@@ -5,6 +5,9 @@ package re.lilith.kalia.renderer.format
  *
  * [location] is the shader input location. Kalia does not reflect shaders, so the layout
  * declared here is the single source of truth and must match the shader by construction.
+ *
+ * @author Lunasa
+ * @since 1.0.0
  */
 data class VertexAttribute(
     val name: String,

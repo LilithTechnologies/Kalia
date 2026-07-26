@@ -1,5 +1,6 @@
 package re.lilith.kalia.renderer.vulkan
 
+import org.lwjgl.vulkan.KHRSwapchain
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.vulkan.utils.Convert
@@ -7,6 +8,7 @@ import re.lilith.vulkan.api.command.CommandRecorder
 import re.lilith.vulkan.api.command.ImageBarrier
 import re.lilith.vulkan.api.command.blitImage
 import re.lilith.vulkan.api.command.pipelineBarrier
+import re.lilith.vulkan.api.core.VulkanResultException
 import re.lilith.vulkan.api.descriptor.Filter
 import re.lilith.vulkan.api.presentation.*
 import re.lilith.vulkan.api.sync.BinarySemaphore
@@ -31,8 +33,8 @@ internal class VulkanSwapchain private constructor(
     fun acquire(imageAvailable: BinarySemaphore): AcquiredSwapchainImage? = runCatching {
         swapchain.acquireNextImage(semaphore = imageAvailable)
     }.getOrElse { failure ->
-        if (failure is re.lilith.vulkan.api.core.VulkanResultException &&
-            failure.resultCode == org.lwjgl.vulkan.KHRSwapchain.VK_ERROR_OUT_OF_DATE_KHR
+        if (failure is VulkanResultException &&
+            failure.resultCode == KHRSwapchain.VK_ERROR_OUT_OF_DATE_KHR
         ) {
             null
         } else {

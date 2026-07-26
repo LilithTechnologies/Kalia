@@ -26,7 +26,7 @@ internal class OpenGlContext private constructor(
         glCapabilities.OpenGL46 || glCapabilities.GL_EXT_texture_filter_anisotropic
 
     val capabilities: DeviceCapabilities = DeviceCapabilities(
-        backend = BackendId.OPENGL,
+        backend = BackendId.OpenGL,
         adapterName = glGetString(GL_RENDERER) ?: "Unknown",
         driverVersion = glGetString(GL_VERSION) ?: "Unknown",
         apiVersion = glGetString(GL_VERSION) ?: "Unknown",

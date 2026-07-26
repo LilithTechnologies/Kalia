@@ -7,23 +7,80 @@ import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.resource.*
 
 /**
- * The one object a backend must provide
+ * Primary interface to a rendering backend.
+ *
+ * Resources created by a device are owned by that device and
+ * must not be used with resources from another device.
+ *
+ * @author Lunasa
+ * @since 1.0.0
  */
 interface RenderDevice : AutoCloseable {
+    /**
+     * Capabilities and implementation limits reported by the backend.
+     */
     val capabilities: DeviceCapabilities
 
+    /**
+     * Current dimensions of the presentation surface in pixels.
+     */
     val surfaceExtent: Extent
+
+    /**
+     * Format used by the presentation surface.
+     */
     val surfaceFormat: TextureFormat
 
+    /**
+     * Mutable runtime settings for the device.
+     * Modifying this value will change the settings.
+     */
     var settings: DeviceSettings
 
+    /**
+     * Creates a GPU buffer.
+     *
+     * @param description Buffer creation parameters.
+     * @return The newly created buffer.
+     */
     fun createBuffer(description: BufferDescription): GpuBuffer
+
+    /**
+     * Creates a GPU texture.
+     *
+     * @param description Texture creation parameters.
+     * @return The newly created texture.
+     */
     fun createTexture(description: TextureDescription): GpuTexture
+
+
+    /**
+     * Creates a GPU sampler.
+     *
+     * @param description Sampler creation parameters.
+     * @return The newly created sampler.
+     */
     fun createSampler(description: SamplerDescription): GpuSampler
+
+    /**
+     * Creates a graphics pipeline.
+     *
+     * @param description Pipeline creation parameters.
+     * @return The newly created pipeline.
+     */
     fun createPipeline(description: GraphicsPipelineDescription): GpuPipeline
 
     /**
-     * Queues a device-side copy between buffers
+     * Queues a device-side copy between buffers.
+     *
+     * The copy is performed entirely on the GPU and does not require data to
+     * pass through CPU memory.
+     *
+     * @param source Source buffer.
+     * @param destination Destination buffer.
+     * @param sourceOffset Byte offset into the source buffer.
+     * @param destinationOffset Byte offset into the destination buffer.
+     * @param sizeBytes Number of bytes to copy.
      */
     fun copyBuffer(
         source: GpuBuffer,
@@ -33,12 +90,34 @@ interface RenderDevice : AutoCloseable {
         sizeBytes: Long,
     )
 
+
     /**
-     * Records and submits [graph] for the current frame
+     * Records and submits a render graph for the current frame.
+     *
+     * @param graph The render graph to execute.
+     * @return `true` if the frame was rendered successfully, otherwise
+     * `false` if rendering should be skipped or retried.
      */
     fun render(graph: RenderGraph): Boolean
 
+    /**
+     * Notifies the device that the presentation surface has changed size.
+     *
+     * @param extent The new surface dimensions.
+     */
     fun resize(extent: Extent)
+
+    /**
+     * Blocks until all previously submitted GPU work has completed.
+     */
     fun waitIdle()
+
+    /**
+     * Releases all resources owned by this device.
+     *
+     * Implementations should ensure outstanding GPU work is completed or
+     * safely discarded before destruction.
+     */
+    override fun close()
 }
 

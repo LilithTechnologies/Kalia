@@ -5,6 +5,9 @@ import java.nio.ByteOrder
 
 /**
  * A fixed-capacity list of indexed draws submitted together through [PassEncoder.multiDrawIndexed]
+ *
+ * @author Lunasa
+ * @since 1.0.0
  */
 class MultiDrawList(val capacity: Int) {
     val buffer: ByteBuffer = ByteBuffer

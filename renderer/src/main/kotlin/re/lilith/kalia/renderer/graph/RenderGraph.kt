@@ -1,21 +1,60 @@
 package re.lilith.kalia.renderer.graph
 
 /**
- * A compiled, immutable frame description
+ * A compiled, immutable render graph describing a single frame.
+ *
+ * @property name Human-readable graph name used for debugging and profiling.
+ * @property textures All texture resources declared within the graph.
+ * @property passes All passes declared within the graph.
+ *
+ * @author Lunasa
+ * @since 1.0.0
  */
 class RenderGraph internal constructor(
+    /**
+     * Human-readable graph name.
+     */
     val name: String,
+
+    /**
+     * Textures declared by the graph.
+     */
     val textures: List<GraphTexture>,
+
+    /**
+     * Passes declared by the graph.
+     */
     val passes: List<GraphPass>,
 ) {
-    val livePasses: List<GraphPass> by lazy(LazyThreadSafetyMode.NONE) { compileLivePasses() }
+    /**
+     * Passes that remain after dead-pass elimination.
+     */
+    val livePasses: List<GraphPass> by lazy(LazyThreadSafetyMode.NONE) {
+        compileLivePasses()
+    }
 
+    /**
+     * Resolves a texture handle to its corresponding graph texture.
+     *
+     * @param handle The texture handle to resolve.
+     * @return The matching graph texture.
+     *
+     * @throws IllegalStateException If the handle does not belong to this graph.
+     */
     fun texture(handle: TextureHandle): GraphTexture =
         textures.firstOrNull { it.handle == handle }
             ?: error("Handle ${handle.id} does not belong to graph '$name'.")
 
-    val textureLifetimes: Map<Int, IntRange> by lazy(LazyThreadSafetyMode.NONE) { computeLifetimes() }
+    /**
+     * Lifetime ranges for textures referenced by live passes.
+     */
+    val textureLifetimes: Map<Int, IntRange> by lazy(LazyThreadSafetyMode.NONE) {
+        computeLifetimes()
+    }
 
+    /**
+     * Computes the set of passes that contribute to the final frame.
+     */
     private fun compileLivePasses(): List<GraphPass> {
         val enabled = passes.filter { it.enabled() }
         val required = HashSet<Int>()
@@ -38,16 +77,26 @@ class RenderGraph internal constructor(
         return enabled.filterIndexed { index, _ -> live[index] }
     }
 
+    /**
+     * Computes texture lifetime ranges for all live graph resources.
+     *
+     * @return A map of texture handle identifiers to inclusive pass ranges.
+     */
     private fun computeLifetimes(): Map<Int, IntRange> {
         val first = HashMap<Int, Int>()
         val last = HashMap<Int, Int>()
+
         livePasses.forEachIndexed { index, pass ->
-            val touched = pass.writes.map(TextureHandle::id) + pass.sampledInputs.map(TextureHandle::id)
+            val touched =
+                pass.writes.map(TextureHandle::id) +
+                        pass.sampledInputs.map(TextureHandle::id)
+
             for (id in touched) {
                 first.putIfAbsent(id, index)
                 last[id] = index
             }
         }
+
         return first.mapValues { (id, start) -> start..last.getValue(id) }
     }
 }

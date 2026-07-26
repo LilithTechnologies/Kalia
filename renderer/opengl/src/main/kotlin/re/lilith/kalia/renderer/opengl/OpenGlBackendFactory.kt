@@ -3,7 +3,7 @@ package re.lilith.kalia.renderer.opengl
 import re.lilith.kalia.renderer.device.*
 
 class OpenGlBackendFactory : RenderBackendFactory {
-    override val id = BackendId.OPENGL
+    override val id = BackendId.OpenGL
 
     override fun isSupported(surface: PlatformSurface): Boolean =
         runCatching { OpenGlContext.isSupported(surface) }.getOrDefault(false)

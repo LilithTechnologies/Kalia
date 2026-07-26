@@ -1,7 +1,17 @@
 package re.lilith.kalia.renderer.format
 
 /**
- * The scalar layout of a single vertex attribute
+ * Describes the storage layout of a single vertex attribute.
+ *
+ * Vertex attribute formats define how attribute data is stored in a vertex
+ * buffer and how it is interpreted by the graphics pipeline when presented
+ * to a vertex shader.
+ *
+ * @property componentCount Number of logical components exposed to the shader.
+ * @property byteSize Size of a single attribute element in bytes.
+ *
+ * @author Lunasa
+ * @since 1.0.0
  */
 enum class VertexAttributeFormat(val componentCount: Int, val byteSize: Int) {
     FLOAT(1, 4),

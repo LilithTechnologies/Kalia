@@ -64,7 +64,7 @@ class PassBuilder internal constructor(private val name: String) {
         }
         val duplicateReads = sampledInputs.filter { input -> colorAttachments.any { it.target == input } }
         require(duplicateReads.isEmpty()) {
-            "Pass '$name' both samples and writes the same texture; use two passes or a copy."
+            "Pass '$name' both samples and writes the same texture. Use two passes or a copy."
         }
         return GraphPass(
             name = name,

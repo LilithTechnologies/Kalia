@@ -72,8 +72,8 @@ object KaliaEngine {
     }
 
     private fun preferredBackend(): BackendId? = when (System.getProperty("kalia.backend")?.lowercase()) {
-        "vulkan" -> BackendId.VULKAN
-        "opengl" -> BackendId.OPENGL
+        "vulkan" -> BackendId.Vulkan
+        "opengl" -> BackendId.OpenGL
         else -> null
     }
 
