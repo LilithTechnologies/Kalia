@@ -20,6 +20,8 @@ import net.minecraft.client.option.GameOptions;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Identifier;
 import org.lwjgl.opengl.Display;
+import re.lilith.kalia.KaliaEngine;
+import re.lilith.kalia.KaliaHooks;
 
 import java.io.IOException;
 
@@ -163,7 +165,7 @@ public class SodiumConfigBuilder implements ConfigEntryPoint {
                                 .setBinding(
                                         (value) -> {
                                             this.vanillaOpts.vsync = value;
-                                            Display.setVSyncEnabled(value);
+                                            KaliaHooks.setVsync(value);
                                         },
                                         () -> this.vanillaOpts.vsync)
                                 .setImpact(OptionImpact.VARIES)
