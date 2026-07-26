@@ -5,17 +5,32 @@ import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.shader.*
 import re.lilith.kalia.vertex.TranslatedVertexFormat
 import re.lilith.kalia.vertex.VertexLocations
+import java.io.File
+import java.nio.file.Files
+import java.nio.file.Paths
+import kotlin.io.path.writeBytes
+import kotlin.io.path.writeText
 
 // janky state based shader gen
 // works, but is janky
 object CoreShaders {
     private const val TEXGEN_BIT = 1 shl 8
+    private val directory = Paths.get(".kalia", "shaders", "source").apply { Files.createDirectories(this) }
 
     private val programs = HashMap<Int, ShaderProgram>()
 
     fun programFor(format: TranslatedVertexFormat, texGen: Boolean = false): ShaderProgram {
         val signature = signature(format) or (if (texGen) TEXGEN_BIT else 0)
-        return programs.getOrPut(signature) { generate(format, texGen) }
+        return programs.getOrPut(signature) {
+            generate(format, texGen).apply {
+                this.stages.forEach { (stage, source) ->
+                    when (source) {
+                        is ShaderSource.Glsl -> directory.resolve("kalia-generated-${source.name}-${stage.name.lowercase()}.glsl").writeText(source.code)
+                        is ShaderSource.SpirV -> directory.resolve("kalia-generated-${signature}-${stage.name.lowercase()}.spv").writeBytes(source.words)
+                    }
+                }
+            }
+        }
     }
 
     private fun signature(format: TranslatedVertexFormat): Int {
