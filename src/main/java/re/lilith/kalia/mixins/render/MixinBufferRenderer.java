@@ -9,7 +9,7 @@ import re.lilith.kalia.KaliaHooks;
 import re.lilith.kalia.draw.TessellatorBridge;
 
 @Mixin(BufferRenderer.class)
-public class MixinBufferUploader {
+public class MixinBufferRenderer {
     /**
      * @reason Redirect to Kalia
      * @author Lunasa
