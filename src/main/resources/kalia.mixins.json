@@ -26,6 +26,7 @@
     "gl.MixinGLX",
     "render.MixinBufferUploader",
     "render.MixinCamera",
+    "render.MixinGameRenderer",
     "render.MixinLivingEntityRenderer",
     "render.MixinMinecraftClient",
     "render.MixinTextRenderer",
