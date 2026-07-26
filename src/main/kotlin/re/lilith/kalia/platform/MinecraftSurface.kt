@@ -27,7 +27,7 @@ class MinecraftSurface private constructor(override val nativeHandle: Long) : Pl
             val handle = runCatching {
                 Display::class.java.getMethod("getHandle").invoke(null) as Long
             }.getOrElse { failure ->
-                unavailableReason = "the display handle is not available (${failure.message}"
+                unavailableReason = "the display handle is not available (${failure.message})"
                 return null
             }
 
