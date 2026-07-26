@@ -1,4 +1,4 @@
-package re.lilith.kalia.entity
+package re.lilith.kalia.entity.cuboid
 
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.VertexAttributeFormat

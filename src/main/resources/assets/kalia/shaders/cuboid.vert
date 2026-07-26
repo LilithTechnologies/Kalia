@@ -10,6 +10,7 @@ layout(location = 7) in vec4 instLight;
 layout(location = 8) in vec4 instBoxA;
 layout(location = 9) in vec4 instBoxB;
 layout(location = 10) in float instScale;
+layout(location = 11) in vec3 instCenter;
 
 layout(location = 0) out vec4 vColor;
 layout(location = 1) out vec2 vUv0;
@@ -58,11 +59,11 @@ void main() {
     float inflate = instBoxB.w;
 
     vec3 fullSize = (vec3(sizeX, sizeY, sizeZ) + vec3(inflate) * 2.0) * instScale;
-    vec3 localPosition = aPosition * fullSize;
+    vec3 localPosition = instCenter + aPosition * fullSize;
 
     vec4 model = vec4(localPosition, 1.0);
     vec3 eye = vec3(dot(instRow0, model), dot(instRow1, model), dot(instRow2, model));
-    vViewDistance = length(eye);
+    vViewDistance = abs(eye.z);
     gl_Position = kaliaProjection * vec4(eye, 1.0);
 
     int faceIndex = gl_VertexIndex / 4;

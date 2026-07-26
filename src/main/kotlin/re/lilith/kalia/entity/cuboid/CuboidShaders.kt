@@ -1,4 +1,4 @@
-package re.lilith.kalia.entity
+package re.lilith.kalia.entity.cuboid
 
 import re.lilith.kalia.gl.ShaderUniforms
 import re.lilith.kalia.renderer.shader.BindingKind

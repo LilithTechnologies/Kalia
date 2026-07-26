@@ -447,7 +447,7 @@ object GlBridge {
 
     private fun syncAlphaCutout() {
         val active = alphaTestEnabled && alphaFunction != GlEnums.GL_ALWAYS
-        ShaderUniforms.setAlphaCutout(if (active) alphaReference else 0f)
+        ShaderUniforms.setAlphaCutout(if (active) alphaReference else -1f)
     }
 
     const val LIGHTMAP_UNIT = 1

@@ -165,6 +165,7 @@ internal class VulkanContext private constructor(
                         samplerAnisotropy = physicalDevice.features.samplerAnisotropy,
                         fillModeNonSolid = physicalDevice.features.fillModeNonSolid,
                         wideLines = physicalDevice.features.wideLines,
+                        logicOp = physicalDevice.features.logicOp,
                         multiDrawIndirect = physicalDevice.features.multiDrawIndirect,
                         timelineSemaphore = physicalDevice.features.timelineSemaphore,
                         dynamicRendering = true,

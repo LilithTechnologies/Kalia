@@ -29,6 +29,8 @@
     "render.MixinBufferRenderer",
     "render.MixinCamera",
     "render.MixinDiffuseLighting",
+    "render.MixinEntityRenderDispatcher",
+    "render.MixinEntityRenderer",
     "render.MixinGameRenderer",
     "render.MixinLivingEntityRenderer",
     "render.MixinMinecraftClient",

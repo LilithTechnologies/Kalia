@@ -8,6 +8,7 @@ data class DeviceFeatureSet(
     val tessellationShader: Boolean = false,
     val fillModeNonSolid: Boolean = false,
     val wideLines: Boolean = false,
+    val logicOp: Boolean = false,
     val multiDrawIndirect: Boolean = false,
     val drawIndirectFirstInstance: Boolean = false,
     val shaderDrawParameters: Boolean = false,

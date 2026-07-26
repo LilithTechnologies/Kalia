@@ -62,8 +62,8 @@ class PassBuilder internal constructor(private val name: String) {
         require(colorAttachments.isNotEmpty() || depthAttachment != null || sideEffects) {
             "Pass '$name' writes nothing and declares no side effects."
         }
-        val duplicateReads = sampledInputs.filter { input -> colorAttachments.any { it.target == input } }
-        require(duplicateReads.isEmpty()) {
+        val duplicateRead = sampledInputs.firstOrNull { input -> colorAttachments.any { it.target == input } }
+        require(duplicateRead == null) {
             "Pass '$name' both samples and writes the same texture. Use two passes or a copy."
         }
         return GraphPass(

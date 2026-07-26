@@ -31,7 +31,7 @@ layout(location = 4) out float vViewDistance;
 void main() {
     vec3 position = inPosition + kaliaModelOffset.xyz;
     vec4 eye = kaliaModelView * vec4(position, 1.0);
-    vViewDistance = length(eye.xyz);
+    vViewDistance = abs(eye.z);
     gl_Position = kaliaProjection * eye;
 
 #ifdef HAS_COLOR

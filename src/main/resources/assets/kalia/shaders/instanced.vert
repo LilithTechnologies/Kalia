@@ -37,7 +37,7 @@ layout(location = 6) out vec4 vMisc;
 void main() {
     vec4 model = vec4(inPosition, 1.0);
     vec3 eye = vec3(dot(instRow0, model), dot(instRow1, model), dot(instRow2, model));
-    vViewDistance = length(eye);
+    vViewDistance = abs(eye.z);
     gl_Position = kaliaProjection * vec4(eye, 1.0);
 
 #ifdef HAS_COLOR

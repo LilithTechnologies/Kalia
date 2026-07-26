@@ -82,6 +82,7 @@ object KaliaEngine {
 
         FrameResources.of(running.device).beginFrame()
         GlBridge.applyDepthBias()
+        GlBridge.clearOverlay()
 
         return runCatching { running.device.render(GameFrameGraph.build(running.device, renderGame)) }
             .getOrElse { failure ->

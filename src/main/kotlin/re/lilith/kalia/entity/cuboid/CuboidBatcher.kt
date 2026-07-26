@@ -1,12 +1,10 @@
-package re.lilith.kalia.draw
+package re.lilith.kalia.entity.cuboid
 
 import org.joml.Matrix4f
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.gl.GlBridge
-import re.lilith.kalia.gl.GlEnums
 import re.lilith.kalia.gl.GlState
-import re.lilith.kalia.gl.MatrixState
 import re.lilith.kalia.gl.ShaderUniforms
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.IndexFormat
@@ -18,40 +16,35 @@ import re.lilith.kalia.renderer.pipeline.BlendState
 import re.lilith.kalia.renderer.pipeline.ColorMask
 import re.lilith.kalia.renderer.pipeline.DepthState
 import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
-import re.lilith.kalia.renderer.pipeline.PrimitiveTopology
 import re.lilith.kalia.renderer.pipeline.RasterState
-import re.lilith.kalia.renderer.resource.GpuBuffer
 import re.lilith.kalia.renderer.resource.GpuPipeline
 import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.renderer.shader.ShaderProgram
-import re.lilith.kalia.gl.TextureUnits
-import re.lilith.kalia.shader.CoreShaders
 import re.lilith.kalia.shader.ShaderPrelude
+import re.lilith.kalia.texture.GlTexture
 import re.lilith.kalia.texture.TextureArrays
 import re.lilith.kalia.texture.TextureTable
 import re.lilith.kalia.utility.MemoryAccess
-import re.lilith.kalia.vertex.TranslatedVertexFormat
-import re.lilith.kalia.vertex.VertexLocations
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.collections.iterator
 
-/**
- * Merges resident-mesh draws into instanced draws
- */
-object InstanceBatcher {
-    private const val BYTES_PER_INSTANCE = 72
+object CuboidBatcher {
+    private const val BYTES_PER_INSTANCE = 120
 
     val INSTANCE_FORMAT: VertexFormat = VertexFormat.of(VertexStepMode.INSTANCE) {
-        attribute("instRow0", VertexLocations.INSTANCE_ROW0, VertexAttributeFormat.FLOAT4)
-        attribute("instRow1", VertexLocations.INSTANCE_ROW1, VertexAttributeFormat.FLOAT4)
-        attribute("instRow2", VertexLocations.INSTANCE_ROW2, VertexAttributeFormat.FLOAT4)
-        attribute("instTint", VertexLocations.INSTANCE_TINT, VertexAttributeFormat.UNORM8X4)
-        attribute("instOverlay", VertexLocations.INSTANCE_OVERLAY, VertexAttributeFormat.UNORM8X4)
-        attribute("instLight", VertexLocations.INSTANCE_LIGHT, VertexAttributeFormat.FLOAT4)
+        attribute("instRow0", 2, VertexAttributeFormat.FLOAT4)
+        attribute("instRow1", 3, VertexAttributeFormat.FLOAT4)
+        attribute("instRow2", 4, VertexAttributeFormat.FLOAT4)
+        attribute("instTint", 5, VertexAttributeFormat.UNORM8X4)
+        attribute("instOverlay", 6, VertexAttributeFormat.UNORM8X4)
+        attribute("instLight", 7, VertexAttributeFormat.FLOAT4)
+        attribute("instBoxA", 8, VertexAttributeFormat.FLOAT4)
+        attribute("instBoxB", 9, VertexAttributeFormat.FLOAT4)
+        attribute("instScale", 10, VertexAttributeFormat.FLOAT)
+        attribute("instCenter", 11, VertexAttributeFormat.FLOAT3)
     }
-
-    private data class MeshKey(val buffer: GpuBuffer, val offsetBytes: Long, val vertexCount: Int)
 
     private data class GroupKey(
         val description: GraphicsPipelineDescription,
@@ -61,7 +54,7 @@ object InstanceBatcher {
         val lightmapSampler: GpuSampler,
     )
 
-    private val groups = LinkedHashMap<GroupKey, LinkedHashMap<MeshKey, Instances>>()
+    private val groups = LinkedHashMap<GroupKey, Instances>()
     private val instancePool = ArrayDeque<Instances>()
 
     private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
@@ -72,12 +65,9 @@ object InstanceBatcher {
     private var biasSlope = 0f
     private var lineWidth = 1f
 
-    private val matrix = Matrix4f()
-
     var pendingInstances: Int = 0
         private set
 
-    // Pipeline-description memo, see CuboidBatcher for the rationale.
     private var lastDescProgram: ShaderProgram? = null
     private var lastDescAttachments: AttachmentLayout? = null
     private var lastDescRaster: RasterState? = null
@@ -86,35 +76,22 @@ object InstanceBatcher {
     private var lastDescColorMask: ColorMask? = null
     private var lastDescription: GraphicsPipelineDescription? = null
 
-    // Single-entry (group, mesh) memo. The mesh side is only trusted while the group side is
-    // still the same match, since a recycled Instances/inner-map can be reassigned elsewhere.
     private var lastKeyDescription: GraphicsPipelineDescription? = null
     private var lastKeyTexture: GpuTexture? = null
     private var lastKeySampler: GpuSampler? = null
     private var lastKeyLightmap: GpuTexture? = null
     private var lastKeyLightmapSampler: GpuSampler? = null
-    private var lastInnerMap: LinkedHashMap<MeshKey, Instances>? = null
-
-    private var lastMeshBuffer: GpuBuffer? = null
-    private var lastMeshOffset: Long = -1L
-    private var lastMeshVertexCount: Int = -1
     private var lastInstances: Instances? = null
 
-    fun tryRecord(
-        format: TranslatedVertexFormat,
-        glMode: Int,
-        vertexCount: Int,
-        buffer: GpuBuffer,
-        offsetBytes: Long,
-    ): Boolean {
-        if (!EntityBatchers.isRenderingEntities) return false
-        if (GlEnums.indexPattern(glMode) != GlEnums.IndexPattern.QUADS) return false
-        if (!GlState.depthTest || !GlState.depthWrite) return false
-        if (ShaderUniforms.isTexGenActive()) return false
-        val encoder = GameFrame.current ?: return false
+    private var activeInstances: Instances? = null
+    private var activeLayer: Int = 0
 
-        MatrixState.flush()
-
+    fun beginPart() {
+        val encoder = GameFrame.current
+        if (encoder == null) {
+            activeInstances = null
+            return
+        }
         val (constant, slope) = GlState.effectiveDepthBias()
         if (ShaderUniforms.environmentVersion != environmentVersion ||
             constant != biasConstant || slope != biasSlope ||
@@ -127,82 +104,70 @@ object InstanceBatcher {
             lineWidth = GlState.lineWidth
         }
 
-        GlState.topology = PrimitiveTopology.TRIANGLES
         val resources = FrameResources.of(encoder.device)
-
-        val pooled = if (format.hasTexture) {
-            TextureArrays.resolve(
-                TextureTable.boundTexture(0)?.takeIf { TextureUnits.isEnabled(0) },
-                encoder.device,
-            )
-        } else {
-            null
-        }
+        val boundTexture = TextureTable.boundTexture(0)
+        val boundLightmap = TextureTable.boundTexture(GlBridge.LIGHTMAP_UNIT)
+        val pooled = TextureArrays.resolve(boundTexture, encoder.device)
 
         val description = descriptionFor(
-            program = CoreShaders.instancedProgramFor(format, textureArray = pooled != null),
-            vertexFormat = format.format,
+            program = CuboidShaders.programFor(textureArray = pooled != null),
             attachments = encoder.attachments,
             raster = GlState.rasterState(),
             depth = if (encoder.attachments.depthFormat != null) GlState.depthState() else DepthState.DISABLED,
             blend = GlState.blendState(),
             colorMask = GlState.colorMask(),
         )
-        val texture = pooled?.texture ?: KaliaDraw.textureForUnit(0, resources)
-        val sampler = pooled?.let { resources.sampler(it.sampler) } ?: KaliaDraw.samplerForUnit(0, resources)
-        val lightmap = KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources)
-        val lightmapSampler = KaliaDraw.samplerForUnit(GlBridge.LIGHTMAP_UNIT, resources)
+        val texture = pooled?.texture ?: textureFor(boundTexture, resources)
+        val sampler = pooled?.let { resources.sampler(it.sampler) } ?: samplerFor(boundTexture, resources)
+        val lightmap = textureFor(boundLightmap, resources)
+        val lightmapSampler = samplerFor(boundLightmap, resources)
 
         val instances: Instances
-        val cachedInner = lastInnerMap
-        if (cachedInner != null &&
+        val cached = lastInstances
+        if (cached != null &&
             lastKeyDescription === description &&
             lastKeyTexture === texture &&
             lastKeySampler === sampler &&
             lastKeyLightmap === lightmap &&
             lastKeyLightmapSampler === lightmapSampler
         ) {
-            val cachedInstances = lastInstances
-            instances = if (cachedInstances != null &&
-                lastMeshBuffer === buffer &&
-                lastMeshOffset == offsetBytes &&
-                lastMeshVertexCount == vertexCount
-            ) {
-                cachedInstances
-            } else {
-                claim(cachedInner, buffer, offsetBytes, vertexCount)
-            }
+            instances = cached
         } else {
             val key = GroupKey(description, texture, sampler, lightmap, lightmapSampler)
-            val inner = groups.getOrPut(key) { LinkedHashMap() }
+            instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: Instances() }
             lastKeyDescription = description
             lastKeyTexture = texture
             lastKeySampler = sampler
             lastKeyLightmap = lightmap
             lastKeyLightmapSampler = lightmapSampler
-            lastInnerMap = inner
-            instances = claim(inner, buffer, offsetBytes, vertexCount)
+            lastInstances = instances
         }
 
-        writeInstance(instances.reserve(), pooled?.layer ?: 0)
-        pendingInstances++
-        return true
+        activeInstances = instances
+        activeLayer = pooled?.layer ?: 0
     }
 
-    private fun claim(inner: LinkedHashMap<MeshKey, Instances>, buffer: GpuBuffer, offsetBytes: Long, vertexCount: Int): Instances {
-        val created = inner.getOrPut(MeshKey(buffer, offsetBytes, vertexCount)) {
-            instancePool.removeLastOrNull()?.also { it.reset() } ?: Instances()
-        }
-        lastMeshBuffer = buffer
-        lastMeshOffset = offsetBytes
-        lastMeshVertexCount = vertexCount
-        lastInstances = created
-        return created
+    fun recordBox(
+        modelView: Matrix4f,
+        centerX: Float, centerY: Float, centerZ: Float,
+        texU: Int, texV: Int,
+        sizeX: Int, sizeY: Int, sizeZ: Int,
+        inflate: Float,
+        textureWidth: Float, textureHeight: Float,
+        scale: Float,
+    ) {
+        val instances = activeInstances ?: return
+        writeInstance(
+            instances.reserve(),
+            modelView, centerX, centerY, centerZ,
+            texU, texV, sizeX, sizeY, sizeZ, inflate, textureWidth, textureHeight, scale,
+            layer = activeLayer,
+        )
+        pendingInstances++
     }
 
     private fun descriptionFor(
         program: ShaderProgram,
-        vertexFormat: VertexFormat,
         attachments: AttachmentLayout,
         raster: RasterState,
         depth: DepthState,
@@ -212,7 +177,6 @@ object InstanceBatcher {
         val cached = lastDescription
         if (cached != null &&
             lastDescProgram === program &&
-            cached.vertexFormat === vertexFormat &&
             lastDescAttachments == attachments &&
             lastDescRaster === raster &&
             lastDescDepth === depth &&
@@ -223,7 +187,7 @@ object InstanceBatcher {
         }
         val created = GraphicsPipelineDescription(
             program = program,
-            vertexFormat = vertexFormat,
+            vertexFormat = CuboidMesh.VERTEX_FORMAT,
             attachments = attachments,
             raster = raster,
             depth = depth,
@@ -241,28 +205,36 @@ object InstanceBatcher {
         return created
     }
 
-    // Writes directly through the instance buffer's native address; see CuboidBatcher.
-    private fun writeInstance(address: Long, layer: Int) {
-        val m = matrix.set(MatrixState.modelView())
-        val offsetX = ShaderUniforms.modelOffsetX()
-        val offsetY = ShaderUniforms.modelOffsetY()
-        val offsetZ = ShaderUniforms.modelOffsetZ()
-        if (offsetX != 0f || offsetY != 0f || offsetZ != 0f) {
-            m.translate(offsetX, offsetY, offsetZ)
-        }
+    private fun textureFor(bound: GlTexture?, resources: FrameResources): GpuTexture =
+        bound?.texture ?: resources.whiteTexture
+
+    private fun samplerFor(bound: GlTexture?, resources: FrameResources): GpuSampler =
+        bound?.let { resources.sampler(it.sampler) } ?: resources.defaultSampler
+
+    private fun writeInstance(
+        address: Long,
+        modelView: Matrix4f,
+        centerX: Float, centerY: Float, centerZ: Float,
+        texU: Int, texV: Int,
+        sizeX: Int, sizeY: Int, sizeZ: Int,
+        inflate: Float,
+        textureWidth: Float, textureHeight: Float,
+        scale: Float,
+        layer: Int,
+    ) {
         var p = address
-        MemoryAccess.putFloat(p, m.m00()); p += 4
-        MemoryAccess.putFloat(p, m.m10()); p += 4
-        MemoryAccess.putFloat(p, m.m20()); p += 4
-        MemoryAccess.putFloat(p, m.m30()); p += 4
-        MemoryAccess.putFloat(p, m.m01()); p += 4
-        MemoryAccess.putFloat(p, m.m11()); p += 4
-        MemoryAccess.putFloat(p, m.m21()); p += 4
-        MemoryAccess.putFloat(p, m.m31()); p += 4
-        MemoryAccess.putFloat(p, m.m02()); p += 4
-        MemoryAccess.putFloat(p, m.m12()); p += 4
-        MemoryAccess.putFloat(p, m.m22()); p += 4
-        MemoryAccess.putFloat(p, m.m32()); p += 4
+        MemoryAccess.putFloat(p, modelView.m00()); p += 4
+        MemoryAccess.putFloat(p, modelView.m10()); p += 4
+        MemoryAccess.putFloat(p, modelView.m20()); p += 4
+        MemoryAccess.putFloat(p, modelView.m30()); p += 4
+        MemoryAccess.putFloat(p, modelView.m01()); p += 4
+        MemoryAccess.putFloat(p, modelView.m11()); p += 4
+        MemoryAccess.putFloat(p, modelView.m21()); p += 4
+        MemoryAccess.putFloat(p, modelView.m31()); p += 4
+        MemoryAccess.putFloat(p, modelView.m02()); p += 4
+        MemoryAccess.putFloat(p, modelView.m12()); p += 4
+        MemoryAccess.putFloat(p, modelView.m22()); p += 4
+        MemoryAccess.putFloat(p, modelView.m32()); p += 4
 
         MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderRed())); p += 1
         MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderGreen())); p += 1
@@ -279,7 +251,21 @@ object InstanceBatcher {
         if (ShaderUniforms.isLightmapEnabled()) flags = flags or 1
         if (ShaderUniforms.isLightingEnabled()) flags = flags or 2
         MemoryAccess.putFloat(p, (layer * 4 + flags).toFloat()); p += 4
-        MemoryAccess.putFloat(p, ShaderUniforms.alphaCutout())
+        MemoryAccess.putFloat(p, ShaderUniforms.alphaCutout()); p += 4
+
+        MemoryAccess.putFloat(p, texU.toFloat()); p += 4
+        MemoryAccess.putFloat(p, texV.toFloat()); p += 4
+        MemoryAccess.putFloat(p, sizeX.toFloat()); p += 4
+        MemoryAccess.putFloat(p, sizeY.toFloat()); p += 4
+        MemoryAccess.putFloat(p, sizeZ.toFloat()); p += 4
+        MemoryAccess.putFloat(p, textureWidth); p += 4
+        MemoryAccess.putFloat(p, textureHeight); p += 4
+        MemoryAccess.putFloat(p, inflate); p += 4
+        MemoryAccess.putFloat(p, scale); p += 4
+
+        MemoryAccess.putFloat(p, centerX); p += 4
+        MemoryAccess.putFloat(p, centerY); p += 4
+        MemoryAccess.putFloat(p, centerZ)
     }
 
     private fun unorm(value: Float): Byte = (value * 255f + 0.5f).toInt().coerceIn(0, 255).toByte()
@@ -301,8 +287,12 @@ object InstanceBatcher {
         }
 
         resources.sceneUniforms.sync()
-        for ((key, meshes) in groups) {
-            encoder.bindPipeline(pipelines.getOrPut(key.description) { device.createPipeline(key.description) })
+        val cubeVertices = CuboidMesh.vertices(device)
+        val cubeIndices = CuboidMesh.indices(device)
+
+        for ((key, instances) in groups) {
+            val pipeline = pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
+            encoder.bindPipeline(pipeline)
             GlBridge.applyDepthBias()
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
@@ -315,82 +305,40 @@ object InstanceBatcher {
             )
             encoder.pushConstants(ShaderUniforms.pushConstants())
 
-            for ((mesh, instances) in meshes) {
-                if (key.description.blend.enabled) {
-                    instances.sortFarthestFirst()
-                }
-                val data = instances.finish()
-                val slice = resources.vertexArena.append(data, data.remaining())
-                encoder.bindVertexBuffer(0, mesh.buffer, mesh.offsetBytes)
-                encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
-                val quadCount = mesh.vertexCount / 4
-                encoder.bindIndexBuffer(resources.indices.forQuads(quadCount), IndexFormat.UINT32)
-                encoder.drawIndexed(
-                    indexCount = resources.indices.quadIndexCount(quadCount),
-                    instanceCount = instances.count,
-                )
-            }
+            val data = instances.finish()
+            val slice = resources.vertexArena.append(data, data.remaining())
+            encoder.bindVertexBuffer(0, cubeVertices)
+            encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
+            encoder.bindIndexBuffer(cubeIndices, IndexFormat.UINT32)
+            encoder.drawIndexed(indexCount = CuboidMesh.INDEX_COUNT, instanceCount = instances.count)
         }
         recycle()
     }
 
     private fun recycle() {
-        for (meshes in groups.values) {
-            for (instances in meshes.values) {
-                if (instancePool.size < POOL_CAPACITY) {
-                    instancePool.addLast(instances)
-                }
+        for (instances in groups.values) {
+            if (instancePool.size < POOL_CAPACITY) {
+                instancePool.addLast(instances)
             }
         }
         groups.clear()
         pendingInstances = 0
+        activeInstances = null
 
         lastKeyDescription = null
         lastKeyTexture = null
         lastKeySampler = null
         lastKeyLightmap = null
         lastKeyLightmapSampler = null
-        lastInnerMap = null
-        lastMeshBuffer = null
-        lastMeshOffset = -1L
-        lastMeshVertexCount = -1
         lastInstances = null
     }
 
     private class Instances {
         private var data = ByteBuffer.allocateDirect(INITIAL_CAPACITY).order(ByteOrder.nativeOrder())
         private var baseAddress = MemoryAccess.addressOf(data)
-        private var scratch: ByteBuffer? = null
 
         var count: Int = 0
             private set
-
-        fun sortFarthestFirst() {
-            if (count <= 1) {
-                return
-            }
-            val order = (0 until count).sortedByDescending { index ->
-                val base = index * BYTES_PER_INSTANCE
-                val x = data.getFloat(base + 12)
-                val y = data.getFloat(base + 28)
-                val z = data.getFloat(base + 44)
-                x * x + y * y + z * z
-            }
-            var target = scratch
-            if (target == null || target.capacity() < data.capacity()) {
-                target = ByteBuffer.allocateDirect(data.capacity()).order(ByteOrder.nativeOrder())
-            }
-            target.clear()
-            for (source in order) {
-                val record = data.duplicate()
-                record.position(source * BYTES_PER_INSTANCE)
-                record.limit(source * BYTES_PER_INSTANCE + BYTES_PER_INSTANCE)
-                target.put(record)
-            }
-            scratch = data
-            data = target
-            baseAddress = MemoryAccess.addressOf(data)
-        }
 
         fun reserve(): Long {
             if (data.remaining() < BYTES_PER_INSTANCE) {
@@ -417,9 +365,9 @@ object InstanceBatcher {
         }
 
         private companion object {
-            const val INITIAL_CAPACITY = 64 * BYTES_PER_INSTANCE
+            const val INITIAL_CAPACITY = 256 * BYTES_PER_INSTANCE
         }
     }
 
-    private const val POOL_CAPACITY = 256
+    private const val POOL_CAPACITY = 64
 }

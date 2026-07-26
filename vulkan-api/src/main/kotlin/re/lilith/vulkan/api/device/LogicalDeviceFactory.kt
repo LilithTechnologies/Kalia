@@ -38,6 +38,7 @@ internal object LogicalDeviceFactory {
             tessellationShader(config.features.tessellationShader)
             fillModeNonSolid(config.features.fillModeNonSolid)
             wideLines(config.features.wideLines)
+            logicOp(config.features.logicOp)
             multiDrawIndirect(config.features.multiDrawIndirect)
             drawIndirectFirstInstance(config.features.drawIndirectFirstInstance)
             shaderFloat64(config.features.shaderFloat64)

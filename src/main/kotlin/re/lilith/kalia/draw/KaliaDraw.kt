@@ -43,9 +43,11 @@ object KaliaDraw {
         if (vertexCount <= 0) {
             return
         }
-        if (InstanceBatcher.tryRecord(format, glMode, vertexCount, buffer, offsetBytes)) {
-            return
-        }
+        // causes issues rn
+        // will re-enable after fixes
+//        if (InstanceBatcher.tryRecord(format, glMode, vertexCount, buffer, offsetBytes)) {
+//            return
+//        }
         EntityBatchers.flush()
         record(format, glMode, vertexCount, buffer, offsetBytes)
     }

@@ -27,7 +27,7 @@ object ShaderUniforms {
     private var offsetX = 0f
     private var offsetY = 0f
     private var offsetZ = 0f
-    private var alphaCutout = 0f
+    private var alphaCutout = -1f
 
     private var fogRed = 0f
     private var fogGreen = 0f
@@ -348,7 +348,7 @@ object ShaderUniforms {
         setShaderColor(1f, 1f, 1f, 1f)
         setOverlayColor(0f, 0f, 0f, 0f)
         setModelOffset(0f, 0f, 0f)
-        setAlphaCutout(0f)
+        setAlphaCutout(-1f)
         setFogEnabled(false)
         setLightingEnabled(false)
         setLightmapEnabled(false)

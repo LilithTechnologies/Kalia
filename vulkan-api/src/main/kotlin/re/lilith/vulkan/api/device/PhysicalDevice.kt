@@ -224,6 +224,7 @@ class PhysicalDevice internal constructor(
             tessellationShader = tessellationShader(),
             fillModeNonSolid = fillModeNonSolid(),
             wideLines = wideLines(),
+            logicOp = logicOp(),
             multiDrawIndirect = multiDrawIndirect(),
             drawIndirectFirstInstance = drawIndirectFirstInstance(),
             shaderDrawParameters = shaderDrawParameters,

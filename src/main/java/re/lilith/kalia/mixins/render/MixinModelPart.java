@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import re.lilith.kalia.entity.CuboidBatcher;
+import re.lilith.kalia.entity.cuboid.CuboidBatcher;
 import re.lilith.kalia.frame.GameFrame;
 import re.lilith.kalia.gl.MatrixState;
 import re.lilith.kalia.entity.ModelBoxCuboidData;
@@ -52,9 +52,6 @@ public class MixinModelPart {
 
     @Unique
     private static final float RAD_TO_DEG = 180.0F / (float) Math.PI;
-
-    @Unique
-    private final Matrix4f kalia$boxMatrix = new Matrix4f();
 
     @Inject(method = "render(F)V", at = @At("HEAD"), cancellable = true)
     private void kalia$render(float scale, CallbackInfo ci) {
@@ -129,7 +126,12 @@ public class MixinModelPart {
 
     @Unique
     private void kalia$recordCuboids(float scale) {
+        if (this.cuboids.isEmpty()) {
+            return;
+        }
+
         Matrix4f modelView = MatrixState.INSTANCE.modelView();
+        CuboidBatcher.INSTANCE.beginPart();
 
         for (ModelBox box : this.cuboids) {
             if (!(box instanceof ModelBoxCuboidData)) continue;
@@ -139,10 +141,8 @@ public class MixinModelPart {
             float cy = (box.minY + box.maxY) * 0.5F * scale;
             float cz = (box.minZ + box.maxZ) * 0.5F * scale;
 
-            kalia$boxMatrix.set(modelView).translate(cx, cy, cz);
-
-            CuboidBatcher.INSTANCE.record(
-                    kalia$boxMatrix,
+            CuboidBatcher.INSTANCE.recordBox(
+                    modelView, cx, cy, cz,
                     data.kalia$texU(), data.kalia$texV(),
                     data.kalia$sizeX(), data.kalia$sizeY(), data.kalia$sizeZ(),
                     data.kalia$inflate(),

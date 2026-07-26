@@ -2,9 +2,11 @@ package re.lilith.kalia.utility
 
 import sun.misc.Unsafe
 import java.lang.reflect.Field
+import java.nio.Buffer
 
 object MemoryAccess {
     private val UNSAFE: Unsafe
+    private val BUFFER_ADDRESS_OFFSET: Long
 
     @JvmField
     val ARRAY_INT_BASE_OFFSET = Unsafe.ARRAY_INT_BASE_OFFSET
@@ -15,10 +17,14 @@ object MemoryAccess {
             field.setAccessible(true)
 
             UNSAFE = field.get(null) as Unsafe
+            BUFFER_ADDRESS_OFFSET = UNSAFE.objectFieldOffset(Buffer::class.java.getDeclaredField("address"))
         } catch (e: Exception) {
             throw RuntimeException("Could not initialize acquire Unsafe", e)
         }
     }
+
+    @JvmStatic
+    fun addressOf(buffer: Buffer): Long = UNSAFE.getLong(buffer, BUFFER_ADDRESS_OFFSET)
 
     @JvmStatic
     fun objectFieldOffset(f: Field): Long {
