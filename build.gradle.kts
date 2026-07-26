@@ -48,7 +48,6 @@ dependencies {
     bundled(libs.lwjgl.asProvider())
     bundled(libs.lwjgl.opengl)
     bundled(libs.lwjgl.openal)
-    bundled(libs.lwjgl.sdl)
     bundled(libs.lwjgl.vulkan)
     bundled(libs.lwjgl.vma)
     bundled(libs.lwjgl.shaderc)
@@ -56,7 +55,6 @@ dependencies {
     lwjglDesktopNatives("lwjgl")
     lwjglDesktopNatives("lwjgl-opengl")
     lwjglDesktopNatives("lwjgl-openal")
-    lwjglDesktopNatives("lwjgl-sdl")
     lwjglDesktopNatives("lwjgl-vma")
     lwjglDesktopNatives("lwjgl-shaderc")
 
