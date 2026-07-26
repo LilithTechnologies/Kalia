@@ -1,6 +1,7 @@
 package net.caffeinemc.mods.sodium.client.gpu;
 
 import re.lilith.kalia.KaliaEngine;
+import re.lilith.kalia.draw.EntityBatchers;
 import re.lilith.kalia.frame.GameFrame;
 import re.lilith.kalia.frame.GameFrameGraph;
 import re.lilith.kalia.renderer.command.PassContext;
@@ -21,6 +22,7 @@ public class KaliaAccess {
         if (pass == null) {
             throw new IllegalStateException("No Kalia pass is recording; Sodium must not record commands.");
         }
+        EntityBatchers.INSTANCE.flush();
         return pass;
     }
 

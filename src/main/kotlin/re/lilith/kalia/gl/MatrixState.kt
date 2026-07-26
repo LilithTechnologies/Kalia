@@ -124,7 +124,7 @@ object MatrixState {
         dirty = false
         ShaderUniforms.setModelView(modelView())
         ShaderUniforms.setProjection(projection())
-        ShaderUniforms.setTexture(texture())
+        ShaderUniforms.setTexture(textureStack(0).last())
     }
 
     fun reset() {

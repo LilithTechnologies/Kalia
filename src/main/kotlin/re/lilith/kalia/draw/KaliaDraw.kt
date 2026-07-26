@@ -43,6 +43,10 @@ object KaliaDraw {
         if (vertexCount <= 0) {
             return
         }
+        if (InstanceBatcher.tryRecord(format, glMode, vertexCount, buffer, offsetBytes)) {
+            return
+        }
+        EntityBatchers.flush()
         record(format, glMode, vertexCount, buffer, offsetBytes)
     }
 
@@ -117,17 +121,17 @@ object KaliaDraw {
         }
     }
 
-    private fun textureForUnit(unit: Int, resources: FrameResources) =
+    internal fun textureForUnit(unit: Int, resources: FrameResources) =
         if (TextureUnits.isEnabled(unit)) {
             TextureTable.boundTexture(unit)?.texture ?: resources.whiteTexture
         } else {
             resources.whiteTexture
         }
 
-    private fun samplerForUnit(unit: Int, resources: FrameResources) =
+    internal fun samplerForUnit(unit: Int, resources: FrameResources) =
         TextureTable.boundTexture(unit)
             ?.takeIf { TextureUnits.isEnabled(unit) }
-            ?.let { resources.device.createSampler(it.sampler) }
+            ?.let { resources.sampler(it.sampler) }
             ?: resources.defaultSampler
 
     private const val LIGHTMAP_UNIT = 1

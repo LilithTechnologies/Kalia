@@ -262,7 +262,7 @@ internal class OpenGlPassEncoder(
         if (boundTextures[binding] !== glTexture) {
             boundTextures[binding] = glTexture
             glActiveTexture(GL_TEXTURE0 + binding)
-            glBindTexture(GL_TEXTURE_2D, glTexture.id)
+            glBindTexture(glTexture.target, glTexture.id)
         }
         if (boundSamplers[binding] !== glSampler) {
             boundSamplers[binding] = glSampler
@@ -317,10 +317,12 @@ internal class OpenGlPassEncoder(
     }
 
     private fun applyVertexBinding(slot: Int, buffer: OpenGlBuffer, offsetBytes: Long) {
-        val format = requirePipeline().description.vertexFormat ?: return
-        if (slot != 0) {
-            return
-        }
+        val description = requirePipeline().description
+        val format = when (slot) {
+            0 -> description.vertexFormat
+            1 -> description.instanceFormat
+            else -> null
+        } ?: return
         glBindBuffer(GL_ARRAY_BUFFER, buffer.id)
         val divisor = if (format.stepMode == VertexStepMode.INSTANCE) 1 else 0
         for (attribute in format.attributes) {

@@ -8,6 +8,7 @@ import org.lwjgl.opengl.GL13.GL_MAX_TEXTURE_UNITS
 import org.lwjgl.opengl.GL13.GL_TEXTURE0
 import org.lwjgl.opengl.GL20.GL_MAX_TEXTURE_IMAGE_UNITS
 import re.lilith.kalia.KaliaEngine
+import re.lilith.kalia.draw.EntityBatchers
 import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.renderer.geometry.Color
 import java.nio.FloatBuffer
@@ -16,6 +17,7 @@ object GlBridge {
     @JvmStatic
     fun clear(mask: Int) {
         val encoder = GameFrame.current ?: return
+        EntityBatchers.flush()
         val color = if (mask and GlEnums.GL_COLOR_BUFFER_BIT != 0) GlState.clearColor else null
         val depth = if (mask and GlEnums.GL_DEPTH_BUFFER_BIT != 0) GlState.clearDepth else null
         encoder.clearAttachments(color, depth)

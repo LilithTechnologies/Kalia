@@ -28,6 +28,20 @@ class GlTexture(val id: Int) : AutoCloseable {
     private var wrap = GL_CLAMP_TO_EDGE
     private var maxLod = 0f
 
+    private var shadow: ByteBuffer? = null
+
+    var contentVersion: Long = 0L
+        private set
+
+    val poolWidth: Int get() = width
+    val poolHeight: Int get() = height
+    val poolFormat: TextureFormat get() = format
+
+    fun shadowPixels(): ByteBuffer? = shadow?.duplicate()?.also {
+        it.position(0)
+        it.limit((width * height * format.bytesPerPixel))
+    }
+
     fun defineLevel(level: Int, width: Int, height: Int, internalFormat: Int) {
         if (level + 1 > requestedMipLevels) {
             requestedMipLevels = level + 1
@@ -66,12 +80,50 @@ class GlTexture(val id: Int) : AutoCloseable {
         val converted = PixelFormats.convert(pixels, pixelFormat, pixelType, format, width * height)
 
         val levelExtent = levelExtent(target, level)
+        if (level == 0) {
+            maintainShadow(target, levelExtent, xOffset, yOffset, width, height, converted)
+        }
         if (xOffset == 0 && yOffset == 0 && width == levelExtent.width && height == levelExtent.height) {
             target.upload(converted, level)
             return
         }
 
         uploadSubRectangle(target, level, levelExtent, xOffset, yOffset, width, height, converted)
+    }
+
+    private fun maintainShadow(
+        target: GpuTexture,
+        levelExtent: Extent,
+        xOffset: Int,
+        yOffset: Int,
+        width: Int,
+        height: Int,
+        pixels: ByteBuffer,
+    ) {
+        if (target.mipLevels != 1 || !format.isColor ||
+            levelExtent.width > TextureArrays.MAX_SIZE || levelExtent.height > TextureArrays.MAX_SIZE
+        ) {
+            if (shadow != null) {
+                shadow = null
+                TextureArrays.release(this)
+            }
+            return
+        }
+        val bytesPerPixel = format.bytesPerPixel
+        val required = levelExtent.width * levelExtent.height * bytesPerPixel
+        var buffer = shadow
+        if (buffer == null || buffer.capacity() < required) {
+            buffer = ByteBuffer.allocateDirect(required).order(java.nio.ByteOrder.nativeOrder())
+            shadow = buffer
+        }
+        for (row in 0 until height) {
+            val sourceOffset = pixels.position() + row * width * bytesPerPixel
+            val targetOffset = ((yOffset + row) * levelExtent.width + xOffset) * bytesPerPixel
+            for (byte in 0 until width * bytesPerPixel) {
+                buffer.put(targetOffset + byte, pixels.get(sourceOffset + byte))
+            }
+        }
+        contentVersion++
     }
 
     fun generateMipmaps(device: RenderDevice) {
@@ -109,8 +161,10 @@ class GlTexture(val id: Int) : AutoCloseable {
     }
 
     override fun close() {
+        TextureArrays.release(this)
         texture?.close()
         texture = null
+        shadow = null
     }
 
     private fun materialize(device: RenderDevice): GpuTexture? {

@@ -1,0 +1,37 @@
+layout(location = 0) in vec4 vColor;
+layout(location = 1) in vec2 vUv0;
+layout(location = 2) in vec3 vNormal;
+layout(location = 3) in float vViewDistance;
+layout(location = 4) in vec4 vOverlay;
+layout(location = 5) in vec4 vMisc;
+layout(location = 6) in vec2 vLightUv;
+layout(location = 0) out vec4 fragColor;
+
+#ifdef TEXTURE_ARRAY
+layout(binding = 0) uniform sampler2DArray kaliaBaseTexture;
+#else
+layout(binding = 0) uniform sampler2D kaliaBaseTexture;
+#endif
+layout(binding = 2) uniform sampler2D kaliaLightmapTexture;
+
+#include "kalia:prelude.glsl"
+
+void main() {
+#ifdef TEXTURE_ARRAY
+    vec4 color = vColor * texture(kaliaBaseTexture, vec3(vUv0, vMisc.w));
+#else
+    vec4 color = vColor * texture(kaliaBaseTexture, vUv0);
+#endif
+    color.rgb = mix(color.rgb, vOverlay.rgb, vOverlay.a);
+    if (vMisc.y > 0.5) {
+        color.rgb = kaliaDiffuse(color.rgb, vNormal);
+    }
+    if (vMisc.x > 0.5) {
+        color.rgb *= texture(kaliaLightmapTexture, vLightUv).rgb;
+    }
+    if (color.a <= vMisc.z) {
+        discard;
+    }
+    color.rgb = kaliaApplyFog(color.rgb, vViewDistance);
+    fragColor = color;
+}

@@ -69,6 +69,13 @@ object ShaderUniforms {
     var sceneVersion: Long = 1L
         private set
 
+    var environmentVersion: Long = 1L
+        private set
+
+    private fun markEnvironmentDirty() {
+        environmentVersion++
+    }
+
     fun setModelView(matrix: Matrix4f) {
         if (modelView == matrix) return
         modelView.set(matrix)
@@ -79,17 +86,47 @@ object ShaderUniforms {
         if (projection == matrix) return
         projection.set(matrix)
         markSceneDirty()
+        markEnvironmentDirty()
     }
 
     fun setTexture(matrix: Matrix4f) {
         if (textureMatrix == matrix) return
         textureMatrix.set(matrix)
         markSceneDirty()
+        markEnvironmentDirty()
     }
 
     fun modelViewMatrix(): Matrix4f = modelView
 
     fun projectionMatrix(): Matrix4f = projection
+
+    fun shaderRed(): Float = shaderRed
+
+    fun shaderGreen(): Float = shaderGreen
+
+    fun shaderBlue(): Float = shaderBlue
+
+    fun shaderAlpha(): Float = shaderAlpha
+
+    fun modelOffsetX(): Float = offsetX
+
+    fun modelOffsetY(): Float = offsetY
+
+    fun modelOffsetZ(): Float = offsetZ
+
+    fun overlayRed(): Float = overlayRed
+
+    fun overlayGreen(): Float = overlayGreen
+
+    fun overlayBlue(): Float = overlayBlue
+
+    fun overlayAlpha(): Float = overlayAlpha
+
+    fun lightmapS(): Float = lightmapS
+
+    fun lightmapT(): Float = lightmapT
+
+    fun isLightmapEnabled(): Boolean = lightmapEnabled
 
 
     fun setShaderColor(red: Float, green: Float, blue: Float, alpha: Float) {
@@ -115,6 +152,8 @@ object ShaderUniforms {
         pushDirty = true
     }
 
+    fun alphaCutout(): Float = alphaCutout
+
     fun setFogColor(red: Float, green: Float, blue: Float, alpha: Float) {
         if (fogRed == red && fogGreen == green && fogBlue == blue && fogAlpha == alpha) return
         fogRed = red
@@ -122,6 +161,7 @@ object ShaderUniforms {
         fogBlue = blue
         fogAlpha = alpha
         pushDirty = true
+        markEnvironmentDirty()
     }
 
     fun setFogRange(start: Float, end: Float) {
@@ -129,24 +169,28 @@ object ShaderUniforms {
         fogStart = start
         fogEnd = end
         pushDirty = true
+        markEnvironmentDirty()
     }
 
     fun setFogDensity(value: Float) {
         if (fogDensity == value) return
         fogDensity = value
         pushDirty = true
+        markEnvironmentDirty()
     }
 
     fun setFogEnabled(value: Boolean) {
         if (fogEnabled == value) return
         fogEnabled = value
         pushDirty = true
+        markEnvironmentDirty()
     }
 
     fun setFogMode(value: GlEnums.FogMode) {
         if (fogMode == value) return
         fogMode = value
         pushDirty = true
+        markEnvironmentDirty()
     }
 
     fun isFogEnabled(): Boolean = fogEnabled
@@ -181,6 +225,7 @@ object ShaderUniforms {
         light1Y = secondY
         light1Z = secondZ
         markSceneDirty()
+        markEnvironmentDirty()
     }
 
     fun setLightDirection(index: Int, x: Float, y: Float, z: Float) {
@@ -196,6 +241,7 @@ object ShaderUniforms {
             light1Z = z
         }
         markSceneDirty()
+        markEnvironmentDirty()
     }
 
     fun setOverlayColor(red: Float, green: Float, blue: Float, alpha: Float) {
@@ -235,6 +281,7 @@ object ShaderUniforms {
         plane.set(x, y, z, w)
         texGenSources[coord] = source
         markSceneDirty()
+        markEnvironmentDirty()
     }
 
     fun setTexGenActive(value: Boolean) {
@@ -310,6 +357,7 @@ object ShaderUniforms {
         texGenSources.fill(0f)
         pushDirty = true
         markSceneDirty()
+        markEnvironmentDirty()
     }
 
     private fun markSceneDirty() {

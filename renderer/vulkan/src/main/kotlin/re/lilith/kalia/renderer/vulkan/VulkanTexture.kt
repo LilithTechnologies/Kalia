@@ -19,6 +19,7 @@ internal class VulkanTexture(
     override val extent: Extent,
     override val format: TextureFormat,
     override val mipLevels: Int,
+    override val layers: Int,
     val image: Image,
     val view: ImageView,
 ) : GpuTexture {
@@ -31,18 +32,19 @@ internal class VulkanTexture(
     val subresourceRange = ImageSubresourceRange(
         aspectMask = Convert.aspect(format),
         levelCount = mipLevels,
-        layerCount = 1,
+        layerCount = layers,
     )
 
-    override fun upload(source: ByteBuffer, mipLevel: Int) {
+    override fun upload(source: ByteBuffer, mipLevel: Int, layer: Int) {
         check(!closed) { "Texture '$label' is closed." }
         require(mipLevel in 0 until mipLevels) { "Texture '$label' has no mip level $mipLevel." }
+        require(layer in 0 until layers) { "Texture '$label' has no layer $layer." }
         val levelExtent = mipExtent(mipLevel)
         val expected = levelExtent.width.toLong() * levelExtent.height * format.bytesPerPixel
         require(source.remaining().toLong() == expected) {
             "Texture '$label' mip $mipLevel expects $expected bytes, got ${source.remaining()}."
         }
-        owner.uploads.stageTextureUpload(this, mipLevel, levelExtent, source)
+        owner.uploads.stageTextureUpload(this, mipLevel, levelExtent, source, layer)
     }
 
     override fun generateMipmaps() {

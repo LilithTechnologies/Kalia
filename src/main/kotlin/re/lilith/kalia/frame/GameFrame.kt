@@ -1,5 +1,6 @@
 package re.lilith.kalia.frame
 
+import re.lilith.kalia.draw.EntityBatchers
 import re.lilith.kalia.renderer.command.PassContext
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.geometry.Rect
@@ -29,6 +30,7 @@ object GameFrame {
             context.scissor(scissor)
             body()
         } finally {
+            EntityBatchers.flush()
             encoder = null
         }
     }
@@ -40,6 +42,7 @@ object GameFrame {
         if (colorTarget === color && depthTarget === depth) {
             return
         }
+        EntityBatchers.flush()
         colorTarget = color
         depthTarget = depth
         encoder?.retarget(color, depth)
@@ -51,11 +54,16 @@ object GameFrame {
 
     fun setViewport(x: Int, y: Int, width: Int, height: Int) {
         val requested = Viewport(x, y, width.coerceAtLeast(0), height.coerceAtLeast(0))
+        if (_viewport == requested) {
+            return
+        }
+        EntityBatchers.flush()
         _viewport = requested
         encoder?.viewport(requested)
     }
 
     fun resetViewport() {
+        EntityBatchers.flush()
         _viewport = null
         encoder?.let { it.viewport(Viewport.of(it.extent)) }
     }
@@ -63,11 +71,19 @@ object GameFrame {
     fun setScissor(x: Int, y: Int, width: Int, height: Int) {
         val height1 = extent.height
         val flipped = Rect(x, height1 - (y + height), width, height)
+        if (scissor == flipped) {
+            return
+        }
+        EntityBatchers.flush()
         scissor = flipped
         encoder?.scissor(flipped)
     }
 
     fun resetScissor() {
+        if (scissor == null) {
+            return
+        }
+        EntityBatchers.flush()
         scissor = null
         encoder?.scissor(null)
     }

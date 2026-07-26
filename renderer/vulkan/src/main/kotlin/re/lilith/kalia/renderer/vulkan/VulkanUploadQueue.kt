@@ -39,11 +39,11 @@ internal class VulkanUploadQueue(private val context: VulkanContext) {
     }
 
     @Synchronized
-    fun stageTextureUpload(target: VulkanTexture, mipLevel: Int, levelExtent: Extent, source: ByteBuffer) {
+    fun stageTextureUpload(target: VulkanTexture, mipLevel: Int, levelExtent: Extent, source: ByteBuffer, layer: Int = 0) {
         val length = source.remaining().toLong()
         val staging = context.createStagingBuffer(length)
         staging.mappedByteBuffer(0L, length).put(source.duplicate())
-        pending += PendingUpload.TextureUpload(staging, target, mipLevel, levelExtent, claimSampleable(target))
+        pending += PendingUpload.TextureUpload(staging, target, mipLevel, levelExtent, claimSampleable(target), layer)
     }
 
     @Synchronized
@@ -96,6 +96,7 @@ internal class VulkanUploadQueue(private val context: VulkanContext) {
                         mipLevel = upload.mipLevel,
                         levelExtent = upload.levelExtent,
                         sourceLayout = upload.sourceLayout,
+                        layer = upload.layer,
                     )
                     retire(upload.staging)
                 }
@@ -149,6 +150,7 @@ internal class VulkanUploadQueue(private val context: VulkanContext) {
             val mipLevel: Int,
             val levelExtent: Extent,
             val sourceLayout: ImageLayout,
+            val layer: Int,
         ) : WithStaging
 
         class MipmapGeneration(

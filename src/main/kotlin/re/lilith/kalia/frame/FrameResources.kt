@@ -50,6 +50,11 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
 
     val defaultSampler: GpuSampler = device.createSampler(SamplerDescription.NEAREST_CLAMP)
 
+    private val samplerCache = HashMap<SamplerDescription, GpuSampler>()
+
+    fun sampler(description: SamplerDescription): GpuSampler =
+        samplerCache.getOrPut(description) { device.createSampler(description) }
+
     fun beginFrame() {
         streamIndex = (streamIndex + 1) % streams.size
         vertexArena.reset()
@@ -63,6 +68,7 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
         }
         indices.close()
         whiteTexture.close()
+        samplerCache.values.forEach { it.close() }
     }
 
     private class Streams(val vertexArena: StreamArena, val sceneUniforms: SceneUniformRing)

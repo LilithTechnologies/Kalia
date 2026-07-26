@@ -39,6 +39,7 @@ internal fun VulkanContext.createTextureResources(description: TextureDescriptio
             format = Convert.format(description.format),
             extent = Extent3D(description.extent.width, description.extent.height, 1),
             mipLevels = description.mipLevels,
+            arrayLayers = description.layers,
             usage = usage,
         ),
         MemoryUsage.GpuOnly,
@@ -47,12 +48,12 @@ internal fun VulkanContext.createTextureResources(description: TextureDescriptio
     val view = device.createImageView(
         image,
         ImageViewConfig(
-            type = ImageViewType.TwoDimensional,
+            type = if (description.layers > 1) ImageViewType.TwoDimensionalArray else ImageViewType.TwoDimensional,
             format = Convert.format(description.format),
             subresourceRange = ImageSubresourceRange(
                 aspectMask = Convert.aspect(description.format),
                 levelCount = description.mipLevels,
-                layerCount = 1,
+                layerCount = description.layers,
             ),
         ),
     )
@@ -76,6 +77,7 @@ internal fun CommandRecorder.recordTextureUpload(
     mipLevel: Int,
     levelExtent: Extent,
     sourceLayout: ImageLayout,
+    layer: Int = 0,
 ) {
     recordLayoutTransition(texture, sourceLayout, ImageLayout.TransferDestinationOptimal)
     copyBufferToImage(
@@ -87,6 +89,7 @@ internal fun CommandRecorder.recordTextureUpload(
                 imageSubresource = ImageSubresourceLayers(
                     aspectMask = Convert.aspect(texture.format),
                     mipLevel = mipLevel,
+                    baseArrayLayer = layer,
                 ),
                 imageExtent = Extent3D(levelExtent.width, levelExtent.height, 1),
             ),

@@ -32,6 +32,8 @@
     "render.MixinGameRenderer",
     "render.MixinLivingEntityRenderer",
     "render.MixinMinecraftClient",
+    "render.MixinModelBox",
+    "render.MixinModelPart",
     "render.MixinTextRenderer",
     "render.MixinTitleScreen",
     "render.MixinVertexBuffer",

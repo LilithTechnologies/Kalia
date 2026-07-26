@@ -49,10 +49,13 @@ object DisplayLists {
         val byteCount = vertexCount * format.format.stride
         val slice = source.slice()
         slice.limit(byteCount)
-        val copy = ByteBuffer.allocateDirect(byteCount).order(ByteOrder.nativeOrder())
-        copy.put(slice)
-        copy.flip()
-        target += Batch(copy, format, glMode, vertexCount)
+
+        val last = target.lastOrNull()
+        if (last != null && last.canAppend(format, glMode)) {
+            last.append(slice, vertexCount)
+            return true
+        }
+        target += Batch(format, glMode).also { it.append(slice, vertexCount) }
         return true
     }
 
@@ -70,13 +73,37 @@ object DisplayLists {
     }
 
     private class Batch(
-        private val vertices: ByteBuffer,
         val format: TranslatedVertexFormat,
         val glMode: Int,
-        val vertexCount: Int,
     ) {
+        private var vertices = ByteBuffer.allocateDirect(INITIAL_BYTES).order(ByteOrder.nativeOrder())
+        var vertexCount = 0
+            private set
+
         private var resident: GpuBuffer? = null
         private var uploadedTo: RenderDevice? = null
+
+        fun canAppend(format: TranslatedVertexFormat, glMode: Int): Boolean =
+            resident == null &&
+                    this.format === format &&
+                    this.glMode == glMode &&
+                    (glMode == GL_QUADS || glMode == GL_TRIANGLES)
+
+        fun append(source: ByteBuffer, count: Int) {
+            val byteCount = source.remaining()
+            if (vertices.remaining() < byteCount) {
+                var capacity = vertices.capacity()
+                while (capacity - vertices.position() < byteCount) {
+                    capacity *= 2
+                }
+                val grown = ByteBuffer.allocateDirect(capacity).order(ByteOrder.nativeOrder())
+                vertices.flip()
+                grown.put(vertices)
+                vertices = grown
+            }
+            vertices.put(source)
+            vertexCount += count
+        }
 
         fun residentOn(device: RenderDevice): GpuBuffer {
             val existing = resident
@@ -88,13 +115,14 @@ object DisplayLists {
             val created = device.createBuffer(
                 BufferDescription(
                     label = "kalia/display-list",
-                    sizeBytes = vertices.capacity().toLong(),
+                    sizeBytes = vertices.position().toLong(),
                     usage = BufferUsage.STATIC,
                     vertex = true,
                 ),
             )
-            vertices.position(0)
-            created.write(vertices)
+            val upload = vertices.duplicate()
+            upload.flip()
+            created.write(upload)
             resident = created
             uploadedTo = device
             return created
@@ -104,6 +132,12 @@ object DisplayLists {
             resident?.close()
             resident = null
             uploadedTo = null
+        }
+
+        private companion object {
+            const val INITIAL_BYTES = 4096
+            const val GL_TRIANGLES = 0x0004
+            const val GL_QUADS = 0x0007
         }
     }
 }

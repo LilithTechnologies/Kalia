@@ -115,6 +115,7 @@ internal class VulkanRenderDevice(
             extent = description.extent,
             format = description.format,
             mipLevels = description.mipLevels,
+            layers = description.layers,
             image = image,
             view = view,
         ).also { texture ->
@@ -268,27 +269,30 @@ internal class VulkanRenderDevice(
     }
 
     private fun vertexInputState(description: GraphicsPipelineDescription): VertexInputState {
-        val format = description.vertexFormat ?: return VertexInputState()
-        return VertexInputState(
-            bindings = listOf(
-                VertexInputBinding(
-                    binding = 0,
-                    stride = format.stride,
-                    inputRate = when (format.stepMode) {
-                        VertexStepMode.VERTEX -> VertexInputRate.Vertex
-                        VertexStepMode.INSTANCE -> VertexInputRate.Instance
-                    },
-                ),
-            ),
-            attributes = format.attributes.map { attribute ->
+        val bindings = mutableListOf<VertexInputBinding>()
+        val attributes = mutableListOf<VertexInputAttribute>()
+        for ((binding, format) in listOfNotNull(
+            description.vertexFormat?.let { 0 to it },
+            description.instanceFormat?.let { 1 to it },
+        )) {
+            bindings += VertexInputBinding(
+                binding = binding,
+                stride = format.stride,
+                inputRate = when (format.stepMode) {
+                    VertexStepMode.VERTEX -> VertexInputRate.Vertex
+                    VertexStepMode.INSTANCE -> VertexInputRate.Instance
+                },
+            )
+            format.attributes.mapTo(attributes) { attribute ->
                 VertexInputAttribute(
                     location = attribute.location,
-                    binding = 0,
+                    binding = binding,
                     format = Convert.vertexFormat(attribute.format),
                     offset = attribute.offset,
                 )
-            },
-        )
+            }
+        }
+        return VertexInputState(bindings = bindings, attributes = attributes)
     }
 
     override fun render(graph: RenderGraph): Boolean {
