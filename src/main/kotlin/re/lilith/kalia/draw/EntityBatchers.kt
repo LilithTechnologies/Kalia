@@ -17,7 +17,6 @@ object EntityBatchers {
     }
 
     fun flush() {
-        InstanceBatcher.flush()
         CuboidBatcher.flush()
         ShadowBatcher.flush()
     }
