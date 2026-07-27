@@ -6,6 +6,7 @@ import net.caffeinemc.mods.sodium.client.gpu.buffer.DeviceBuffer;
 import net.caffeinemc.mods.sodium.client.gpu.buffer.MappingType;
 import net.caffeinemc.mods.sodium.client.gpu.device.CommandList;
 import net.caffeinemc.mods.sodium.client.gpu.util.EnumBitField;
+import net.caffeinemc.mods.sodium.client.gui.Colors;
 import net.caffeinemc.mods.sodium.client.render.chunk.region.RenderRegion;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;
 import net.caffeinemc.mods.sodium.client.util.MathUtil;
@@ -21,8 +22,8 @@ import java.util.List;
 public class ArenaAggregator {
     // how much bigger than requested a buffer can be to be considered for reuse
     public static final float MAX_BUFFER_REUSE_SIZE_FACTOR = 1.4f;
-    private static final int DEFRAG_COPIES_PER_FRAME_BUDGET = 32;
-    private static final long DEFRAG_BYTES_PER_FRAME_BUDGET = MathUtil.fromMib(32);
+    private static final float DEFRAG_COPIES_PER_FRAME = (float) 32 / MathUtil.fromMib(1024);
+    private static final float DEFRAG_BYTES_PER_FRAME = (float) MathUtil.fromMib(32) / MathUtil.fromMib(1024);
     private static final float MIN_FREE_FRACTION_AFTER_DEALLOC = 0.07f;
     private static final float FREE_FRACTION_AFTER_DEALLOC_ABORT_LIMIT = 0.04f;
     private static final long RATE_MEASURE_INTERVAL_NANOS = 500_000_000L;
@@ -33,7 +34,8 @@ public class ArenaAggregator {
     private static final float RESIZE_TO_COMPACT_TOTAL_FREE_FRACTION = 0.05f;
     private static final float COMPACTION_MARGIN = 0.1f;
 
-    private static final long NO_MAX_CAPACITY = 0;
+    private static final long MAX_DYNAMIC_BUFFER_SIZE = MathUtil.fromMib(512 + 1024);
+    private static final float HUGE_BUFFER_SIZE_FACTOR = 1.1f;
     private static final int DISALLOW_NEW_ALLOCATION = 0;
     private static final int ALLOW_NEW_ALLOCATION = 1;
     private static final int REQUIRE_NEW_ALLOCATION = 2;
@@ -42,41 +44,46 @@ public class ArenaAggregator {
     private final DeviceBuffer[] freeBuffers = new DeviceBuffer[8];
     private int freeBufferCount = 0;
 
+    private DefragBudget lastDefragBudget;
+
     private final DataType index = new DataType("Index", Integer.BYTES) {
         @Override
-        long calculateArenaSize(int newArenaCount, long requiredSize, long maxSize) {
+        long calculateArenaSize(int newArenaCount, long requiredSize) {
             var factorSize = switch (newArenaCount) {
                 case 1 -> MathUtil.fromMib(16);
                 case 2 -> MathUtil.fromMib(32);
                 default -> MathUtil.fromMib(64);
             };
-            var capacitySize = requiredSize * 3;
-            if (maxSize != NO_MAX_CAPACITY) {
-                capacitySize = requiredSize * 2;
-            } else {
-                maxSize = Long.MAX_VALUE;
-            }
-            return Math.min(Math.max(capacitySize, factorSize), maxSize);
+
+            long capacitySize = requiredSize * 3;
+
+            capacitySize = limitLargeBufferSize(requiredSize, capacitySize);
+
+            return Math.max(capacitySize, factorSize);
         }
     };
+
     private final DataType geometry = new DataType("Geometry", ChunkMeshFormats.COMPACT.getVertexFormat().getStride()) {
         @Override
-        long calculateArenaSize(int newArenaCount, long requiredSize, long maxSize) {
+        long calculateArenaSize(int newArenaCount, long requiredSize) {
             var factorSize = switch (newArenaCount) {
-                case 1 -> MathUtil.fromMib(16);
-                case 2 -> MathUtil.fromMib(32);
-                default -> MathUtil.fromMib(64);
+                case 1 -> MathUtil.fromMib(32);
+                case 2 -> MathUtil.fromMib(128);
+                default -> MathUtil.fromMib(256);
             };
-            var capacitySize = requiredSize * 3;
-            if (maxSize != NO_MAX_CAPACITY) {
+
+            long capacitySize;
+            if (requiredSize >= MathUtil.fromMib(256)) {
                 capacitySize = requiredSize * 2;
+            } else if (requiredSize >= MathUtil.fromMib(32) && newArenaCount >= 3) {
+                capacitySize = requiredSize * 4;
             } else {
-                maxSize = Long.MAX_VALUE;
-                if (requiredSize >= MathUtil.fromMib(64)) {
-                    capacitySize = requiredSize * 2;
-                }
+                capacitySize = requiredSize * 7;
             }
-            return Math.min(Math.max(capacitySize, factorSize), maxSize);
+
+            capacitySize = limitLargeBufferSize(requiredSize, capacitySize);
+
+            return Math.max(capacitySize, factorSize);
         }
     };
 
@@ -129,6 +136,14 @@ public class ArenaAggregator {
         public long getUsedCopyBytes() {
             return this.startCopyBytes - this.copyBytes;
         }
+
+        public int getStartCopyCount() {
+            return this.startCopyCount;
+        }
+
+        public long getStartCopyBytes() {
+            return this.startCopyBytes;
+        }
     }
 
     private abstract class DataType {
@@ -144,7 +159,16 @@ public class ArenaAggregator {
             this.arenas = new ArrayList<>();
         }
 
-        abstract long calculateArenaSize(int newArenaCount, long requiredSize, long maxSize);
+        abstract long calculateArenaSize(int newArenaCount, long requiredSize);
+
+        protected static long limitLargeBufferSize(long requiredSize, long capacitySize) {
+            // if the buffer is very large, limit its size to be just enough to fit the requirement
+            if (capacitySize >= MAX_DYNAMIC_BUFFER_SIZE) {
+                var limitedSize = (long) (requiredSize * HUGE_BUFFER_SIZE_FACTOR);
+                capacitySize = Math.max(limitedSize, MAX_DYNAMIC_BUFFER_SIZE);
+            }
+            return capacitySize;
+        }
 
         SharedBufferArena createSharedArena(CommandList commands, long requiredSize) {
             DeviceBuffer buffer = ArenaAggregator.this.getBufferOfSizeAtLeast(commands, requiredSize);
@@ -152,7 +176,7 @@ public class ArenaAggregator {
             return new SharedBufferArena(ArenaAggregator.this, buffer, actualCapacity, this.stride);
         }
 
-        SharedBufferArena ensureSharedArena(CommandList commands, long requiredCapacity, int newAllocationMode, long maxCapacity) {
+        SharedBufferArena ensureSharedArena(CommandList commands, long requiredCapacity, int newAllocationMode) {
             SharedBufferArena bestArena = null;
             if (newAllocationMode != REQUIRE_NEW_ALLOCATION) {
                 long biggestFreeSegmentSize = requiredCapacity;
@@ -166,7 +190,7 @@ public class ArenaAggregator {
             }
 
             if (bestArena == null && newAllocationMode != DISALLOW_NEW_ALLOCATION) {
-                var allocationSize = this.calculateArenaSize(this.arenas.size() + 1, requiredCapacity * this.stride, maxCapacity * this.stride);
+                var allocationSize = this.calculateArenaSize(this.arenas.size() + 1, requiredCapacity * this.stride);
                 if (allocationSize <= 0) {
                     throw new IllegalStateException("Cannot allocate arena of with " + requiredCapacity + " bytes");
                 }
@@ -193,7 +217,7 @@ public class ArenaAggregator {
             return allocated;
         }
 
-        void update(CommandList commands, DefragBudget budget, long nanosSinceMeasure) {
+        void update(CommandList commandList, DefragBudget budget, long nanosSinceMeasure) {
             budget.setupElementCopy(this.stride);
 
             // calculate total unfragmented free and capacity, remove empty arenas.
@@ -208,7 +232,7 @@ public class ArenaAggregator {
                 var arena = it.next();
 
                 if (arena.isEmpty() && canDeleteArena && !arena.isCompactionTarget()) {
-                    arena.deleteShared(commands);
+                    arena.deleteShared(commandList);
                     it.remove();
                     continue;
                 }
@@ -237,8 +261,8 @@ public class ArenaAggregator {
                     emptyingArena = null;
                 }
                 // remove if emptying results in empty
-                else if (emptyingArena.continueEmptying(commands, budget)) {
-                    emptyingArena.deleteShared(commands);
+                else if (emptyingArena.continueEmptying(commandList, budget)) {
+                    emptyingArena.deleteShared(commandList);
                     this.arenas.remove(emptyingArena);
                     emptyingArena = null;
                 }
@@ -271,7 +295,7 @@ public class ArenaAggregator {
                     }
 
                     if (!budget.isElementBudgetEmpty()) {
-                        arena.defragmentIncremental(commands, budget);
+                        arena.defragmentIncremental(commandList, budget);
                     }
                 }
             }
@@ -296,7 +320,7 @@ public class ArenaAggregator {
 //                float freeFraction = compactionCandidate.getFree() / (float) totalUnfragmentedFree;
 //                if (freeFraction >= RESIZE_TO_COMPACT_TOTAL_FREE_FRACTION) {
 //                    var sizeTarget = compactionCandidate.getUsed() + (long) (compactionCandidate.getFree() * COMPACTION_MARGIN);
-//                    var compactionTarget = this.ensureSharedArena(commands, compactionCandidate.getUsed(), REQUIRE_NEW_ALLOCATION, sizeTarget);
+//                    var compactionTarget = this.ensureSharedArena(compactionCandidate.getUsed(), REQUIRE_NEW_ALLOCATION, sizeTarget);
 //                    compactionCandidate.makeCompactionSource(compactionTarget);
 //                    // emptyingArena = biggestFreeArena;
 //                }
@@ -331,21 +355,21 @@ public class ArenaAggregator {
         }
     }
 
-    BufferArena getArenaFittingFor(CommandList commands, long requiredCapacity, int stride, boolean allowNewAllocation) {
+        BufferArena getArenaFittingFor(CommandList commands, long requiredCapacity, int stride, boolean allowNewAllocation) {
         // TODO: create arena size based on top k region sizes, and scale up if all regions are big
-        return getDataTypeForStride(stride).ensureSharedArena(commands, requiredCapacity, allowNewAllocation ? ALLOW_NEW_ALLOCATION : DISALLOW_NEW_ALLOCATION, NO_MAX_CAPACITY);
+        return getDataTypeForStride(stride).ensureSharedArena(commands, requiredCapacity, allowNewAllocation ? ALLOW_NEW_ALLOCATION : DISALLOW_NEW_ALLOCATION);
     }
 
     BufferArena createDedicatedArena(CommandList commands, long requiredCapacity, int stride) {
         DeviceBuffer buffer = getBufferOfSizeAtLeast(commands, requiredCapacity * stride);
         long actualCapacity = buffer.getSize() / stride;
-        return new BufferArena(this, buffer, actualCapacity, stride);
+        return new SingleOwnerBufferArena(this, buffer, actualCapacity, stride);
     }
 
     DeviceBuffer getBufferOfSizeAtLeast(CommandList commands, long bytes) {
         DeviceBuffer buffer = null;
 
-        if (freeBufferCount > 0) {
+        if (this.freeBufferCount > 0) {
             // get any buffer of at least the requested size but at most MAX_BUFFER_REUSE_SIZE_FACTOR larger
             long maxAcceptableSize = (long) (bytes * MAX_BUFFER_REUSE_SIZE_FACTOR);
 
@@ -364,7 +388,7 @@ public class ArenaAggregator {
             }
             if (buffer != null) {
                 this.freeBuffers[candidateIndex] = null;
-                freeBufferCount--;
+                this.freeBufferCount--;
             }
         }
 
@@ -378,19 +402,19 @@ public class ArenaAggregator {
 
     void releaseBufferForReuse(CommandList commands, DeviceBuffer buffer) {
         // find an empty slot if there is one
-        if (freeBufferCount < this.freeBuffers.length) {
+        if (this.freeBufferCount < this.freeBuffers.length) {
             for (int i = 0; i < this.freeBuffers.length; i++) {
                 if (this.freeBuffers[i] == null) {
                     this.freeBuffers[i] = buffer;
-                    freeBufferCount++;
+                    this.freeBufferCount++;
                     return;
                 }
             }
         }
 
         // evict randomly if no empty slot available
-        int evictIndex = this.nextRandomInt(this.freeBuffers.length);
-        commands.deleteBuffer(this.freeBuffers[evictIndex]);
+        int evictIndex = (int) (Math.random() * this.freeBuffers.length);
+        if (this.freeBuffers[evictIndex] != null) commands.deleteBuffer(this.freeBuffers[evictIndex]);
         this.freeBuffers[evictIndex] = buffer;
     }
 
@@ -402,7 +426,7 @@ public class ArenaAggregator {
                 this.freeBuffers[i] = null;
             }
         }
-        freeBufferCount = 0;
+        this.freeBufferCount = 0;
 
         for (var dataType : this.dataTypes) {
             for (var arenaEntry : dataType.arenas) {
@@ -412,75 +436,33 @@ public class ArenaAggregator {
         }
     }
 
-    // Maintenance (defrag / emptying / compaction candidate scan) only needs to run while
-    // the arenas' contents are changing or an incremental job is in flight. In a static
-    // world nothing changes for thousands of frames; the flag lets update() skip the full
-    // per-arena scan entirely until the next alloc/free.
-    private boolean maintenanceDirty = true;
-
-    // Cheap xorshift64 for the eviction/type-offset randomness; Math.random() synchronizes
-    // on a shared java.util.Random and was measurable on the per-frame path.
-    private long xorshiftState = System.nanoTime() | 1L;
-
-    private int nextRandomInt(int bound) {
-        long x = this.xorshiftState;
-        x ^= x << 13;
-        x ^= x >>> 7;
-        x ^= x << 17;
-        this.xorshiftState = x;
-        return (int) Math.floorMod(x, bound);
-    }
-
-    void notifyContentsChanged() {
-        this.maintenanceDirty = true;
-    }
-
-    public boolean hasPendingMaintenance() {
-        return this.maintenanceDirty;
-    }
-
-    private boolean anyArenaEmptying() {
-        for (var dataType : this.dataTypes) {
-            for (var arena : dataType.arenas) {
-                if (arena.isEmptying()) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    public void update(CommandList commands) {
-        if (!this.maintenanceDirty) {
-            return;
-        }
-
+    public void update(CommandList commandList) {
         long currentTime = System.nanoTime();
         long timeSinceLastMeasure = currentTime - this.lastRateMeasureTime;
         if (timeSinceLastMeasure >= RATE_MEASURE_INTERVAL_NANOS) {
             this.lastRateMeasureTime = currentTime;
         }
 
-        // TODO: adjust based on total memory usage? if we have more memory usage we need to move more of it around
-        var budget = new DefragBudget(DEFRAG_COPIES_PER_FRAME_BUDGET, DEFRAG_BYTES_PER_FRAME_BUDGET);
+        // calculate budget based on total allocated memory, but acting as if there's at least one GiB "allocated" for the budget
+        long budgetAllocatedBytes = 0;
+        for (var dataType : this.dataTypes) {
+            budgetAllocatedBytes += dataType.getDeviceAllocatedMemory();
+        }
+        budgetAllocatedBytes = Math.max(budgetAllocatedBytes, MathUtil.fromMib(1024));
+        var budget = new DefragBudget((int) (DEFRAG_COPIES_PER_FRAME * budgetAllocatedBytes), (long) (DEFRAG_BYTES_PER_FRAME * budgetAllocatedBytes));
+        this.lastDefragBudget = budget;
 
         // perform some amount of defragmentation on update
-        var typeOffset = this.nextRandomInt(this.dataTypes.size());
+        var typeOffset = (int) Math.floor(Math.random() * this.dataTypes.size());
         for (int i = 0; i < this.dataTypes.size(); i++) {
             int dataTypeIndex = (typeOffset + i) % this.dataTypes.size();
             var dataType = this.dataTypes.get(dataTypeIndex);
-            dataType.update(commands, budget, timeSinceLastMeasure);
+            dataType.update(commandList, budget, timeSinceLastMeasure);
         }
 
         this.totalCopyCount += budget.getUsedCopyCount();
         this.totalCopyBytes += budget.getUsedCopyBytes();
         this.arenaDefragOffset++;
-
-        // Go idle only after a fully quiescent pass: no copies were performed and no arena
-        // has an emptying job in flight. Any alloc/free re-arms the flag.
-        if (budget.getUsedCopyCount() == 0 && budget.getUsedCopyBytes() == 0L && !this.anyArenaEmptying()) {
-            this.maintenanceDirty = false;
-        }
     }
 
     public long getGeometryDeviceUsedMemory() {
@@ -510,72 +492,10 @@ public class ArenaAggregator {
     }
 
     public int getBufferCount() {
-        int count = freeBufferCount;
+        int count = this.freeBufferCount;
         for (var dataType : this.dataTypes) {
             count += dataType.arenas.size();
         }
         return count;
     }
-
-//    public void renderBufferDebug(GuiGraphics graphics) {
-//        int leftPadding = 10;
-//        int verticalPadding = 10;
-//        int arenaPadding = 4;
-//        int targetWidth = graphics.guiWidth() / 2;
-//        int targetHeight = graphics.guiHeight();
-//        var totalMapHeight = (targetHeight - verticalPadding - 2 * verticalPadding * this.dataTypes.size());
-//
-//        // count number of maps to adjust heights
-//        var countOffset = 2;
-//        int mapCount = this.dataTypes.stream().mapToInt(dt -> dt.arenas.size() + countOffset).sum();
-//        if (mapCount == 0) {
-//            return;
-//        }
-//
-//        int y = verticalPadding;
-//        for (var dataType : this.dataTypes) {
-//            // dataType.name + " Shared Arenas: " + dataType.arenas.size()
-//            var str = String.format("%s Shared Arenas: %d (Used: %d MiB / Allocated: %d MiB) %s",
-//                    dataType.name,
-//                    dataType.arenas.size(),
-//                    MathUtil.toMib(dataType.getDeviceUsedMemory()),
-//                    MathUtil.toMib(dataType.getDeviceAllocatedMemory()),
-//                    dataType.pauseDeallocation ? "deallocation paused" : "");
-//            graphics.drawString(Minecraft.getInstance().font, str, leftPadding, y, Colors.FOREGROUND);
-//            y += verticalPadding;
-//            var x = leftPadding;
-//            var arenaCount = dataType.arenas.size();
-//            if (arenaCount == 0) {
-//                continue;
-//            }
-//
-//            int mapWidth = (targetWidth - leftPadding * 2 - arenaPadding * (arenaCount - 1)) / arenaCount;
-//            int mapHeight = (totalMapHeight * (arenaCount + countOffset)) / mapCount;
-//            for (var arenaEntry : dataType.arenas) {
-//                arenaEntry.renderDebugMap(x, y, mapWidth, mapHeight);
-//                x += mapWidth + arenaPadding;
-//            }
-//
-//            y += mapHeight + verticalPadding;
-//        }
-//
-//        // show total copies and bytes
-//        graphics.drawString(Minecraft.getInstance().font,
-//                String.format("Defragmentation copies: %d (%d MiB)",
-//                        this.totalCopyCount, MathUtil.toMib(this.totalCopyBytes)),
-//                leftPadding, 30, Colors.FOREGROUND);
-//
-//        // budget per frame
-//        graphics.drawString(Minecraft.getInstance().font,
-//                String.format("Defragmentation budget per frame: %d copies / %d MiB",
-//                        DEFRAG_COPIES_PER_FRAME_BUDGET,
-//                        MathUtil.toMib(DEFRAG_BYTES_PER_FRAME_BUDGET)),
-//                leftPadding, 40, Colors.FOREGROUND);
-//
-//        // allocation stats
-//        graphics.drawString(Minecraft.getInstance().font,
-//                String.format("Buffer allocations: %d (%d MiB)",
-//                        this.allocationCount, MathUtil.toMib(this.allocationBytes)),
-//                leftPadding, 50, Colors.FOREGROUND);
-//    }
 }

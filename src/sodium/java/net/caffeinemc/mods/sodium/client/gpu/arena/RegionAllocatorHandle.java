@@ -53,9 +53,9 @@ public class RegionAllocatorHandle implements AllocatorBase, SizedTreeMap.Sized 
         this.backingArena.free(entry);
     }
 
-    public void deleteSingleOwner(CommandList commands) {
+    public void deleteSingleOwner(CommandList commandList) {
         // differentiation of single-owner or shared deletion is handled at the arena level
-        this.backingArena.deleteSingleOwner(commands, this);
+        this.backingArena.deleteSingleOwner(commandList, this);
     }
 
     @Override

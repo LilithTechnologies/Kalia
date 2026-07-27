@@ -5,7 +5,7 @@ import net.caffeinemc.mods.sodium.client.gpu.device.CommandList;
 
 import java.util.Collection;
 
-public class DefragmentingBufferArena extends BufferArena {
+public abstract class DefragmentingBufferArena extends BufferArena {
     private static final float DEFRAG_STOP_AFTER_FREE_SEEN_FRACTION = 0.95f;
     private static final float DEFRAG_MIN_FREE_FRACTION = 0.03f;
     private static final int MAX_DEFRAG_STEPS = 5;
@@ -20,12 +20,6 @@ public class DefragmentingBufferArena extends BufferArena {
 
     protected DefragmentingBufferArena(ArenaAggregator parent, DeviceBuffer initialBuffer, long capacity, int stride) {
         super(parent, initialBuffer, capacity, stride);
-        this.addFreeSegment(this.head);
-    }
-
-    @Override
-    protected void onSegmentsRebuilt() {
-        this.freeSegmentsByLength.clear();
         this.addFreeSegment(this.head);
     }
 
@@ -73,7 +67,7 @@ public class DefragmentingBufferArena extends BufferArena {
         return (float) (totalFreeSize - biggestFreeTotalSize) / (float) this.capacity;
     }
 
-    protected void defragmentIncremental(CommandList commands, ArenaAggregator.DefragBudget budget) {
+    protected void defragmentIncremental(CommandList commandList, ArenaAggregator.DefragBudget budget) {
         // don't defragment if there's only one free segment
         if (this.freeSegmentsByLength.size() <= 1) {
             return;
@@ -93,7 +87,7 @@ public class DefragmentingBufferArena extends BufferArena {
         int defragmentationSteps = calculateDefragmentationSteps(fragmentationDegree);
 
         for (int i = 0; i < defragmentationSteps; i++) {
-            defragmentationStep(commands, descendingFreeSegments, requiredSeenFreeSize, budget);
+            defragmentationStep(commandList, descendingFreeSegments, requiredSeenFreeSize, budget);
             if (budget.isElementBudgetEmpty()) {
                 break;
             }
@@ -104,24 +98,18 @@ public class DefragmentingBufferArena extends BufferArena {
         return 1 + (int) Math.floor(fragmentationDegree * MAX_DEFRAG_STEPS);
     }
 
-    private void defragmentationStep(CommandList commands, Collection<BufferSegment> descendingFreeSegments, long requiredSeenFreeSize, ArenaAggregator.DefragBudget budget) {
+    private void defragmentationStep(CommandList commandList, Collection<BufferSegment> descendingFreeSegments, long requiredSeenFreeSize, ArenaAggregator.DefragBudget budget) {
         // find the biggest free segment that can receive defragmentation
         long seenFreeSize = 0;
-        var it = descendingFreeSegments.iterator();
-        BufferSegment biggestFree;
-        var secondBiggestFree = it.next();
-        while (it.hasNext() || secondBiggestFree != null) {
-            biggestFree = secondBiggestFree;
-            secondBiggestFree = it.hasNext() ? it.next() : null;
+        for (BufferSegment segmentToMove : descendingFreeSegments) {
+            seenFreeSize += segmentToMove.getLength();
 
-            seenFreeSize += biggestFree.getLength(); // biggestFree guaranteed non-null here
-
-            // stop if we've already seen enough free and defragmentation must be low
+            // stop if we've already seen enough free and thus the degree of fragmentation is low
             if (seenFreeSize >= requiredSeenFreeSize) {
                 return;
             }
 
-            if (defragmentDirectional(commands, budget, biggestFree, descendingFreeSegments)) {
+            if (defragmentDirectional(commandList, budget, segmentToMove, descendingFreeSegments)) {
                 return;
             }
         }
@@ -130,7 +118,7 @@ public class DefragmentingBufferArena extends BufferArena {
         this.defragmentRight = !this.defragmentRight;
     }
 
-    private boolean defragmentDirectional(CommandList commands, ArenaAggregator.DefragBudget budget, BufferSegment biggestFree, Collection<BufferSegment> biggestSegments) {
+    private boolean defragmentDirectional(CommandList commandList, ArenaAggregator.DefragBudget budget, BufferSegment biggestFree, Collection<BufferSegment> biggestSegments) {
         // determine the direction we want to move it
         var next = biggestFree.getNext();
         var prev = biggestFree.getPrev();
@@ -140,6 +128,8 @@ public class DefragmentingBufferArena extends BufferArena {
         }
 
         // find as many segments as will fit into the free segment in the chosen direction to move in the opposite direction, which causes the free segment to move in the chosen direction
+        // TODO: this is causing likely the cause of a java.lang.IllegalStateException: segment.prev.end > segment.start: overlapping segments (corrupted) within the segment extraction code
+        // TODO: more smartly determine whether moving the free space in any particular direction would actually gain us anything, i.e. if there's no significant amount of free segments to be combined with in this direction, don't even try. maybe just get the top N biggest free segments and move them towards each other preferentially? -> use while loops and collect the biggest and second biggest and try to move the biggest towards the second biggest, and if that doesn't work, in the other direction, and if that doesn't work, try the second and third biggest, etc.
         // TODO: byte and copy count budgeting, integrate with time estimation?
         var defragmentRightLocal = this.defragmentRight;
 
@@ -164,12 +154,12 @@ public class DefragmentingBufferArena extends BufferArena {
         }
 
         if (defragmentRightLocal) {
-            if (next != null && defragmentRightwards(commands, biggestFree, budget)) {
+            if (next != null && defragmentRightwards(commandList, biggestFree, budget)) {
                 this.checkAssertions();
                 return true;
             }
         } else {
-            if (prev != this.head && biggestFree != this.head && defragmentLeftwards(commands, biggestFree, budget)) {
+            if (prev != this.head && biggestFree != this.head && defragmentLeftwards(commandList, biggestFree, budget)) {
                 this.checkAssertions();
                 return true;
             }
@@ -177,7 +167,7 @@ public class DefragmentingBufferArena extends BufferArena {
         return false;
     }
 
-    private boolean defragmentRightwards(CommandList commands, BufferSegment biggestFree, ArenaAggregator.DefragBudget budget) {
+    private boolean defragmentRightwards(CommandList commandList, BufferSegment biggestFree, ArenaAggregator.DefragBudget budget) {
         long freeLength = biggestFree.getLength();
         long freeEnd = biggestFree.getEnd();
         long freeOffset = biggestFree.getOffset();
@@ -194,7 +184,7 @@ public class DefragmentingBufferArena extends BufferArena {
             // this segment does still fit, add it
             toMove.setOffset(freeOffset + totalMoveLength);
             totalMoveLength = newTotalMoveLength;
-            toMove.notifyOwnerSegmentChanged(commands);
+            toMove.notifyOwnerSegmentChanged(commandList);
 
             // perform linkages with prev
             if (destinationPrev == null) {
@@ -215,7 +205,7 @@ public class DefragmentingBufferArena extends BufferArena {
         if (totalMoveLength > 0) {
             // execute the copy of the continuous segments
             long bytes = totalMoveLength * this.stride;
-            commands.copyBufferToBuffer(this.arenaBuffer, this.arenaBuffer,
+            commandList.copyBufferToBuffer(this.arenaBuffer, this.arenaBuffer,
                     freeEnd * this.stride,
                     freeOffset * this.stride,
                     bytes
@@ -254,7 +244,7 @@ public class DefragmentingBufferArena extends BufferArena {
     }
 
     // note that there is no this.tail
-    private boolean defragmentLeftwards(CommandList commands, BufferSegment biggestFree, ArenaAggregator.DefragBudget budget) {
+    private boolean defragmentLeftwards(CommandList commandList, BufferSegment biggestFree, ArenaAggregator.DefragBudget budget) {
         long freeLength = biggestFree.getLength();
         long freeEnd = biggestFree.getEnd();
         long freeOffset = biggestFree.getOffset();
@@ -271,7 +261,7 @@ public class DefragmentingBufferArena extends BufferArena {
             // this segment does still fit, add it
             totalMoveLength = newTotalMoveLength;
             toMove.setOffset(freeEnd - totalMoveLength);
-            toMove.notifyOwnerSegmentChanged(commands);
+            toMove.notifyOwnerSegmentChanged(commandList);
 
             // perform linkages with next
             if (destinationNext != null) {
@@ -289,7 +279,7 @@ public class DefragmentingBufferArena extends BufferArena {
         if (totalMoveLength > 0) {
             // execute the copy of the continuous segments
             long bytes = totalMoveLength * this.stride;
-            commands.copyBufferToBuffer(this.arenaBuffer, this.arenaBuffer,
+            commandList.copyBufferToBuffer(this.arenaBuffer, this.arenaBuffer,
                     (freeOffset - totalMoveLength) * this.stride,
                     (freeEnd - totalMoveLength) * this.stride,
                     bytes
@@ -303,6 +293,8 @@ public class DefragmentingBufferArena extends BufferArena {
             // adjust the free segment
             this.removeFreeSegment(biggestFree);
 
+            // TODO: in weird rare cases this results in a negative offset, why?
+            // run with asserts enabled in mangrove forest: the overlapping segments are probably the cause
             if (freeOffset < totalMoveLength) {
                 CHECK_ASSERTIONS = true;
                 this.checkAssertions();
@@ -343,9 +335,9 @@ public class DefragmentingBufferArena extends BufferArena {
         return this.freeSegmentsByLength.removeFirstOfSizeAtLeast(size);
     }
 
+    @Override
     BufferSegment alloc(long size, RegionAllocatorHandle owner, int ownerIndex) {
         this.checkAssertions();
-        this.parent.notifyContentsChanged();
 
         BufferSegment free = this.takeFree(size);
 
@@ -393,7 +385,6 @@ public class DefragmentingBufferArena extends BufferArena {
         if (entry.isFree()) {
             throw new IllegalStateException("Already freed");
         }
-        this.parent.notifyContentsChanged();
 
         var owner = entry.getOwner();
         entry.setFree();
@@ -436,18 +427,5 @@ public class DefragmentingBufferArena extends BufferArena {
         }
 
         this.checkAssertions();
-    }
-
-    @Override
-    public void renderDebugMap(int x, int y, int drawWidth, int drawHeight) {
-//        super.renderDebugMap(x, y, drawWidth, drawHeight);
-//
-//        // render measure of fragmentation degree and copies performed per frame
-//        float fragmentationDegree = this.calculateFragmentationDegree(null);
-//        int defragmentationSteps = calculateDefragmentationSteps(fragmentationDegree);
-//        int barLength = (int) (drawHeight * fragmentationDegree);
-//        var thickness = 3;
-//        DrawableHelper.fill(x, y, x + thickness, y + barLength, 0xCFFFFFFF);
-//        graphics.drawString(Minecraft.getInstance().font, Integer.toString(defragmentationSteps), x, y, 0xFFFFFFFF);
     }
 }

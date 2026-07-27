@@ -11,7 +11,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.stream.Stream;
 
-public class BufferArena implements AllocatorBase {
+public abstract class BufferArena implements AllocatorBase {
     public static boolean CHECK_ASSERTIONS = false;
     public static boolean CHECK_SEGMENT_ASSERTIONS = true;
 
@@ -44,82 +44,9 @@ public class BufferArena implements AllocatorBase {
         this.head = BufferSegment.createFreeSegment(this, 0, capacity);
     }
 
-    private void resize(CommandList commandList, long newCapacity) {
-        if (this.used > newCapacity) {
-            throw new UnsupportedOperationException("New capacity must be larger than used size");
-        }
+    protected abstract void handleResizeUploads(CommandList commandList, RegionAllocatorHandle owner, List<PendingUpload> queue, long totalUploadBytes);
 
-        this.checkAssertions();
-
-        long endOfFreeHead = newCapacity - this.used;
-
-        List<BufferSegment> usedSegments = this.getUsedSegments();
-        List<PendingBufferCopyCommand> pendingCopies = this.buildTransferList(usedSegments, endOfFreeHead);
-
-        this.transferSegments(commandList, pendingCopies, newCapacity);
-
-        this.finalizeCompactedSegments(endOfFreeHead, usedSegments);
-    }
-
-    private void transferSegments(CommandList commandList, Collection<PendingBufferCopyCommand> list, long capacity) {
-        long bufferSize = capacity * this.stride;
-        if (bufferSize >= (1L << 32)) {
-            throw new IllegalArgumentException("Maximum arena buffer size is 4 GiB");
-        }
-
-        DeviceBuffer srcBufferObj = this.arenaBuffer;
-        DeviceBuffer dstBufferObj = this.parent.getBufferOfSizeAtLeast(commandList, bufferSize);
-
-        executeCopyCommands(commandList, list, srcBufferObj, dstBufferObj);
-
-        this.parent.releaseBufferForReuse(commandList, srcBufferObj);
-
-        this.arenaBuffer = dstBufferObj;
-
-        // set the capacity using the size of the buffer since it may be larger than the expected capacity due to buffer reuse
-        this.capacity = this.arenaBuffer.getSize() / this.stride;
-    }
-
-    int receiveSegmentsFrom(CommandList commandList, List<BufferSegment> segments, DeviceBuffer srcBufferObj, RegionAllocatorHandle owner) {
-        this.used = owner.used;
-        this.usedSegments = segments.size();
-        if (this.used > this.capacity) {
-            throw new UnsupportedOperationException("New capacity must be larger than used size");
-        }
-
-        long endOfFreeHead = this.capacity - this.used;
-        var pendingCopies = this.buildTransferList(segments, endOfFreeHead);
-
-        long bufferSize = this.capacity * this.stride;
-        if (bufferSize >= (1L << 32)) {
-            throw new IllegalArgumentException("Maximum arena buffer size is 4 GiB");
-        }
-
-        this.executeCopyCommands(commandList, pendingCopies, srcBufferObj, this.arenaBuffer);
-
-        this.finalizeCompactedSegments(endOfFreeHead, segments);
-
-        return pendingCopies.size();
-    }
-
-    private void finalizeCompactedSegments(long tail, List<BufferSegment> usedSegments) {
-        this.head = BufferSegment.createFreeSegment(this, 0, tail);
-
-        if (usedSegments.isEmpty()) {
-            // this.head.setNext(null);
-            // TODO: when would this ever happen??
-            throw new IllegalStateException("No used segments after compaction");
-        } else {
-            this.head.setNext(usedSegments.getFirst());
-            this.head.getNext().setPrev(this.head);
-        }
-
-        this.onSegmentsRebuilt();
-        this.checkAssertions();
-    }
-
-    protected void onSegmentsRebuilt() {
-    }
+    protected abstract int receiveSegmentsFrom(CommandList commandList, List<BufferSegment> segments, DeviceBuffer srcBufferObj, RegionAllocatorHandle owner);
 
     List<PendingBufferCopyCommand> buildTransferList(List<BufferSegment> usedSegments, long base) {
         List<PendingBufferCopyCommand> pendingCopies = new ArrayList<>();
@@ -170,23 +97,6 @@ public class BufferArena implements AllocatorBase {
         }
     }
 
-    private ArrayList<BufferSegment> getUsedSegments() {
-        ArrayList<BufferSegment> used = new ArrayList<>();
-        BufferSegment seg = this.head;
-
-        while (seg != null) {
-            BufferSegment next = seg.getNext();
-
-            if (!seg.isFree()) {
-                used.add(seg);
-            }
-
-            seg = next;
-        }
-
-        return used;
-    }
-
     @Override
     public long getDeviceUsedMemory() {
         return this.used * this.stride;
@@ -207,7 +117,6 @@ public class BufferArena implements AllocatorBase {
 
     BufferSegment alloc(long size, RegionAllocatorHandle owner, int ownerIndex) {
         this.checkAssertions();
-        this.parent.notifyContentsChanged();
 
         BufferSegment free = this.takeFree(size);
 
@@ -269,7 +178,6 @@ public class BufferArena implements AllocatorBase {
         if (entry.isFree()) {
             throw new IllegalStateException("Already freed");
         }
-        this.parent.notifyContentsChanged();
 
         var owner = entry.getOwner();
         entry.setFree();
@@ -291,18 +199,20 @@ public class BufferArena implements AllocatorBase {
         this.checkAssertions();
     }
 
-    public void deleteSingleOwner(CommandList commands, RegionAllocatorHandle owner) {
-        commands.deleteBuffer(this.arenaBuffer);
-    }
+    public abstract void deleteSingleOwner(CommandList commandList, RegionAllocatorHandle owner);
 
     @Override
     public boolean isEmpty() {
         return this.used <= 0;
     }
 
-    boolean isOwnerEmpty(RegionAllocatorHandle owner) {
-        return this.isEmpty();
-    }
+    /**
+     * Whether the given owner holds no allocations, which is distinct from the whole arena being empty when the arena is shared.
+     *
+     * @param owner the owner to check
+     * @return true if the owner has no allocations, false otherwise
+     */
+    abstract boolean isOwnerEmpty(RegionAllocatorHandle owner);
 
     @Override
     public DeviceBuffer getBufferObject() {
@@ -340,19 +250,6 @@ public class BufferArena implements AllocatorBase {
         return this.arenaBuffer != prevBuffer;
     }
 
-    void handleResizeUploads(CommandList commandList, RegionAllocatorHandle owner, List<PendingUpload> queue, long totalUploadBytes) {
-        // resize to the new estimated capacity
-        this.resize(commandList, estimateNewCapacityAfterUpload(owner.getFillFractionInv(), queue));
-
-        // Try again to upload any buffers that failed last time
-        this.tryUploads(commandList, owner, queue);
-
-        // If we still had failures, something has gone wrong
-        if (!queue.isEmpty()) {
-            throw new RuntimeException("Failed to upload all buffers");
-        }
-    }
-
     static long estimateNewCapacity(int newSegmentCount, float regionFillFractionInv, long requiredNewSize) {
         // the base estimation is to use a growth factor applied to the new required size
         long newCapacity;
@@ -363,7 +260,16 @@ public class BufferArena implements AllocatorBase {
         } else {
             newCapacity = (long) (requiredNewSize * FEW_SEGMENTS_GROWTH_FACTOR);
         }
-        return newCapacity;
+        // round up to the next multiple of 4
+        // since the new capacity is estimated using non-integers factors, it may end up not being a multiple of 4
+        // this causes three separate issues:
+        // 1. new segments are always allocated at the end of the free segment, but since the tail is calculated from the capacity,
+        //    segments may end up misaligned
+        // 2. terrain is rendered with glDrawElementsBaseCount, and since baseCount may not be even, gl_VertexID % 4 would
+        //    would not be reliable to detect quads as baseCount is added to the vertex ID
+        // 3. misaligned segments on NVIDIA GPUs seem to confuse the driver into splitting quads across workgroups,
+        //    possibly due to how the shared index buffer works
+        return (newCapacity + 3) & ~3;
     }
 
     long estimateNewCapacityAfterUpload(float regionFillFractionInv, List<PendingUpload> queue) {
@@ -516,71 +422,5 @@ public class BufferArena implements AllocatorBase {
         if (this.used != used) {
             throw new IllegalStateException("arena.used is invalid");
         }
-    }
-
-    {
-//        this.texture.getPixels().setPixelABGR(0, 0, 0xFFFFFFFF);
-//        this.texture.upload();
-//        Minecraft.getInstance().getTextureManager().register(this.textureId, this.texture);
-    }
-
-    public void renderDebugMap(int x, int y, int drawWidth, int drawHeight) {
-//        var image = this.texture.getPixels();
-//        int width = image.getWidth();
-//        int height = image.getHeight();
-//
-//        // draw segments, unused are black, used are colored based on owner id
-//        var pixelCount = width * height;
-//        var seg = this.head;
-//        double pos = 0;
-//        var sameOwnerSegments = 0;
-//        while (seg != null) {
-//            double length = ((double) seg.getLength() / this.capacity) * pixelCount;
-//            int color;
-//            if (seg.isFree()) {
-//                color = 0xFF000000; // black
-//            } else {
-//                // color based on owner id
-//                var owner = seg.getOwner();
-//                var ownerHash = System.identityHashCode(owner);
-//
-//                if (seg.getPrev() != null && seg.getPrev().getOwner() == owner) {
-//                    sameOwnerSegments++;
-//                } else {
-//                    sameOwnerSegments = 0;
-//                }
-//                color = ColorARGB.fromHSV(
-//                        (owner.identifier * 0.618033988749895f) % 1.0f,
-//                        Mth.map(ownerHash & 0xFF, 0, 0xFF, 0.5f, 1.0f),
-//                        Mth.map(ownerHash >> 8 & 0xFF, 0, 0xFF, 0.5f, 0.8f) +
-//                                Mth.map(sameOwnerSegments & 0b11, 0, 0b11, 0.0f, 0.2f)
-//                );
-//            }
-//
-//            // draw rects with wrapping
-//            var lineWidth = width - 1;
-//            while (length > 0) {
-//                var yPos = (int) Math.floor(pos / lineWidth);
-//                var xPos = pos - (yPos * lineWidth);
-//                var drawLength = Math.min(length, lineWidth - xPos);
-//                if (yPos >= height || xPos < 0) {
-//                    break;
-//                }
-//                image.fillRect((int) xPos, yPos, (int) Math.ceil(drawLength), 1, color);
-//                pos += drawLength;
-//                length -= drawLength;
-//            }
-//
-//            seg = seg.getNext();
-//        }
-//
-//        this.texture.upload();
-//
-//        graphics.blit(RenderPipelines.GUI_TEXTURED, this.textureId, x, y, 0, 0, drawWidth, drawHeight, 1, 1, 1, 1);
-//
-//        int usageOffset = 3;
-//        graphics.drawString(Minecraft.getInstance().font, String.format("%d MiB", MathUtil.toMib(this.getDeviceUsedMemory())), x + usageOffset, y + drawHeight - 30, 0xFFFFFFFF);
-//        graphics.drawString(Minecraft.getInstance().font, "of", x + usageOffset, y + drawHeight - 20, 0xFFFFFFFF);
-//        graphics.drawString(Minecraft.getInstance().font, String.format("%d MiB", MathUtil.toMib(this.getDeviceAllocatedMemory())), x + usageOffset, y + drawHeight - 10, 0xFFFFFFFF);
     }
 }

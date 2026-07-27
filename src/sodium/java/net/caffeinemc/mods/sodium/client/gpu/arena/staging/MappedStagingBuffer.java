@@ -18,14 +18,13 @@ public class MappedStagingBuffer implements StagingBuffer {
     private static final float UPLOAD_LIMIT_MARGIN = 0.8f;
 
     private final FallbackStagingBuffer fallbackStagingBuffer;
-
     private final PriorityQueue<CopyCommand> pendingCopies = new ObjectArrayFIFOQueue<>();
 
     private final DeviceBuffer buffer;
     private final long mapping;
 
-    private int start = 0;
-    private int pos = 0;
+    private int start;
+    private int pos;
 
     private final int capacity;
     private int remaining;
@@ -35,36 +34,68 @@ public class MappedStagingBuffer implements StagingBuffer {
     }
 
     public MappedStagingBuffer(CommandList commandList, int capacity) {
-        this.buffer = commandList.createBuffer(capacity, MappingType.CPU_ONLY, EnumBitField.of(BufferUsages.TRANSFER_SRC, BufferUsages.TRANSFER_DST));
-        this.mapping = buffer.getMapping().getMappedData();
+        this.buffer = commandList.createBuffer(
+                capacity,
+                MappingType.CPU_ONLY,
+                EnumBitField.of(
+                        BufferUsages.TRANSFER_SRC,
+                        BufferUsages.TRANSFER_DST
+                )
+        );
+
+        this.mapping = this.buffer.getMapping().getMappedData();
+        this.capacity = capacity;
+        this.remaining = capacity;
 
         this.fallbackStagingBuffer = new FallbackStagingBuffer(commandList);
-        this.capacity = capacity;
-        this.remaining = this.capacity;
     }
 
     @Override
     public void enqueueCopy(CommandList commandList, ByteBuffer data, DeviceBuffer dst, long writeOffset) {
         int length = data.remaining();
 
-        if (length > this.remaining) {
-            this.fallbackStagingBuffer.enqueueCopy(commandList, data, dst, writeOffset);
-
+        if (length <= 0) {
             return;
         }
 
-        int remaining = this.capacity - this.pos;
+        if (length > this.remaining) {
+            this.fallbackStagingBuffer.enqueueCopy(
+                    commandList,
+                    data,
+                    dst,
+                    writeOffset
+            );
+            return;
+        }
 
-        // Split the transfer in two if we have enough available memory at the end and start of the buffer
-        if (length > remaining) {
-            int split = length - remaining;
+        int tailRemaining = this.capacity - this.pos;
 
-            this.addTransfer(data.slice(0, remaining), dst, this.pos, writeOffset);
-            this.addTransfer(data.slice(remaining, split), dst, 0, writeOffset + remaining);
+        if (length > tailRemaining) {
+            int split = length - tailRemaining;
+
+            this.addTransfer(
+                    data.slice(0, tailRemaining),
+                    dst,
+                    this.pos,
+                    writeOffset
+            );
+
+            this.addTransfer(
+                    data.slice(tailRemaining, split),
+                    dst,
+                    0,
+                    writeOffset + tailRemaining
+            );
 
             this.pos = split;
         } else {
-            this.addTransfer(data, dst, this.pos, writeOffset);
+            this.addTransfer(
+                    data,
+                    dst,
+                    this.pos,
+                    writeOffset
+            );
+
             this.pos += length;
         }
 
@@ -72,8 +103,20 @@ public class MappedStagingBuffer implements StagingBuffer {
     }
 
     private void addTransfer(ByteBuffer data, DeviceBuffer dst, long readOffset, long writeOffset) {
-        MemoryUtil.memCopy(MemoryUtil.memAddress(data), this.mapping + readOffset, data.remaining());
-        this.pendingCopies.enqueue(new CopyCommand(dst, readOffset, writeOffset, data.remaining()));
+        MemoryUtil.memCopy(
+                MemoryUtil.memAddress(data),
+                this.mapping + readOffset,
+                data.remaining()
+        );
+
+        this.pendingCopies.enqueue(
+                new CopyCommand(
+                        dst,
+                        readOffset,
+                        writeOffset,
+                        data.remaining()
+                )
+        );
     }
 
     @Override
@@ -83,7 +126,13 @@ public class MappedStagingBuffer implements StagingBuffer {
         }
 
         for (CopyCommand command : consolidateCopies(this.pendingCopies)) {
-            commandList.copyBufferToBuffer(this.buffer, command.buffer, command.readOffset, command.writeOffset, command.bytes);
+            commandList.copyBufferToBuffer(
+                    this.buffer,
+                    command.buffer,
+                    command.readOffset,
+                    command.writeOffset,
+                    command.bytes
+            );
         }
 
         this.start = this.pos;
@@ -96,13 +145,12 @@ public class MappedStagingBuffer implements StagingBuffer {
         while (!queue.isEmpty()) {
             CopyCommand command = queue.dequeue();
 
-            if (last != null) {
-                if (last.buffer == command.buffer &&
-                        last.writeOffset + last.bytes == command.writeOffset &&
-                        last.readOffset + last.bytes == command.readOffset) {
-                    last.bytes += command.bytes;
-                    continue;
-                }
+            if (last != null &&
+                    last.buffer == command.buffer &&
+                    last.writeOffset + last.bytes == command.writeOffset &&
+                    last.readOffset + last.bytes == command.readOffset) {
+                last.bytes += command.bytes;
+                continue;
             }
 
             merged.add(last = new CopyCommand(command));
@@ -112,24 +160,34 @@ public class MappedStagingBuffer implements StagingBuffer {
     }
 
     @Override
-    public void delete(CommandList commandList) {
-        commandList.deleteBuffer(buffer);
-        this.fallbackStagingBuffer.delete(commandList);
-        this.pendingCopies.clear();
-    }
-
-    @Override
     public void flip(CommandList commandList) {
-        if (this.fallbackStagingBuffer.hasPendingUploads()) {
-            this.fallbackStagingBuffer.releaseCompleted(commandList);
+        this.fallbackStagingBuffer.releaseCompleted(commandList);
+
+        if (!this.fallbackStagingBuffer.hasPendingUploads()) {
             this.start = this.pos;
             this.remaining = this.capacity;
         }
     }
 
     @Override
+    public void delete(CommandList commandList) {
+        commandList.deleteBuffer(this.buffer);
+        this.fallbackStagingBuffer.delete(commandList);
+        this.pendingCopies.clear();
+    }
+
+    @Override
     public long getUploadSizeLimit(long frameDuration) {
         return (long) (this.capacity * UPLOAD_LIMIT_MARGIN);
+    }
+
+    @Override
+    public String toString() {
+        return "Mapped (%s/%s MiB)"
+                .formatted(
+                        MathUtil.toMib(this.remaining),
+                        MathUtil.toMib(this.capacity)
+                );
     }
 
     private static final class CopyCommand {
@@ -146,16 +204,11 @@ public class MappedStagingBuffer implements StagingBuffer {
             this.bytes = bytes;
         }
 
-        public CopyCommand(CopyCommand command) {
+        private CopyCommand(CopyCommand command) {
             this.buffer = command.buffer;
-            this.writeOffset = command.writeOffset;
             this.readOffset = command.readOffset;
+            this.writeOffset = command.writeOffset;
             this.bytes = command.bytes;
         }
-    }
-
-    @Override
-    public String toString() {
-        return "Mapped (%s/%s MiB)".formatted(MathUtil.toMib(this.remaining), MathUtil.toMib(this.capacity));
     }
 }

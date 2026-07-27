@@ -90,7 +90,6 @@ interface RenderDevice : AutoCloseable {
         sizeBytes: Long,
     )
 
-
     /**
      * Records and submits a render graph for the current frame.
      *

@@ -17,7 +17,6 @@ public class SizedTreeMap<V extends SizedTreeMap.Sized> extends TreeMap<Long, V>
 
     interface Sized {
         long getSize();
-
         long getIdentifier();
 
         default long makeKey() {

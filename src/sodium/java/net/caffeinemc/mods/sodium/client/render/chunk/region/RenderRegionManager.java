@@ -40,15 +40,6 @@ public class RenderRegionManager {
         this.arenaAggregator = new ArenaAggregator(this.stagingBuffer);
     }
 
-    /**
-     * True when the next {@link #update()} may record copy/delete commands (arena defrag,
-     * emptying, or pending content changes). When false, update() is command-free and the
-     * caller may keep its render pass open across the call.
-     */
-    public boolean needsArenaMaintenance() {
-        return this.arenaAggregator.hasPendingMaintenance();
-    }
-
     public void update() {
         try (CommandList commandList = RenderDevice.INSTANCE.createCommandList()) {
             this.stagingBuffer.flip(commandList);

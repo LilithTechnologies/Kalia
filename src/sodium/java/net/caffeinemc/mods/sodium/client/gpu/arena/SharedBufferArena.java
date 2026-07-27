@@ -31,13 +31,14 @@ public class SharedBufferArena extends DefragmentingBufferArena implements Sized
     }
 
     @Override
-    public void deleteSingleOwner(CommandList commands, RegionAllocatorHandle owner) {
-        // don't delete on single-owner deletion
+    public void deleteSingleOwner(CommandList commandList, RegionAllocatorHandle owner) {
+        // don't delete the buffer when a single owner is deleted
         this.removeOwner(owner);
     }
 
-    public void deleteShared(CommandList commands) {
-        super.deleteSingleOwner(commands, null);
+    public void deleteShared(CommandList commandList) {
+        commandList.deleteBuffer(this.arenaBuffer);
+
         if (this.compactionPair != null) {
             this.compactionPair.compactionPair = null;
             this.compactionPair = null;
@@ -63,6 +64,7 @@ public class SharedBufferArena extends DefragmentingBufferArena implements Sized
 
     @Override
     boolean isOwnerEmpty(RegionAllocatorHandle owner) {
+        // an individual owner is empty when it holds no segments
         return owner.used <= 0;
     }
 
@@ -133,7 +135,7 @@ public class SharedBufferArena extends DefragmentingBufferArena implements Sized
         return (float) remainingFreeAfterDealloc / remainingCapacityAfterDealloc;
     }
 
-    public boolean continueEmptying(CommandList commands, ArenaAggregator.DefragBudget budget) {
+    public boolean continueEmptying(CommandList commandList, ArenaAggregator.DefragBudget budget) {
         if (!this.isEmptying) {
             throw new IllegalStateException("Arena is not emptying");
         }
@@ -146,7 +148,7 @@ public class SharedBufferArena extends DefragmentingBufferArena implements Sized
                 throw new IllegalStateException("No owner to evict found even though arena is not empty");
             }
 
-            copyCount = estimateAndTransferOwner(commands, ownerToEvict, false);
+            copyCount = estimateAndTransferOwner(commandList, ownerToEvict, false);
 
             // stop emptying if there's no arena that can accommodate the eviction
             if (copyCount == TRANSFER_ABORTED) {
@@ -156,7 +158,7 @@ public class SharedBufferArena extends DefragmentingBufferArena implements Sized
             }
 
             // notify the owner that has been moved of the buffer change
-            ownerToEvict.notifyBufferChanged(commands);
+            ownerToEvict.notifyBufferChanged(commandList);
 
             budget.consumeElementCopy(ownerToEvict.used, copyCount);
         }
@@ -175,7 +177,7 @@ public class SharedBufferArena extends DefragmentingBufferArena implements Sized
     }
 
     @Override
-    void handleResizeUploads(CommandList commands, RegionAllocatorHandle uploadingOwner, List<PendingUpload> queue, long totalOwnerUsageAfterUploads) {
+    protected void handleResizeUploads(CommandList commands, RegionAllocatorHandle uploadingOwner, List<PendingUpload> queue, long totalOwnerUsageAfterUploads) {
         boolean relocatedUploadingOwner = false;
 
         // this needs to be a loop because the shared buffer isn't guaranteed to be fully defragmented so we may need to evict more than one owner
@@ -246,7 +248,7 @@ public class SharedBufferArena extends DefragmentingBufferArena implements Sized
     }
 
     @Override
-    int receiveSegmentsFrom(CommandList commandList, List<BufferSegment> segments, DeviceBuffer srcBufferObj, RegionAllocatorHandle owner) {
+    protected int receiveSegmentsFrom(CommandList commandList, List<BufferSegment> segments, DeviceBuffer srcBufferObj, RegionAllocatorHandle owner) {
         this.used += owner.used;
         this.usedSegments += segments.size();
         if (this.used > this.capacity) {
