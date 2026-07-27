@@ -1,5 +1,6 @@
 package re.lilith.kalia.shader
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import re.lilith.kalia.gl.ShaderUniforms
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.shader.*
@@ -11,7 +12,7 @@ object CoreShaders {
     private const val INSTANCED_BIT = 1 shl 9
     private const val TEXTURE_ARRAY_BIT = 1 shl 10
 
-    private val programs = HashMap<Int, ShaderProgram>()
+    private val programs = Int2ObjectOpenHashMap<ShaderProgram>()
 
     fun programFor(format: TranslatedVertexFormat, texGen: Boolean = false): ShaderProgram {
         val signature = signature(format) or (if (texGen) TEXGEN_BIT else 0)

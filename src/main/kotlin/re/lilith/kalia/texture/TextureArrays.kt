@@ -1,5 +1,6 @@
 package re.lilith.kalia.texture
 
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.geometry.Extent
@@ -28,8 +29,8 @@ object TextureArrays {
         var uploadedVersion = -1L
     }
 
-    private val pools = HashMap<PoolKey, MutableList<Pool>>()
-    private val slots = HashMap<GlTexture, Slot>()
+    private val pools = Object2ObjectOpenHashMap<PoolKey, MutableList<Pool>>()
+    private val slots = Object2ObjectOpenHashMap<GlTexture, Slot>()
     private var device: RenderDevice? = null
     private var poolCounter = 0
 

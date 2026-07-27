@@ -12,8 +12,8 @@ object ShaderUniforms {
     private const val LIGHTING_ENABLED_BIT = 1
     private const val LIGHTMAP_ENABLED_BIT = 2
 
-    private val push: ByteBuffer = direct(PUSH_CONSTANT_BYTES)
-    private val scene: ByteBuffer = direct(SCENE_UNIFORM_BYTES)
+    private val push = direct(PUSH_CONSTANT_BYTES)
+    private val scene = direct(SCENE_UNIFORM_BYTES)
 
     private val modelView = Matrix4f()
     private val projection = Matrix4f()

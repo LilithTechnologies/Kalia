@@ -1,11 +1,11 @@
 package re.lilith.kalia.texture
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import org.lwjgl.opengl.GL30.*
 import re.lilith.kalia.frame.GameFrame
 
 object FramebufferTable {
-
-    private val framebuffers = HashMap<Int, GlFramebuffer>()
+    private val framebuffers = Int2ObjectOpenHashMap<GlFramebuffer>()
     private var nextId = 1
 
     var bound: GlFramebuffer? = null

@@ -1,13 +1,16 @@
 package re.lilith.kalia.gl
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+import it.unimi.dsi.fastutil.objects.ObjectArrayFIFOQueue
+import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import org.joml.Matrix4f
 import java.nio.FloatBuffer
 
 object MatrixState {
 
-    private val modelViewStack = ArrayDeque<Matrix4f>().apply { addLast(Matrix4f()) }
-    private val projectionStack = ArrayDeque<Matrix4f>().apply { addLast(Matrix4f()) }
-    private val textureStacks = HashMap<Int, ArrayDeque<Matrix4f>>()
+    private val modelViewStack = ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) }
+    private val projectionStack = ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) }
+    private val textureStacks = Int2ObjectOpenHashMap<ObjectArrayList<Matrix4f>>()
 
     private val pool = ArrayDeque<Matrix4f>()
 
@@ -140,14 +143,14 @@ object MatrixState {
         dirty = true
     }
 
-    private fun stackFor(glMode: Int): ArrayDeque<Matrix4f> = when (glMode) {
+    private fun stackFor(glMode: Int) = when (glMode) {
         GlEnums.GL_PROJECTION -> projectionStack
         GlEnums.GL_TEXTURE -> textureStack(activeTextureUnit)
         else -> modelViewStack
     }
 
-    private fun textureStack(unit: Int): ArrayDeque<Matrix4f> =
-        textureStacks.getOrPut(unit) { ArrayDeque<Matrix4f>().apply { addLast(Matrix4f()) } }
+    private fun textureStack(unit: Int) =
+        textureStacks.getOrPut(unit) { ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) } }
 
     private fun borrow(source: Matrix4f): Matrix4f = (pool.removeLastOrNull() ?: Matrix4f()).set(source)
 

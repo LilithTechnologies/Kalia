@@ -1,5 +1,7 @@
 package re.lilith.kalia.texture
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectMaps
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import org.lwjgl.opengl.GL11.GL_TEXTURE_HEIGHT
 import org.lwjgl.opengl.GL11.GL_TEXTURE_WIDTH
 import re.lilith.kalia.KaliaEngine
@@ -9,7 +11,7 @@ import java.io.File
 import java.nio.ByteBuffer
 
 object TextureTable {
-    private val textures = HashMap<Int, GlTexture>()
+    private val textures = Int2ObjectOpenHashMap<GlTexture>()
     private var nextId = 1
 
     fun generate(): Int {

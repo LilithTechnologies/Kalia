@@ -7,13 +7,12 @@ import re.lilith.kalia.renderer.resource.BufferUsage
 import re.lilith.kalia.renderer.resource.GpuBuffer
 
 class SceneUniformRing(
-    private val device: RenderDevice,
+    device: RenderDevice,
     private val sliceCount: Int = DEFAULT_SLICES,
 ) : AutoCloseable {
-
     private val stride: Long = align(ShaderUniforms.SCENE_UNIFORM_BYTES.toLong())
 
-    private val buffer: GpuBuffer = device.createBuffer(
+    private val buffer = device.createBuffer(
         BufferDescription(
             label = "kalia/scene-uniforms",
             sizeBytes = stride * sliceCount,
@@ -26,11 +25,11 @@ class SceneUniformRing(
     private var currentOffset = 0L
     private var uploadedVersion = -1L
 
-    val uniformBuffer: GpuBuffer get() = buffer
+    val uniformBuffer get() = buffer
 
-    val offsetBytes: Long get() = currentOffset
+    val offsetBytes get() = currentOffset
 
-    val sizeBytes: Long get() = ShaderUniforms.SCENE_UNIFORM_BYTES.toLong()
+    val sizeBytes get() = ShaderUniforms.SCENE_UNIFORM_BYTES.toLong()
 
     fun sync(): Boolean {
         if (uploadedVersion == ShaderUniforms.sceneVersion) {

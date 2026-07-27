@@ -1,5 +1,6 @@
 package re.lilith.kalia.texture
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import re.lilith.kalia.KaliaEngine
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.TextureFormat
@@ -8,7 +9,7 @@ import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.renderer.resource.TextureDescription
 
 object RenderbufferTable {
-    private val renderbuffers = HashMap<Int, GpuTexture>()
+    private val renderbuffers = Int2ObjectOpenHashMap<GpuTexture>()
     private var boundId = 0
     private var nextId = 1
 
