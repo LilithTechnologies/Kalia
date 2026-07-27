@@ -13,6 +13,5 @@ include(":vulkan-api")
 include(":renderer")
 include(":renderer:vulkan")
 include(":renderer:opengl")
-include(":renderer:opengl")
 
 rootProject.name = "Kalia"
