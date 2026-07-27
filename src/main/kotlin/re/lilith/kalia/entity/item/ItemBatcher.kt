@@ -43,6 +43,8 @@ object ItemBatcher {
         val mesh: PersistentMesh,
         val texture: GpuTexture,
         val sampler: GpuSampler,
+        val lightmap: GpuTexture,
+        val lightmapSampler: GpuSampler,
     )
 
     private val groups = LinkedHashMap<GroupKey, Instances>()
@@ -63,6 +65,8 @@ object ItemBatcher {
     private var lastKeyMesh: PersistentMesh? = null
     private var lastKeyTexture: GpuTexture? = null
     private var lastKeySampler: GpuSampler? = null
+    private var lastKeyLightmap: GpuTexture? = null
+    private var lastKeyLightmapSampler: GpuSampler? = null
     private var lastInstances: Instances? = null
 
     fun record(mesh: PersistentMesh, modelView: Matrix4f) {
@@ -71,29 +75,34 @@ object ItemBatcher {
         val resources = FrameResources.of(encoder.device)
         val texture = KaliaDraw.textureForUnit(0, resources)
         val sampler = KaliaDraw.samplerForUnit(0, resources)
+        val lightmap = KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources)
+        val lightmapSampler = KaliaDraw.samplerForUnit(GlBridge.LIGHTMAP_UNIT, resources)
         val description = descriptionFor(encoder.attachments, format.format)
 
         val instances: Instances
         val cached = lastInstances
         if (cached != null &&
             lastKeyDescription === description && lastKeyMesh === mesh &&
-            lastKeyTexture === texture && lastKeySampler === sampler
+            lastKeyTexture === texture && lastKeySampler === sampler &&
+            lastKeyLightmap === lightmap && lastKeyLightmapSampler === lightmapSampler
         ) {
             instances = cached
         } else {
-            val key = GroupKey(description, mesh, texture, sampler)
+            val key = GroupKey(description, mesh, texture, sampler, lightmap, lightmapSampler)
             instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: Instances() }
             lastKeyDescription = description
             lastKeyMesh = mesh
             lastKeyTexture = texture
             lastKeySampler = sampler
+            lastKeyLightmap = lightmap
+            lastKeyLightmapSampler = lightmapSampler
             lastInstances = instances
         }
         writeInstance(instances.reserve(), modelView)
     }
 
     private fun descriptionFor(attachments: AttachmentLayout, vertexFormat: VertexFormat): GraphicsPipelineDescription {
-        val raster = GlState.rasterState()
+        val raster = RasterState.TWO_SIDED
         val depth = if (attachments.depthFormat != null) GlState.depthState() else DepthState.DISABLED
         val blend = GlState.blendState()
         val colorMask = GlState.colorMask()
@@ -181,11 +190,7 @@ object ItemBatcher {
             GlBridge.applyDepthBias()
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
-            encoder.bindTexture(
-                ShaderPrelude.Bindings.LIGHTMAP_TEXTURE,
-                KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources),
-                KaliaDraw.samplerForUnit(GlBridge.LIGHTMAP_UNIT, resources),
-            )
+            encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
             encoder.bindUniformBuffer(
                 binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
                 buffer = resources.sceneUniforms.uniformBuffer,
@@ -215,6 +220,8 @@ object ItemBatcher {
         lastKeyMesh = null
         lastKeyTexture = null
         lastKeySampler = null
+        lastKeyLightmap = null
+        lastKeyLightmapSampler = null
         lastInstances = null
     }
 

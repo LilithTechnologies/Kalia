@@ -6,7 +6,7 @@ layout(location = 4) in vec4 aNormal;
 layout(location = 5) in vec4 instRow0;
 layout(location = 6) in vec4 instRow1;
 layout(location = 7) in vec4 instRow2;
-layout(location = 8) in vec4 instLight;
+layout(location = 10) in vec4 instLight;
 
 layout(location = 0) out vec4 vColor;
 layout(location = 1) out vec2 vUv;
