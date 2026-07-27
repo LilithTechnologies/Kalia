@@ -8,6 +8,7 @@ lwjgl = "3.4.1"
 joml = "1.10.8"
 yarn = "1.8.9+build.4"
 legacy-lwjgl3 = "1.4.0-beta.11"
+devauth = "1.2.2"
 
 [libraries]
 minecraft = { module = "com.mojang:minecraft", version.ref = "minecraft" }
@@ -24,6 +25,7 @@ lwjgl-shaderc = { module = "org.lwjgl:lwjgl-shaderc", version.ref = "lwjgl" }
 joml = { module = "org.joml:joml", version.ref = "joml" }
 legacy-yarn = { module = "net.legacyfabric:legacy-yarn", version.ref = "yarn" }
 legacy-lwjgl3 = { module = "io.github.moehreag:legacy-lwjgl3", version.ref = "legacy-lwjgl3" }
+devauth-fabric = { module = "me.djtheredstoner:DevAuth-fabric", version = "1.2.2" }
 
 [plugins]
 fabric-loom = { id = "net.fabricmc.fabric-loom-remap", version.ref = "fabric-loom" }

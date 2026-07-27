@@ -1,21 +1,29 @@
 package re.lilith.kalia.mixins.render;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap;
 import net.minecraft.client.font.TextRenderer;
-import net.minecraft.client.render.BufferBuilder;
-import net.minecraft.client.render.Tessellator;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.texture.TextureManager;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
+import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import re.lilith.kalia.draw.KaliaDraw;
+import re.lilith.kalia.draw.TextMeshCache;
+import re.lilith.kalia.gl.GlBridge;
+import re.lilith.kalia.gl.MatrixState;
+import re.lilith.kalia.gl.ShaderUniforms;
+import re.lilith.kalia.vertex.TranslatedVertexFormat;
+import re.lilith.kalia.vertex.VertexFormatBridge;
 
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.List;
 import java.util.Random;
 
 @Mixin(TextRenderer.class)
@@ -66,8 +74,8 @@ public class MixinTextRenderer {
     @Shadow
     public int fontHeight;
 
-    @Unique
-    private static final String kalia$TABLE =
+    @Unique // for fast lookup
+    private static final String sulfide$TABLE =
             "\u00c0\u00c1\u00c2\u00c8\u00ca\u00cb\u00cd\u00d3\u00d4\u00d5"
                     + "\u00da\u00df\u00e3\u00f5\u011f\u0130\u0131\u0152\u0153\u015e"
                     + "\u015f\u0174\u0175\u017e\u0207"
@@ -91,39 +99,70 @@ public class MixinTextRenderer {
                     + "\u25a0\u0000";
 
     @Unique
-    private static final int[] kalia$CHAR_INDEX = new int[65536];
-
-    @Unique
-    private static final int kalia$PAGE_NONE = Integer.MIN_VALUE;
+    private static final int[] sulfide$CHAR_INDEX = new int[65536];
 
     static {
-        Arrays.fill(kalia$CHAR_INDEX, -1);
-        for (int i = kalia$TABLE.length() - 1; i >= 0; i--) {
-            kalia$CHAR_INDEX[kalia$TABLE.charAt(i)] = i;
+        Arrays.fill(sulfide$CHAR_INDEX, -1);
+        for (int i = sulfide$TABLE.length() - 1; i >= 0; i--) {
+            sulfide$CHAR_INDEX[sulfide$TABLE.charAt(i)] = i;
         }
     }
 
+    // Sized to match TextMeshCache.MAX_ENTRIES so any string with a cached mesh also
+    // keeps a cached width (nametags, chat, scoreboard all measure per frame).
     @Unique
-    private final Map<String, Integer> kalia$widthCache =
-            new LinkedHashMap<>(512, 0.75f, true) {
-                @Override
-                protected boolean removeEldestEntry(Map.Entry<String, Integer> eldest) {
-                    return size() > 256;
-                }
-            };
+    private static final int sulfide$WIDTH_CACHE_ENTRIES = 2048;
+
+    @Unique
+    private final Object2IntLinkedOpenHashMap<String> sulfide$widthCache =
+            new Object2IntLinkedOpenHashMap<>(sulfide$WIDTH_CACHE_ENTRIES);
+
+    @Unique
+    private static final int sulfide$PAGE_NONE = Integer.MIN_VALUE;
+
+    @Unique
+    private static final int sulfide$VERTEX_BYTES = 24; // pos 3f + uv 2f + rgba 4ub
+
+    // Bake scratch: glyph vertices are written here first, then each page run is
+    // copied into an exact-size buffer owned by the cache entry.
+    @Unique
+    private static ByteBuffer sulfide$scratch = MemoryUtil.memAlloc(1 << 20);
+
+    @Unique
+    private int sulfide$segPage = sulfide$PAGE_NONE;
+    @Unique
+    private int sulfide$segStartByte;
+    @Unique
+    private final List<TextMeshCache.Segment> sulfide$segments = new ArrayList<>();
+
+    @Unique
+    private static final int sulfide$DECO_STRIDE = 8;
+    @Unique
+    private static final int sulfide$MAX_DECOS = 256;
+    @Unique
+    private final float[] sulfide$decoData = new float[sulfide$MAX_DECOS * sulfide$DECO_STRIDE];
 
     @Inject(method = "reload", at = @At("HEAD"))
-    private void kalia$onReload(ResourceManager mgr, CallbackInfo ci) {
-        kalia$widthCache.clear();
+    private void sulfide$onReload(ResourceManager mgr, CallbackInfo ci) {
+        sulfide$widthCache.clear();
+        TextMeshCache.clear();
+//        SignTextCache.clear();
     }
 
     @Inject(method = "setUnicode", at = @At("HEAD"))
-    private void kalia$onSetUnicode(boolean unicode, CallbackInfo ci) {
-        kalia$widthCache.clear();
+    private void sulfide$onSetUnicode(boolean unicode, CallbackInfo ci) {
+        sulfide$widthCache.clear();
+        TextMeshCache.clear();
+//        SignTextCache.clear();
+    }
+
+    @Inject(method = "<init>", at = @At("RETURN"))
+    private void sulfide$initWidthCache(CallbackInfo ci) {
+        sulfide$widthCache.defaultReturnValue(Integer.MIN_VALUE);
     }
 
     /**
-     * @reason Cached width computation
+     * @reason Cached width computaton
      * @author Lunasa
      */
     @Overwrite
@@ -131,341 +170,407 @@ public class MixinTextRenderer {
         if (character == 167) return -1;
         if (character == ' ') return 4;
 
-        int index = kalia$CHAR_INDEX[character];
-        if (character > 0 && index != -1 && !this.unicode) {
-            return this.characterWidths[index];
+        int i = sulfide$CHAR_INDEX[character];
+        if (character > 0 && i != -1 && !this.unicode) {
+            return this.characterWidths[i];
         }
         if (this.glyphWidths[character] != 0) {
-            int start = this.glyphWidths[character] >>> 4;
-            int end = this.glyphWidths[character] & 15;
-            if (end > 7) {
-                end = 15;
-                start = 0;
+            int j = this.glyphWidths[character] >>> 4;
+            int k = this.glyphWidths[character] & 15;
+            if (k > 7) {
+                k = 15;
+                j = 0;
             }
-            ++end;
-            return (end - start) / 2 + 1;
+            ++k;
+            return (k - j) / 2 + 1;
         }
         return 0;
     }
 
     /**
-     * @reason Cached width computation
+     * @reason Cached width computaton
      * @author Lunasa
      */
     @Overwrite
     public int getStringWidth(String text) {
         if (text == null) return 0;
 
-        Integer cached = kalia$widthCache.get(text);
-        if (cached != null) return cached;
+        int cached = sulfide$widthCache.getAndMoveToFirst(text);
+        if (cached != Integer.MIN_VALUE) return cached;
 
         int width = 0;
-        boolean boldStyle = false;
+        boolean bl = false;
 
-        for (int i = 0; i < text.length(); ++i) {
-            char c = text.charAt(i);
-            int charWidth = this.getCharWidth(c);
-            if (charWidth < 0 && i < text.length() - 1) {
-                c = text.charAt(++i);
+        for (int j = 0; j < text.length(); ++j) {
+            char c = text.charAt(j);
+            int k = this.getCharWidth(c);
+            if (k < 0 && j < text.length() - 1) {
+                ++j;
+                c = text.charAt(j);
                 if (c == 'l' || c == 'L') {
-                    boldStyle = true;
+                    bl = true;
                 } else if (c == 'r' || c == 'R') {
-                    boldStyle = false;
+                    bl = false;
                 }
-                charWidth = 0;
+                k = 0;
             }
-            width += charWidth;
-            if (boldStyle && charWidth > 0) {
-                ++width;
-            }
+            width += k;
+            if (bl && k > 0) ++width;
         }
 
-        kalia$widthCache.put(text, width);
+        sulfide$widthCache.putAndMoveToFirst(text, width);
+        if (sulfide$widthCache.size() > sulfide$WIDTH_CACHE_ENTRIES) {
+            sulfide$widthCache.removeLastInt();
+        }
         return width;
     }
 
     /**
-     * @reason Batched vanilla-compatible text rendering
+     * @reason Cached-mesh text rendering: each unique string is tessellated once into
+     * per-page vertex buffers (colors and formatting codes baked per vertex) and
+     * replayed with one arena memcpy + one draw per segment on later frames.
      * @author Lunasa
      */
     @Overwrite
     private void draw(String text, boolean shadow) {
-        Tessellator tessellator = Tessellator.getInstance();
-        BufferBuilder bufferBuilder = tessellator.getBuffer();
+        if (text.isEmpty()) {
+            return;
+        }
 
-        int currentPage = kalia$PAGE_NONE;
-        boolean batchActive = false;
-        float currentRed = this.red;
-        float currentGreen = this.green;
-        float currentBlue = this.blue;
-        float currentAlpha = this.alpha;
+        // Alpha is decoupled from the baked mesh: vertices bake fully opaque and the
+        // string's alpha is applied through the shader color at draw time. Meshes and
+        // cache entries are therefore shared across alpha variants — nametags draw the
+        // same string at alpha 32 (through-wall pass) and 255 every frame.
+        int opaqueColor = sulfide$packColor(this.red, this.green, this.blue, 1.0F);
+        int styleBits = (this.bold ? 1 : 0)
+                | (this.italic ? 2 : 0)
+                | (this.underline ? 4 : 0)
+                | (this.strikethrough ? 8 : 0)
+                | (this.obfuscated ? 16 : 0);
+        // Obfuscated (magic) text is re-randomised every frame - never cache it.
+        boolean cacheable = !this.obfuscated && !sulfide$containsObfuscationCode(text);
 
-        float[] decorations = new float[256 * 8];
-        int decorationCount = 0;
+        TextMeshCache.CachedText cached = null;
+        if (cacheable) {
+            cached = TextMeshCache.find(text, shadow, opaqueColor, this.unicode, styleBits);
+        }
+        if (cached == null) {
+            cached = sulfide$bake(text, shadow, opaqueColor);
+            if (cacheable) {
+                TextMeshCache.put(text, shadow, opaqueColor, this.unicode, styleBits, cached);
+            }
+        }
+
+        sulfide$drawCached(cached);
+        this.x += cached.advance;
+
+        if (!cacheable) {
+            cached.free();
+        }
+    }
+
+    @Unique
+    private static String sulfide$guiPipelineKey;
+    @Unique
+    private static String sulfide$worldPipelineKey;
+
+    @Unique
+    private void sulfide$drawCached(TextMeshCache.CachedText cached) {
+        TextMeshCache.Segment[] segments = cached.segments;
+        if (segments.length == 0) {
+            return;
+        }
+
+        GlStateManager.color(1.0F, 1.0F, 1.0F, this.alpha);
+
+        MatrixState.INSTANCE.flush();
+        var uniforms = ShaderUniforms.INSTANCE;
+
+        float baseX = uniforms.modelOffsetX();
+        float baseY = uniforms.modelOffsetY();
+        float baseZ = uniforms.modelOffsetZ();
+        uniforms.setModelOffset(baseX + this.x, baseY + this.y, baseZ);
+
+        for (TextMeshCache.Segment segment : segments) {
+            boolean decoration = segment.page == TextMeshCache.PAGE_DECORATION;
+            if (decoration) {
+                GlStateManager.disableTexture();
+            } else if (segment.page == TextMeshCache.PAGE_DEFAULT) {
+                this.textureManager.bindTexture(this.fontTexture);
+            } else {
+                this.textureManager.bindTexture(sulfide$getFontPage(segment.page));
+            }
+
+            ByteBuffer vertexData = segment.vertexData;
+            vertexData.position(0);
+            vertexData.limit(segment.vertexCount * sulfide$VERTEX_BYTES);
+
+            KaliaDraw.INSTANCE.drawTransient(
+                    vertexData,
+                    VertexFormatBridge.INSTANCE.translate(VertexFormats.POSITION_TEXTURE_COLOR),
+                    7,
+                    segment.vertexCount
+            );
+
+            if (decoration) {
+                GlStateManager.enableTexture();
+            }
+        }
+
+        uniforms.setModelOffset(baseX, baseY, baseZ);
+    }
+
+    @Unique
+    private TextMeshCache.CachedText sulfide$bake(String text, boolean shadow, int baseColor) {
+        // Worst case: every char bold (2 quads) plus decorations.
+        int worstBytes = (text.length() * 8 + sulfide$MAX_DECOS * 4) * sulfide$VERTEX_BYTES;
+        if (sulfide$scratch.capacity() < worstBytes) {
+            sulfide$scratch = MemoryUtil.memRealloc(sulfide$scratch, Integer.highestOneBit(worstBytes) * 2);
+        }
+        ByteBuffer scratch = sulfide$scratch;
+        scratch.clear();
+
+        sulfide$segments.clear();
+        sulfide$segPage = sulfide$PAGE_NONE;
+        sulfide$segStartByte = 0;
+        int decoCount = 0;
+
+        float relX = 0.0F;
+        int rgba = baseColor;
 
         for (int i = 0; i < text.length(); ++i) {
             char c = text.charAt(i);
 
             if (c == 167 && i + 1 < text.length()) {
-                int formatting = kalia$formattingIndex(text.charAt(i + 1));
-                if (formatting < 16) {
+                int j = sulfide$formattingIndex(text.charAt(i + 1));
+
+                if (j < 16) {
                     this.obfuscated = false;
                     this.bold = false;
                     this.strikethrough = false;
                     this.underline = false;
                     this.italic = false;
-                    if (formatting < 0) formatting = 15;
-                    if (shadow) formatting += 16;
-                    int rgb = this.colorCodes[formatting];
-                    this.color = rgb;
-
-                    if (batchActive) {
-                        tessellator.draw();
-                        batchActive = false;
-                        currentPage = kalia$PAGE_NONE;
-                    }
-
-                    currentRed = (float) (rgb >> 16 & 255) / 255.0F;
-                    currentGreen = (float) (rgb >> 8 & 255) / 255.0F;
-                    currentBlue = (float) (rgb & 255) / 255.0F;
-                    currentAlpha = this.alpha;
-                    GlStateManager.color(currentRed, currentGreen, currentBlue, currentAlpha);
-                } else if (formatting == 16) {
+                    if (j < 0) j = 15;
+                    if (shadow) j += 16;
+                    int k = this.colorCodes[j];
+                    this.color = k;
+                    rgba = sulfide$packColor(
+                            (float) (k >> 16 & 255) / 255.0F,
+                            (float) (k >> 8 & 255) / 255.0F,
+                            (float) (k & 255) / 255.0F,
+                            1.0F
+                    );
+                } else if (j == 16) {
                     this.obfuscated = true;
-                } else if (formatting == 17) {
+                } else if (j == 17) {
                     this.bold = true;
-                } else if (formatting == 18) {
+                } else if (j == 18) {
                     this.strikethrough = true;
-                } else if (formatting == 19) {
+                } else if (j == 19) {
                     this.underline = true;
-                } else if (formatting == 20) {
+                } else if (j == 20) {
                     this.italic = true;
-                } else if (formatting == 21) {
+                } else if (j == 21) {
                     this.obfuscated = false;
                     this.bold = false;
                     this.strikethrough = false;
                     this.underline = false;
                     this.italic = false;
-
-                    if (batchActive) {
-                        tessellator.draw();
-                        batchActive = false;
-                        currentPage = kalia$PAGE_NONE;
-                    }
-
-                    currentRed = this.red;
-                    currentGreen = this.green;
-                    currentBlue = this.blue;
-                    currentAlpha = this.alpha;
-                    GlStateManager.color(currentRed, currentGreen, currentBlue, currentAlpha);
+                    rgba = baseColor;
                 }
                 ++i;
                 continue;
             }
 
-            int tableIndex = kalia$CHAR_INDEX[c];
-            if (this.obfuscated && tableIndex != -1) {
-                int charWidth = this.getCharWidth(c);
-                char mapped;
+            int j = sulfide$CHAR_INDEX[c];
+
+            if (this.obfuscated && j != -1) {
+                int charW = this.getCharWidth(c);
+                char d;
                 do {
-                    mapped = kalia$TABLE.charAt(this.random.nextInt(kalia$TABLE.length()));
-                } while (charWidth != this.getCharWidth(mapped));
-                c = mapped;
-                tableIndex = kalia$CHAR_INDEX[c];
+                    d = sulfide$TABLE.charAt(this.random.nextInt(sulfide$TABLE.length()));
+                } while (charW != this.getCharWidth(d));
+                c = d;
+                j = sulfide$CHAR_INDEX[c];
             }
 
-            float offset = this.unicode ? 0.5F : 1.0F;
-            boolean shadowOffset = (c == 0 || tableIndex == -1 || this.unicode) && shadow;
-            if (shadowOffset) {
-                this.x -= offset;
-                this.y -= offset;
-            }
+            float f = this.unicode ? 0.5F : 1.0F;
+            boolean shifted = (c == 0 || j == -1 || this.unicode) && shadow;
+            float shift = shifted ? -f : 0.0F;
 
-            float advance;
-            if (c == ' ') {
-                advance = 4.0F;
-            } else {
-                currentPage = kalia$ensureGlyphPage(c, tableIndex, currentPage, tessellator, bufferBuilder);
-                batchActive = true;
-                advance = currentPage == -1
-                        ? kalia$addNormalGlyph(tableIndex, this.italic, bufferBuilder)
-                        : kalia$addUnicodeGlyph(c, this.italic, bufferBuilder);
-            }
+            float g = sulfide$bakeGlyph(scratch, c, j, this.italic, relX + shift, shift, rgba);
 
-            if (shadowOffset) {
-                this.x += offset;
-                this.y += offset;
-            }
-
+            // bold: bake a second copy offset by 1
             if (this.bold) {
-                this.x += offset;
-                if (shadowOffset) {
-                    this.x -= offset;
-                    this.y -= offset;
-                }
-
-                if (c != ' ') {
-                    currentPage = kalia$ensureGlyphPage(c, tableIndex, currentPage, tessellator, bufferBuilder);
-                    batchActive = true;
-                    if (currentPage == -1) {
-                        kalia$addNormalGlyph(tableIndex, this.italic, bufferBuilder);
-                    } else {
-                        kalia$addUnicodeGlyph(c, this.italic, bufferBuilder);
-                    }
-                }
-
-                this.x -= offset;
-                if (shadowOffset) {
-                    this.x += offset;
-                    this.y += offset;
-                }
-                ++advance;
+                sulfide$bakeGlyph(scratch, c, j, this.italic, relX + shift + f, shift, rgba);
+                ++g;
             }
 
-            if (this.strikethrough && decorationCount < 256) {
-                int dataIndex = decorationCount++ * 8;
-                float yCenter = this.y + (float) (this.fontHeight / 2);
-                decorations[dataIndex] = this.x;
-                decorations[dataIndex + 1] = yCenter - 1.0F;
-                decorations[dataIndex + 2] = this.x + advance;
-                decorations[dataIndex + 3] = yCenter;
-                decorations[dataIndex + 4] = currentRed;
-                decorations[dataIndex + 5] = currentGreen;
-                decorations[dataIndex + 6] = currentBlue;
-                decorations[dataIndex + 7] = currentAlpha;
+            if (this.strikethrough && decoCount < sulfide$MAX_DECOS) {
+                int di = decoCount++ * sulfide$DECO_STRIDE;
+                float yc = (float) (this.fontHeight / 2);
+                sulfide$decoData[di] = relX;
+                sulfide$decoData[di + 1] = yc - 1.0F;
+                sulfide$decoData[di + 2] = relX + g;
+                sulfide$decoData[di + 3] = yc;
+                sulfide$decoData[di + 4] = Float.intBitsToFloat(rgba);
+            }
+            if (this.underline && decoCount < sulfide$MAX_DECOS) {
+                int di = decoCount++ * sulfide$DECO_STRIDE;
+                float yb = (float) this.fontHeight;
+                sulfide$decoData[di] = relX - 1.0F;
+                sulfide$decoData[di + 1] = yb - 1.0F;
+                sulfide$decoData[di + 2] = relX + g;
+                sulfide$decoData[di + 3] = yb;
+                sulfide$decoData[di + 4] = Float.intBitsToFloat(rgba);
             }
 
-            if (this.underline && decorationCount < 256) {
-                int dataIndex = decorationCount++ * 8;
-                float yBottom = this.y + (float) this.fontHeight;
-                decorations[dataIndex] = this.x - 1.0F;
-                decorations[dataIndex + 1] = yBottom - 1.0F;
-                decorations[dataIndex + 2] = this.x + advance;
-                decorations[dataIndex + 3] = yBottom;
-                decorations[dataIndex + 4] = currentRed;
-                decorations[dataIndex + 5] = currentGreen;
-                decorations[dataIndex + 6] = currentBlue;
-                decorations[dataIndex + 7] = currentAlpha;
-            }
-
-            this.x += (float) ((int) advance);
+            relX += (float) ((int) g);
         }
 
-        if (batchActive) {
-            tessellator.draw();
-        }
+        sulfide$closeSegment(scratch);
 
-        if (decorationCount > 0) {
-            GlStateManager.disableTexture();
-            bufferBuilder.begin(7, VertexFormats.POSITION);
-
-            float previousRed = currentRed;
-            float previousGreen = currentGreen;
-            float previousBlue = currentBlue;
-            float previousAlpha = currentAlpha;
-
-            for (int i = 0; i < decorationCount; ++i) {
-                int dataIndex = i * 8;
-                float decoRed = decorations[dataIndex + 4];
-                float decoGreen = decorations[dataIndex + 5];
-                float decoBlue = decorations[dataIndex + 6];
-                float decoAlpha = decorations[dataIndex + 7];
-
-                if (decoRed != previousRed || decoGreen != previousGreen || decoBlue != previousBlue || decoAlpha != previousAlpha) {
-                    tessellator.draw();
-                    GlStateManager.color(decoRed, decoGreen, decoBlue, decoAlpha);
-                    bufferBuilder.begin(7, VertexFormats.POSITION);
-                    previousRed = decoRed;
-                    previousGreen = decoGreen;
-                    previousBlue = decoBlue;
-                    previousAlpha = decoAlpha;
-                } else if (i == 0) {
-                    GlStateManager.color(decoRed, decoGreen, decoBlue, decoAlpha);
-                }
-
-                float x1 = decorations[dataIndex];
-                float y1 = decorations[dataIndex + 1];
-                float x2 = decorations[dataIndex + 2];
-                float y2 = decorations[dataIndex + 3];
-                bufferBuilder.vertex(x1, y2, 0.0).next();
-                bufferBuilder.vertex(x2, y2, 0.0).next();
-                bufferBuilder.vertex(x2, y1, 0.0).next();
-                bufferBuilder.vertex(x1, y1, 0.0).next();
+        if (decoCount > 0) {
+            sulfide$segPage = TextMeshCache.PAGE_DECORATION;
+            sulfide$segStartByte = scratch.position();
+            for (int d = 0; d < decoCount; d++) {
+                int di = d * sulfide$DECO_STRIDE;
+                float x1 = sulfide$decoData[di];
+                float y1 = sulfide$decoData[di + 1];
+                float x2 = sulfide$decoData[di + 2];
+                float y2 = sulfide$decoData[di + 3];
+                int decoRgba = Float.floatToRawIntBits(sulfide$decoData[di + 4]);
+                sulfide$vertex(scratch, x1, y2, 0.0F, 0.0F, decoRgba);
+                sulfide$vertex(scratch, x2, y2, 0.0F, 0.0F, decoRgba);
+                sulfide$vertex(scratch, x2, y1, 0.0F, 0.0F, decoRgba);
+                sulfide$vertex(scratch, x1, y1, 0.0F, 0.0F, decoRgba);
             }
-
-            tessellator.draw();
-            GlStateManager.enableTexture();
+            sulfide$closeSegment(scratch);
         }
+
+        TextMeshCache.Segment[] segments = sulfide$segments.toArray(new TextMeshCache.Segment[0]);
+        sulfide$segments.clear();
+        return new TextMeshCache.CachedText(segments, relX);
     }
 
     @Unique
-    private int kalia$ensureGlyphPage(char c, int tableIndex, int currentPage, Tessellator tessellator, BufferBuilder bufferBuilder) {
-        int page = (tableIndex != -1 && !this.unicode) ? -1 : c / 256;
-        if (page == currentPage) {
-            return currentPage;
-        }
+    private float sulfide$bakeGlyph(ByteBuffer scratch, char c, int tableIdx, boolean italic,
+                                    float relX, float shiftY, int rgba) {
+        if (c == ' ') return 4.0F;
 
-        if (currentPage != kalia$PAGE_NONE) {
-            tessellator.draw();
-        }
+        if (tableIdx != -1 && !this.unicode) {
+            sulfide$ensureSegment(scratch, TextMeshCache.PAGE_DEFAULT);
 
-        if (page == -1) {
-            this.textureManager.bindTexture(this.fontTexture);
+            int texU = (tableIdx % 16) * 8;
+            int texV = (tableIdx / 16) * 8;
+            int slant = italic ? 1 : 0;
+            int w = this.characterWidths[tableIdx];
+            float fw = (float) w - 0.01F;
+
+            float u0 = (float) texU / 128.0F;
+            float v0 = (float) texV / 128.0F;
+            float u1 = ((float) texU + fw - 1.0F) / 128.0F;
+            float v1 = ((float) texV + 7.99F) / 128.0F;
+
+            sulfide$vertex(scratch, relX + (float) slant, shiftY, u0, v0, rgba);
+            sulfide$vertex(scratch, relX - (float) slant, shiftY + 7.99F, u0, v1, rgba);
+            sulfide$vertex(scratch, relX + fw - 1.0F - (float) slant, shiftY + 7.99F, u1, v1, rgba);
+            sulfide$vertex(scratch, relX + fw - 1.0F + (float) slant, shiftY, u1, v0, rgba);
+
+            return (float) w;
         } else {
-            this.textureManager.bindTexture(kalia$getFontPage(page));
+            if (this.glyphWidths[c] == 0) return 0.0F;
+            sulfide$ensureSegment(scratch, c / 256);
+
+            int rawStart = this.glyphWidths[c] >>> 4;
+            int rawEnd = this.glyphWidths[c] & 15;
+            float gStart = (float) rawStart;
+            float gEnd = (float) (rawEnd + 1);
+            float texX = (float) (c % 16 * 16) + gStart;
+            float texY = (float) ((c & 255) / 16 * 16);
+            float glyphW = gEnd - gStart - 0.02F;
+            float slant = italic ? 1.0F : 0.0F;
+
+            float u0 = texX / 256.0F;
+            float v0 = texY / 256.0F;
+            float u1 = (texX + glyphW) / 256.0F;
+            float v1 = (texY + 15.98F) / 256.0F;
+
+            sulfide$vertex(scratch, relX + slant, shiftY, u0, v0, rgba);
+            sulfide$vertex(scratch, relX - slant, shiftY + 7.99F, u0, v1, rgba);
+            sulfide$vertex(scratch, relX + glyphW / 2.0F - slant, shiftY + 7.99F, u1, v1, rgba);
+            sulfide$vertex(scratch, relX + glyphW / 2.0F + slant, shiftY, u1, v0, rgba);
+
+            return (gEnd - gStart) / 2.0F + 1.0F;
         }
-
-        bufferBuilder.begin(7, VertexFormats.POSITION_TEXTURE);
-        return page;
     }
 
     @Unique
-    private float kalia$addNormalGlyph(int index, boolean italic, BufferBuilder bufferBuilder) {
-        int texU = (index % 16) * 8;
-        int texV = (index / 16) * 8;
-        int slant = italic ? 1 : 0;
-        int width = this.characterWidths[index];
-        float glyphWidth = (float) width - 0.01F;
-
-        float u0 = (float) texU / 128.0F;
-        float v0 = (float) texV / 128.0F;
-        float u1 = ((float) texU + glyphWidth - 1.0F) / 128.0F;
-        float v1 = ((float) texV + 7.99F) / 128.0F;
-
-        bufferBuilder.vertex(this.x + (float) slant, this.y, 0.0).texture(u0, v0).next();
-        bufferBuilder.vertex(this.x - (float) slant, this.y + 7.99, 0.0).texture(u0, v1).next();
-        bufferBuilder.vertex(this.x + glyphWidth - 1.0F - (float) slant, this.y + 7.99, 0.0).texture(u1, v1).next();
-        bufferBuilder.vertex(this.x + glyphWidth - 1.0F + (float) slant, this.y, 0.0).texture(u1, v0).next();
-
-        return (float) width;
+    private void sulfide$ensureSegment(ByteBuffer scratch, int page) {
+        if (sulfide$segPage != page) {
+            sulfide$closeSegment(scratch);
+            sulfide$segPage = page;
+            sulfide$segStartByte = scratch.position();
+        }
     }
 
     @Unique
-    private float kalia$addUnicodeGlyph(char c, boolean italic, BufferBuilder bufferBuilder) {
-        int rawStart = this.glyphWidths[c] >>> 4;
-        int rawEnd = this.glyphWidths[c] & 15;
-        float glyphStart = (float) rawStart;
-        float glyphEnd = (float) (rawEnd + 1);
-        float texX = (float) (c % 16 * 16) + glyphStart;
-        float texY = (float) ((c & 255) / 16 * 16);
-        float glyphWidth = glyphEnd - glyphStart - 0.02F;
-        float slant = italic ? 1.0F : 0.0F;
-
-        float u0 = texX / 256.0F;
-        float v0 = texY / 256.0F;
-        float u1 = (texX + glyphWidth) / 256.0F;
-        float v1 = (texY + 15.98F) / 256.0F;
-
-        bufferBuilder.vertex(this.x + slant, this.y, 0.0).texture(u0, v0).next();
-        bufferBuilder.vertex(this.x - slant, this.y + 7.99, 0.0).texture(u0, v1).next();
-        bufferBuilder.vertex(this.x + glyphWidth / 2.0F - slant, this.y + 7.99, 0.0).texture(u1, v1).next();
-        bufferBuilder.vertex(this.x + glyphWidth / 2.0F + slant, this.y, 0.0).texture(u1, v0).next();
-
-        return (glyphEnd - glyphStart) / 2.0F + 1.0F;
+    private void sulfide$closeSegment(ByteBuffer scratch) {
+        int endByte = scratch.position();
+        int length = endByte - sulfide$segStartByte;
+        if (sulfide$segPage != sulfide$PAGE_NONE && length > 0) {
+            ByteBuffer vertexData = TextMeshCache.allocSegmentBuffer(length);
+            MemoryUtil.memCopy(
+                    MemoryUtil.memAddress0(scratch) + sulfide$segStartByte,
+                    MemoryUtil.memAddress0(vertexData),
+                    length
+            );
+            sulfide$segments.add(new TextMeshCache.Segment(
+                    sulfide$segPage,
+                    vertexData,
+                    length / sulfide$VERTEX_BYTES
+            ));
+        }
+        sulfide$segPage = sulfide$PAGE_NONE;
+        sulfide$segStartByte = endByte;
     }
 
     @Unique
-    private static Identifier kalia$getFontPage(int page) {
+    private static void sulfide$vertex(ByteBuffer buffer, float x, float y, float u, float v, int rgba) {
+        buffer.putFloat(x);
+        buffer.putFloat(y);
+        buffer.putFloat(0.0F);
+        buffer.putFloat(u);
+        buffer.putFloat(v);
+        buffer.put((byte) (rgba >> 24 & 255));
+        buffer.put((byte) (rgba >> 16 & 255));
+        buffer.put((byte) (rgba >> 8 & 255));
+        buffer.put((byte) (rgba & 255));
+    }
+
+    @Unique
+    private static int sulfide$packColor(float r, float g, float b, float a) {
+        return ((int) (r * 255.0F) & 255) << 24
+                | ((int) (g * 255.0F) & 255) << 16
+                | ((int) (b * 255.0F) & 255) << 8
+                | ((int) (a * 255.0F) & 255);
+    }
+
+    @Unique
+    private static boolean sulfide$containsObfuscationCode(String text) {
+        int index = text.indexOf(167);
+        while (index >= 0 && index + 1 < text.length()) {
+            char next = text.charAt(index + 1);
+            if (next == 'k' || next == 'K') {
+                return true;
+            }
+            index = text.indexOf(167, index + 2);
+        }
+        return false;
+    }
+
+    @Unique
+    private static Identifier sulfide$getFontPage(int page) {
         if (PAGES[page] == null) {
             PAGES[page] = new Identifier(String.format("textures/font/unicode_page_%02x.png", page));
         }
@@ -473,7 +578,7 @@ public class MixinTextRenderer {
     }
 
     @Unique
-    private static int kalia$formattingIndex(char c) {
+    private static int sulfide$formattingIndex(char c) {
         if (c >= '0' && c <= '9') return c - '0';
         if (c >= 'a' && c <= 'f') return c - 'a' + 10;
         if (c >= 'A' && c <= 'F') return c - 'A' + 10;

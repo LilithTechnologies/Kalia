@@ -5,6 +5,8 @@ import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.gl.*
 import re.lilith.kalia.renderer.format.IndexFormat
 import re.lilith.kalia.renderer.resource.GpuBuffer
+import re.lilith.kalia.renderer.resource.GpuSampler
+import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.shader.CoreShaders
 import re.lilith.kalia.shader.PipelineCache
 import re.lilith.kalia.shader.ShaderPrelude
@@ -33,6 +35,31 @@ object KaliaDraw {
         record(format, glMode, vertexCount, slice.buffer, slice.offsetBytes)
     }
 
+    /**
+     * Like [drawTransient], but samples an explicit texture instead of whatever is
+     * currently bound in [TextureTable]. For drawing Kalia-owned render targets
+     * (e.g. an offscreen cache) that never go through the legacy texture-id path.
+     */
+    fun drawTransientTextured(
+        source: ByteBuffer,
+        format: TranslatedVertexFormat,
+        glMode: Int,
+        vertexCount: Int,
+        texture: GpuTexture,
+    ) {
+        if (vertexCount <= 0) {
+            return
+        }
+        val encoder = GameFrame.current ?: return
+        val resources = FrameResources.of(encoder.device)
+
+        val byteCount = vertexCount * format.format.stride
+        val slice = resources.vertexArena.append(source, byteCount)
+        record(format, glMode, vertexCount, slice.buffer, slice.offsetBytes, BoundTexture(texture, resources.defaultSampler))
+    }
+
+    private class BoundTexture(val texture: GpuTexture, val sampler: GpuSampler)
+
     fun drawResident(
         buffer: GpuBuffer,
         format: TranslatedVertexFormat,
@@ -58,6 +85,7 @@ object KaliaDraw {
         vertexCount: Int,
         vertexBuffer: GpuBuffer,
         vertexOffset: Long,
+        textureOverride: BoundTexture? = null,
     ) {
         val encoder = GameFrame.current ?: return
         val resources = FrameResources.of(encoder.device)
@@ -80,8 +108,8 @@ object KaliaDraw {
         if (format.hasTexture || texGen) {
             encoder.bindTexture(
                 binding = ShaderPrelude.Bindings.BASE_TEXTURE,
-                texture = textureForUnit(0, resources),
-                sampler = samplerForUnit(0, resources),
+                texture = textureOverride?.texture ?: textureForUnit(0, resources),
+                sampler = textureOverride?.sampler ?: samplerForUnit(0, resources),
             )
         }
         encoder.bindTexture(

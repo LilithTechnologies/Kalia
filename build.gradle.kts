@@ -14,6 +14,7 @@ ploceus {
 repositories {
     maven(url = "https://maven.legacyfabric.net/") { name = "Legacy Fabric" }
     maven(url = "https://maven.axolotlclient.com/snapshots") { name = "Axolotl Client" }
+    maven(url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1") { name = "DevAuth" }
     mavenCentral()
 }
 
@@ -36,6 +37,7 @@ dependencies {
 
     modImplementation(libs.legacy.lwjgl3)
     modImplementation(libs.fabric.loader)
+    modImplementation(libs.devauth.fabric)
     modImplementation(libs.fabric.language.kotlin)
 
     ploceus.dependOsl("0.17.0")

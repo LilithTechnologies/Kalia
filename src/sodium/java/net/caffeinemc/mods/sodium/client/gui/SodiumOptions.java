@@ -49,6 +49,7 @@ public class SodiumOptions {
         public boolean useEntityCulling = true;
         public boolean useFogOcclusion = true;
         public boolean useBlockFaceCulling = true;
+        public boolean hudCaching = true;
 
         public boolean smartCull = true;
 
