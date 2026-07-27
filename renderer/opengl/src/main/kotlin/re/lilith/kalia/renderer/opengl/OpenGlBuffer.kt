@@ -5,6 +5,7 @@ import org.lwjgl.opengl.GL15C.*
 import org.lwjgl.opengl.GL30C.GL_MAP_WRITE_BIT
 import org.lwjgl.opengl.GL30C.glMapBufferRange
 import org.lwjgl.opengl.GL31C.GL_COPY_WRITE_BUFFER
+import org.lwjgl.opengl.GL44C.GL_DYNAMIC_STORAGE_BIT
 import org.lwjgl.opengl.GL44C.GL_MAP_COHERENT_BIT
 import org.lwjgl.opengl.GL44C.GL_MAP_PERSISTENT_BIT
 import org.lwjgl.system.MemoryUtil
@@ -100,11 +101,12 @@ internal class OpenGlBuffer(
             var shadow: ByteBuffer? = null
             when (usage) {
                 BufferUsage.STREAM if owner.context.supportsBufferStorage -> {
-                    val flags = GL_MAP_WRITE_BIT or GL_MAP_PERSISTENT_BIT or GL_MAP_COHERENT_BIT
+                    val flags = GL_DYNAMIC_STORAGE_BIT or GL_MAP_WRITE_BIT or GL_MAP_PERSISTENT_BIT or GL_MAP_COHERENT_BIT
                     glBufferStorage(GL_COPY_WRITE_BUFFER, sizeBytes, flags)
-                    mapped = checkNotNull(glMapBufferRange(GL_COPY_WRITE_BUFFER, 0L, sizeBytes, flags)) {
-                        "Persistent mapping of buffer '$label' failed."
-                    }.order(ByteOrder.nativeOrder())
+                    mapped = glMapBufferRange(GL_COPY_WRITE_BUFFER, 0L, sizeBytes, flags)?.order(ByteOrder.nativeOrder())
+                    if (mapped == null) {
+                        shadow = ByteBuffer.allocateDirect(sizeBytes.toInt()).order(ByteOrder.nativeOrder())
+                    }
                 }
 
                 BufferUsage.STREAM -> {

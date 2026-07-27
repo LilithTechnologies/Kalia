@@ -36,51 +36,52 @@ public class MixinEntityRenderer<T extends Entity> {
     @Unique
     private static boolean kalia$shadowTextureResolved = false;
 
-    @Inject(
-            method = "renderShadow(Lnet/minecraft/entity/Entity;DDDFF)V",
-            at = @At("HEAD"),
-            cancellable = true
-    )
-    private void kalia$renderShadow(Entity entity, double x, double y, double z, float f, float tickDelta, CallbackInfo ci) {
-        ci.cancel();
-
-        if (!kalia$shadowTextureResolved) {
-            this.dispatcher.textureManager.bindTexture(SHADOW_TEXTURE);
-            Texture texture = this.dispatcher.textureManager.getTexture(SHADOW_TEXTURE);
-            ShadowBatcher.INSTANCE.texture = TextureTable.INSTANCE.get(texture.getGlId());
-            kalia$shadowTextureResolved = true;
-        }
-
-        World world = this.getWorld();
-        float g = this.shadowSize;
-        if (entity instanceof MobEntity) {
-            MobEntity mobEntity = (MobEntity) entity;
-            g *= mobEntity.method_2638();
-            if (mobEntity.isBaby()) {
-                g *= 0.5F;
-            }
-        }
-
-        double d = entity.prevTickX + (entity.x - entity.prevTickX) * tickDelta;
-        double e = entity.prevTickY + (entity.y - entity.prevTickY) * tickDelta;
-        double h = entity.prevTickZ + (entity.z - entity.prevTickZ) * tickDelta;
-        int i = MathHelper.floor(d - g);
-        int j = MathHelper.floor(d + g);
-        int k = MathHelper.floor(e - g);
-        int l = MathHelper.floor(e);
-        int m = MathHelper.floor(h - g);
-        int n = MathHelper.floor(h + g);
-        double o = x - d;
-        double p = y - e;
-        double q = z - h;
-
-        for (BlockPos blockPos : BlockPos.mutableIterate(new BlockPos(i, k, m), new BlockPos(j, l, n))) {
-            Block block = world.getBlockState(blockPos.down()).getBlock();
-            if (block.getBlockType() != -1 && world.getLightLevelWithNeighbours(blockPos) > 3) {
-                kalia$recordShadowQuad(world, block, x, y, z, blockPos, f, g, o, p, q);
-            }
-        }
-    }
+    // todo: fix shadow batching
+//    @Inject(
+//            method = "renderShadow(Lnet/minecraft/entity/Entity;DDDFF)V",
+//            at = @At("HEAD"),
+//            cancellable = true
+//    )
+//    private void kalia$renderShadow(Entity entity, double x, double y, double z, float f, float tickDelta, CallbackInfo ci) {
+//        ci.cancel();
+//
+//        if (!kalia$shadowTextureResolved) {
+//            this.dispatcher.textureManager.bindTexture(SHADOW_TEXTURE);
+//            Texture texture = this.dispatcher.textureManager.getTexture(SHADOW_TEXTURE);
+//            ShadowBatcher.INSTANCE.texture = TextureTable.INSTANCE.get(texture.getGlId());
+//            kalia$shadowTextureResolved = true;
+//        }
+//
+//        World world = this.getWorld();
+//        float g = this.shadowSize;
+//        if (entity instanceof MobEntity) {
+//            MobEntity mobEntity = (MobEntity) entity;
+//            g *= mobEntity.method_2638();
+//            if (mobEntity.isBaby()) {
+//                g *= 0.5F;
+//            }
+//        }
+//
+//        double d = entity.prevTickX + (entity.x - entity.prevTickX) * tickDelta;
+//        double e = entity.prevTickY + (entity.y - entity.prevTickY) * tickDelta;
+//        double h = entity.prevTickZ + (entity.z - entity.prevTickZ) * tickDelta;
+//        int i = MathHelper.floor(d - g);
+//        int j = MathHelper.floor(d + g);
+//        int k = MathHelper.floor(e - g);
+//        int l = MathHelper.floor(e);
+//        int m = MathHelper.floor(h - g);
+//        int n = MathHelper.floor(h + g);
+//        double o = x - d;
+//        double p = y - e;
+//        double q = z - h;
+//
+//        for (BlockPos blockPos : BlockPos.mutableIterate(new BlockPos(i, k, m), new BlockPos(j, l, n))) {
+//            Block block = world.getBlockState(blockPos.down()).getBlock();
+//            if (block.getBlockType() != -1 && world.getLightLevelWithNeighbours(blockPos) > 3) {
+//                kalia$recordShadowQuad(world, block, x, y, z, blockPos, f, g, o, p, q);
+//            }
+//        }
+//    }
 
     @Unique
     private void kalia$recordShadowQuad(

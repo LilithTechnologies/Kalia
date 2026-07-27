@@ -47,7 +47,7 @@ object KaliaEngine {
                 it.errors.forEach { error ->
                     KaliaMod.LOGGER.error("Error while creating the backend", error)
                 }
-                KaliaMod.LOGGER.warn("This is usually not an issue, as we have multiple rendering backends. If both of them fail, please report this to us ASAP.N")
+                KaliaMod.LOGGER.warn("This is usually not an issue, as we have multiple rendering backends. If both of them fail, please report this to us ASAP.")
             }
         }.device }
             .onSuccess { created ->

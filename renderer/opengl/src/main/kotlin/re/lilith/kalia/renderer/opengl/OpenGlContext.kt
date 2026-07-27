@@ -8,6 +8,7 @@ import org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT
 import org.lwjgl.opengl.GL32C.GL_PROGRAM_POINT_SIZE
 import org.lwjgl.opengl.GL45C
 import org.lwjgl.opengl.GLCapabilities
+import org.lwjgl.opengl.GLUtil
 import org.lwjgl.sdl.SDLPlatform.SDL_GetPlatform
 import org.lwjgl.sdl.SDLVideo.*
 import re.lilith.kalia.renderer.device.*
@@ -70,10 +71,11 @@ internal class OpenGlContext private constructor(
             check(SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4))
             check(SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1))
             check(SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE))
+            var contextFlags = 0
             if ("macOS" == SDL_GetPlatform()) {
-                // macOS refuses core contexts that are not forward compatible
-                check(SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG))
+                contextFlags = contextFlags or SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG
             }
+            check(SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, contextFlags))
 
             val handle = SDL_GL_CreateContext(platformSurface.nativeHandle)
             check(handle != 0L) { "SDL was unable to create an OpenGL 4.1 core context." }

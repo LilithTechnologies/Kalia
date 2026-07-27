@@ -1,10 +1,13 @@
 package re.lilith.kalia.renderer.opengl.utils
 
-import org.lwjgl.opengl.ARBBufferStorage.*
-import org.lwjgl.opengl.ARBCopyBuffer.GL_COPY_WRITE_BUFFER
-import org.lwjgl.opengl.ARBMapBufferRange.GL_MAP_WRITE_BIT
-import org.lwjgl.opengl.ARBMapBufferRange.glMapBufferRange
-import org.lwjgl.opengl.GL15.*
+import org.lwjgl.opengl.ARBBufferStorage.glBufferStorage
+import org.lwjgl.opengl.GL15C.*
+import org.lwjgl.opengl.GL30C.GL_MAP_WRITE_BIT
+import org.lwjgl.opengl.GL30C.glMapBufferRange
+import org.lwjgl.opengl.GL31C.GL_UNIFORM_BUFFER
+import org.lwjgl.opengl.GL44C.GL_DYNAMIC_STORAGE_BIT
+import org.lwjgl.opengl.GL44C.GL_MAP_COHERENT_BIT
+import org.lwjgl.opengl.GL44C.GL_MAP_PERSISTENT_BIT
 import org.lwjgl.system.MemoryUtil
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -35,8 +38,8 @@ internal class PushConstantRing(private val persistent: Boolean) : AutoCloseable
             target.position(aligned.toInt())
             target.put(data.duplicate())
         } else {
-            glBindBuffer(GL_COPY_WRITE_BUFFER, id)
-            nglBufferSubData(GL_COPY_WRITE_BUFFER, aligned, size, MemoryUtil.memAddress(data))
+            glBindBuffer(GL_UNIFORM_BUFFER, id)
+            nglBufferSubData(GL_UNIFORM_BUFFER, aligned, size, MemoryUtil.memAddress(data))
         }
 
         offset = aligned + size
@@ -56,15 +59,13 @@ internal class PushConstantRing(private val persistent: Boolean) : AutoCloseable
         id = glGenBuffers()
         capacity = newCapacity
         offset = 0L
-        glBindBuffer(GL_COPY_WRITE_BUFFER, id)
+        glBindBuffer(GL_UNIFORM_BUFFER, id)
         if (persistent) {
-            val flags = GL_MAP_WRITE_BIT or GL_MAP_PERSISTENT_BIT or GL_MAP_COHERENT_BIT
-            glBufferStorage(GL_COPY_WRITE_BUFFER, newCapacity, flags)
-            mapped = checkNotNull(glMapBufferRange(GL_COPY_WRITE_BUFFER, 0L, newCapacity, flags)) {
-                "Persistent mapping of the push-constant ring failed."
-            }.order(ByteOrder.nativeOrder())
+            val flags = GL_DYNAMIC_STORAGE_BIT or GL_MAP_WRITE_BIT or GL_MAP_PERSISTENT_BIT or GL_MAP_COHERENT_BIT
+            glBufferStorage(GL_UNIFORM_BUFFER, newCapacity, flags)
+            mapped = glMapBufferRange(GL_UNIFORM_BUFFER, 0L, newCapacity, flags)?.order(ByteOrder.nativeOrder())
         } else {
-            glBufferData(GL_COPY_WRITE_BUFFER, newCapacity, GL_STREAM_DRAW)
+            glBufferData(GL_UNIFORM_BUFFER, newCapacity, GL_STREAM_DRAW)
             mapped = null
         }
     }

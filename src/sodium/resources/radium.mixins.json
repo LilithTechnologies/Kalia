@@ -8,6 +8,7 @@
     "core.MixinBaseFrustum",
     "core.MixinBufferBuilder",
     "core.MixinCullingCameraView",
+    "core.MixinDebugHud",
     "core.MixinFramebuffer",
     "core.model.quad.BakedQuadMixin",
     "sodium.core.TextureAtlasMixin",
