@@ -8,10 +8,9 @@ version = rootProject.property("project.version") as String
 repositories.mavenCentral()
 
 dependencies {
-    api(libs.joml)
+    api(project(":renderer"))
 }
 
 kotlin {
     jvmToolchain(25)
-    compilerOptions.freeCompilerArgs.add("-Xjvm-default=all")
 }

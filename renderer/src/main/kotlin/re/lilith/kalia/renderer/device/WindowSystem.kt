@@ -7,6 +7,7 @@ package re.lilith.kalia.renderer.device
  * @since 1.0.0
  */
 enum class WindowSystem {
-    SDL
+    SDL,
+    HEADLESS
     ;
 }

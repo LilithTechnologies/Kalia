@@ -15,3 +15,5 @@ include(":renderer:vulkan")
 include(":renderer:opengl")
 
 rootProject.name = "Kalia"
+
+include("renderer:headless")

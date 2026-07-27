@@ -47,6 +47,9 @@ dependencies {
     implementation(include(project(":renderer:vulkan"))!!)
     implementation(include(project(":renderer:opengl"))!!)
 
+    testImplementation(kotlin("test"))
+    testImplementation(project(":renderer:headless")) // the headless renderer is not shipped
+
     bundled(libs.joml)
     bundled(libs.lwjgl.asProvider())
     bundled(libs.lwjgl.vulkan)

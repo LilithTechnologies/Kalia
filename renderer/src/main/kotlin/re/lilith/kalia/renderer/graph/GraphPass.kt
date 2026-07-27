@@ -54,7 +54,7 @@ class GraphPass internal constructor(
      */
     val body: PassContext.() -> Unit,
 ) {
-    internal val writes: List<TextureHandle> =
+    val writes: List<TextureHandle> =
         buildList {
             colorAttachments.forEach { add(it.target) }
             depthAttachment?.takeIf(DepthAttachment::write)?.let { add(it.target) }
