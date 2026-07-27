@@ -17,3 +17,4 @@ include(":renderer:opengl")
 rootProject.name = "Kalia"
 
 include("renderer:headless")
+include("terrain")

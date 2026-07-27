@@ -29,16 +29,14 @@
   "accessWidener": "kalia.accesswidener",
 
   "mixins": [
-    "kalia.mixins.json",
-    "radium.mixins.json"
+    "kalia.mixins.json"
   ],
   "entrypoints": {
     "preLaunch": [
       "re.lilith.kalia.KaliaPreLaunch"
     ],
     "client": [
-      "re.lilith.kalia.KaliaMod",
-      "net.caffeinemc.mods.sodium.fabric.SodiumFabricMod"
+      "re.lilith.kalia.KaliaMod"
     ]
   },
 
