@@ -2,8 +2,6 @@ package net.caffeinemc.mods.sodium.client.render.chunk.lists;
 
 import it.unimi.dsi.fastutil.ints.IntArrays;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
-import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
-import net.caffeinemc.mods.sodium.client.render.chunk.TaskQueueType;
 import net.caffeinemc.mods.sodium.client.render.chunk.region.RenderRegion;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 
@@ -12,12 +10,6 @@ import java.util.Map;
 
 public interface RenderListProvider extends SortItemsProvider {
     ObjectArrayList<ChunkRenderList> getUnsortedRenderLists();
-
-    Map<TaskQueueType, ArrayDeque<RenderSection>> getTaskLists();
-
-    boolean orderIsSorted();
-
-    boolean needsRevisitForPendingUpdates();
 
     default SortedRenderLists createRenderLists(Viewport viewport) {
         var sectionPos = viewport.getChunkCoord();

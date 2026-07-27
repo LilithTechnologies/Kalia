@@ -1,9 +1,13 @@
 package re.lilith.kalia.mixins.render;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import net.minecraft.client.render.GameRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import re.lilith.kalia.draw.EntityBatchers;
 import re.lilith.kalia.gl.GlBridge;
 
 import java.nio.FloatBuffer;

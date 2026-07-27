@@ -5,24 +5,22 @@ import net.minecraft.text.Text;
 import net.minecraft.text.TranslatableText;
 
 public enum DeferMode implements TextProvider {
-    ALWAYS("sodium.options.defer_chunk_updates.always", TaskQueueType.ALWAYS_DEFER),
-    ONE_FRAME("sodium.options.defer_chunk_updates.one_frame", TaskQueueType.ONE_FRAME_DEFER),
-    ZERO_FRAMES("sodium.options.defer_chunk_updates.zero_frames", TaskQueueType.ZERO_FRAME_DEFER);
+    ALWAYS("sodium.options.defer_chunk_updates.always"),
+    ONE_FRAME("sodium.options.defer_chunk_updates.one_frame"),
+    ZERO_FRAMES("sodium.options.defer_chunk_updates.zero_frames");
 
     private final Text name;
-    private final TaskQueueType importantRebuildQueueType;
 
-    DeferMode(String name, TaskQueueType importantRebuildQueueType) {
+    DeferMode(String name) {
         this.name = new TranslatableText(name);
-        this.importantRebuildQueueType = importantRebuildQueueType;
+    }
+
+    public boolean allowsUnlimitedUploadDuration() {
+        return this == ZERO_FRAMES;
     }
 
     @Override
     public Text getLocalizedName() {
         return this.name;
-    }
-
-    public TaskQueueType getImportantRebuildQueueType() {
-        return this.importantRebuildQueueType;
     }
 }

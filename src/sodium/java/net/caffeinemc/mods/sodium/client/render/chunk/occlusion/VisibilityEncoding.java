@@ -4,8 +4,6 @@ import net.minecraft.client.render.chunk.ChunkOcclusionData;
 import org.jetbrains.annotations.NotNull;
 
 public class VisibilityEncoding {
-    public static final long NULL = 0L;
-
     public static long encode(@NotNull ChunkOcclusionData occlusionData) {
         long visibilityData = 0;
 

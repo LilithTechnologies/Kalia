@@ -56,4 +56,8 @@ public abstract class MixinBaseFrustum implements ExtendedFrustum {
         return intersects ? FrustumIntersection.INTERSECT : FrustumIntersection.INSIDE;
     }
 
+    @Override
+    public float[][] kalia$getPlanes() {
+        return this.homogeneousCoordinates;
+    }
 }

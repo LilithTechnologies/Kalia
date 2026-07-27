@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import re.lilith.kalia.draw.EntityBatchers;
 import re.lilith.kalia.entity.cuboid.CuboidBatcher;
 import re.lilith.kalia.frame.GameFrame;
 import re.lilith.kalia.gl.MatrixState;
@@ -55,7 +56,7 @@ public class MixinModelPart {
 
     @Inject(method = "render(F)V", at = @At("HEAD"), cancellable = true)
     private void kalia$render(float scale, CallbackInfo ci) {
-        if (!GameFrame.INSTANCE.isRecording()) return;
+        if (!GameFrame.INSTANCE.isRecording() || !EntityBatchers.INSTANCE.isRenderingEntities()) return;
 
         if (this.hide || !this.visible) {
             ci.cancel();
@@ -98,7 +99,7 @@ public class MixinModelPart {
 
     @Inject(method = "rotateAndRender(F)V", at = @At("HEAD"), cancellable = true)
     private void kalia$rotateAndRender(float scale, CallbackInfo ci) {
-        if (!GameFrame.INSTANCE.isRecording()) return;
+        if (!GameFrame.INSTANCE.isRecording() || !EntityBatchers.INSTANCE.isRenderingEntities()) return;
 
         if (this.hide || !this.visible) {
             ci.cancel();
@@ -134,8 +135,7 @@ public class MixinModelPart {
         CuboidBatcher.INSTANCE.beginPart();
 
         for (ModelBox box : this.cuboids) {
-            if (!(box instanceof ModelBoxCuboidData)) continue;
-            ModelBoxCuboidData data = (ModelBoxCuboidData) box;
+            if (!(box instanceof ModelBoxCuboidData data)) continue;
 
             float cx = (box.minX + box.maxX) * 0.5F * scale;
             float cy = (box.minY + box.maxY) * 0.5F * scale;

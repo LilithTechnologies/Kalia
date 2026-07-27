@@ -6,6 +6,8 @@ import net.caffeinemc.mods.sodium.client.gpu.arena.RegionAllocatorHandle;
 import net.caffeinemc.mods.sodium.client.gpu.device.CommandList;
 import net.caffeinemc.mods.sodium.client.model.quad.properties.ModelQuadFacing;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
+import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionFlags;
+import net.caffeinemc.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
 import net.caffeinemc.mods.sodium.client.render.chunk.data.SectionRenderDataStorage;
 import net.caffeinemc.mods.sodium.client.render.chunk.lists.ChunkRenderList;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
@@ -13,7 +15,10 @@ import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.caffeinemc.mods.sodium.client.render.chunk.vertex.format.ChunkMeshFormats;
 import net.caffeinemc.mods.sodium.client.util.MathUtil;
 import net.caffeinemc.mods.sodium.legacy.compat.mojang.minecraft.math.SectionPos;
+import net.minecraft.block.entity.BlockEntity;
+import net.minecraft.client.texture.Sprite;
 import org.apache.commons.lang3.Validate;
+import org.jetbrains.annotations.Nullable;
 import re.lilith.kalia.renderer.command.MultiDrawList;
 
 import java.util.Arrays;
@@ -51,6 +56,10 @@ public class RenderRegion {
     private final ChunkRenderList renderList;
 
     private final RenderSection[] sections = new RenderSection[RenderRegion.REGION_SIZE];
+    private final byte[] sectionFlags = new byte[RenderRegion.REGION_SIZE];
+    private final BlockEntity[] @Nullable [] globalBlockEntities = new BlockEntity[RenderRegion.REGION_SIZE][];
+    private final BlockEntity[] @Nullable [] culledBlockEntities = new BlockEntity[RenderRegion.REGION_SIZE][];
+    private final Sprite[] @Nullable [] animatedSprites = new Sprite[RenderRegion.REGION_SIZE][];
     private final long creationTime;
     private int sectionCount;
 
@@ -238,6 +247,59 @@ public class RenderRegion {
         this.sectionCount++;
     }
 
+    public void setSectionRenderState(int id, BuiltSectionInfo info) {
+        this.sectionFlags[id] = (byte) (info.flags | RenderSectionFlags.MASK_IS_BUILT);
+        this.globalBlockEntities[id] = info.globalBlockEntities;
+        this.culledBlockEntities[id] = info.culledBlockEntities;
+        this.animatedSprites[id] = info.animatedSprites;
+    }
+
+    public void clearSectionRenderState(int id) {
+        this.sectionFlags[id] = RenderSectionFlags.NONE;
+        this.globalBlockEntities[id] = null;
+        this.culledBlockEntities[id] = null;
+        this.animatedSprites[id] = null;
+    }
+
+    public int getSectionFlags(int id) {
+        return this.sectionFlags[id];
+    }
+
+    public boolean sectionNeedsRender(int id) {
+        return RenderSectionFlags.needsRender(this.sectionFlags[id]);
+    }
+
+    /**
+     * Returns the collection of block entities contained by this rendered chunk, which are not part of its culling
+     * volume. These entities should always be rendered regardless of the render being visible in the frustum.
+     *
+     * @param id The section index
+     * @return The collection of block entities
+     */
+    public BlockEntity[] getGlobalBlockEntities(int id) {
+        return this.globalBlockEntities[id];
+    }
+
+    /**
+     * Returns the collection of block entities contained by this rendered chunk.
+     *
+     * @param id The section index
+     * @return The collection of block entities
+     */
+    public BlockEntity[] getCulledBlockEntities(int id) {
+        return this.culledBlockEntities[id];
+    }
+
+    /**
+     * Returns the collection of animated sprites contained by this rendered chunk section.
+     *
+     * @param id The section index
+     * @return The collection of animated sprites
+     */
+    public Sprite[] getAnimatedSprites(int id) {
+        return this.animatedSprites[id];
+    }
+
     public void removeSection(RenderSection section) {
         var sectionIndex = section.getSectionIndex();
         var prev = this.sections[sectionIndex];
@@ -258,10 +320,6 @@ public class RenderRegion {
 
     public float getFillFractionInv() {
         return (float) RenderRegion.REGION_SIZE / (float) this.sectionCount;
-    }
-
-    public RenderSection getSection(int id) {
-        return this.sections[id];
     }
 
     public DeviceResources getResources() {

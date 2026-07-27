@@ -82,9 +82,9 @@ public class RenderRegionManager {
         var translucentPassIndex = DefaultTerrainRenderPasses.getPassIndex(DefaultTerrainRenderPasses.TRANSLUCENT);
 
         for (BuilderTaskOutput result : results) {
-            int renderSectionIndex = result.render.getSectionIndex();
+            int renderSectionIndex = result.section.getSectionIndex();
 
-            if (result.render.isDisposed()) {
+            if (result.section.isDisposed()) {
                 throw new IllegalStateException("Render section is disposed");
             }
 
@@ -104,18 +104,18 @@ public class RenderRegionManager {
 
                     int meshTime = -1;
 
-                    if (!result.render.isBuilt()) {
+                    if (!result.section.isBuilt()) {
                         meshTime = Math.toIntExact(System.currentTimeMillis() - region.getCreationTime());
                     }
 
                     if (mesh != null) {
-                        uploads.add(new PendingSectionMeshUpload(result.render, meshTime, mesh, pass,
+                        uploads.add(new PendingSectionMeshUpload(result.section, meshTime, mesh, pass,
                                 new PendingUpload(mesh.getVertexData(), RenderRegion.packOwnerIndex(renderSectionIndex, passIndex))));
                     }
                 }
             }
 
-            if (result instanceof ChunkSortOutput indexDataOutput && !indexDataOutput.isReusingUploadedIndexData()) {
+            if (result instanceof ChunkSortOutput indexDataOutput && indexDataOutput.containsNewIndexData()) {
                 var sorter = indexDataOutput.getSorter();
                 if (sorter instanceof SharedIndexSorter sharedIndexSorter) {
                     var storage = region.createStorage(DefaultTerrainRenderPasses.TRANSLUCENT);
@@ -145,7 +145,7 @@ public class RenderRegionManager {
                         continue;
                     }
 
-                    indexUploads.add(new PendingSectionIndexBufferUpload(result.render, new PendingUpload(buffer, RenderRegion.packOwnerIndex(renderSectionIndex, translucentPassIndex))));
+                    indexUploads.add(new PendingSectionIndexBufferUpload(result.section, new PendingUpload(buffer, RenderRegion.packOwnerIndex(renderSectionIndex, translucentPassIndex))));
                 }
             }
         }
@@ -187,7 +187,6 @@ public class RenderRegionManager {
                     double distanceToPlayer = dx * dx + dy * dy + dz * dz;
 
                     int relativeBuiltTime = distanceToPlayer < 768.0 ? -1 : upload.relativeBuiltTime;
-                    upload.section.setFadeTime(relativeBuiltTime);
                     resources.writeMeshTimes(upload.section.getSectionIndex(), relativeBuiltTime);
                 }
                 storage.setVertexData(upload.section.getSectionIndex(),
@@ -224,7 +223,7 @@ public class RenderRegionManager {
         var map = new Reference2ReferenceOpenHashMap<RenderRegion, List<BuilderTaskOutput>>();
 
         for (var result : results) {
-            var queue = map.computeIfAbsent(result.render.getRegion(), k -> new ArrayList<>());
+            var queue = map.computeIfAbsent(result.section.getRegion(), k -> new ArrayList<>());
             queue.add(result);
         }
 
@@ -257,6 +256,12 @@ public class RenderRegionManager {
         return this.create(chunkX >> RenderRegion.REGION_WIDTH_SH,
                 chunkY >> RenderRegion.REGION_HEIGHT_SH,
                 chunkZ >> RenderRegion.REGION_LENGTH_SH);
+    }
+
+    public RenderRegion getForChunk(int chunkX, int chunkY, int chunkZ) {
+        return this.regions.get(RenderRegion.key(chunkX >> RenderRegion.REGION_WIDTH_SH,
+                chunkY >> RenderRegion.REGION_HEIGHT_SH,
+                chunkZ >> RenderRegion.REGION_LENGTH_SH));
     }
 
     @NotNull

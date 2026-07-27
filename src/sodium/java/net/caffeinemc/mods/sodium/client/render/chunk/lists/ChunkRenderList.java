@@ -1,7 +1,5 @@
 package net.caffeinemc.mods.sodium.client.render.chunk.lists;
 
-import net.caffeinemc.mods.sodium.client.render.chunk.LocalSectionIndex;
-import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionFlags;
 import net.caffeinemc.mods.sodium.client.render.chunk.region.RenderRegion;
 import net.caffeinemc.mods.sodium.client.util.iterator.ByteArrayIterator;
@@ -24,7 +22,6 @@ public class ChunkRenderList {
     private int lastRelativeCameraSectionX;
     private int lastRelativeCameraSectionY;
     private int lastRelativeCameraSectionZ;
-    private boolean addedSectionsAreSorted = false;
 
     private final byte[] sectionsWithSprites = new byte[RenderRegion.REGION_SIZE];
     private int sectionsWithSpritesCount = 0;
@@ -40,7 +37,7 @@ public class ChunkRenderList {
         this.region = region;
     }
 
-    public void reset(int frame, boolean addedSectionsAreSorted) {
+    public void reset(int frame) {
         this.prevSectionsWithGeometryCount = this.sectionsWithGeometryCount;
         Arrays.fill(this.sectionsWithGeometryMap, 0L);
 
@@ -50,12 +47,10 @@ public class ChunkRenderList {
 
         this.size = 0;
         this.lastVisibleFrame = frame;
-        this.addedSectionsAreSorted = addedSectionsAreSorted;
     }
 
     // clamping the relative camera position to the region bounds means there can only be very few different distances
     private static final int SORTING_HISTOGRAM_SIZE = RenderRegion.REGION_WIDTH + RenderRegion.REGION_HEIGHT + RenderRegion.REGION_LENGTH - 2;
-    private static final int[] SORT_HISTOGRAM = new int[SORTING_HISTOGRAM_SIZE];
 
     public void prepareForRender(SectionPos cameraPos, SortItemsProvider sortItemsProvider) {
         // The relative coordinates are clamped to one section larger than the region bounds to also capture cache invalidation that happens
@@ -72,6 +67,7 @@ public class ChunkRenderList {
                 relativeCameraSectionY != this.lastRelativeCameraSectionY ||
                 relativeCameraSectionZ != this.lastRelativeCameraSectionZ ||
                 !Arrays.equals(this.sectionsWithGeometryMap, this.prevSectionsWithGeometryMap)) {
+            // reset cache invalidation, the newly built batches will remain valid until the next change
             this.region.clearAllCachedBatches();
 
             this.prevSectionsWithGeometryCount = this.sectionsWithGeometryCount;
@@ -79,77 +75,28 @@ public class ChunkRenderList {
             this.lastRelativeCameraSectionX = relativeCameraSectionX;
             this.lastRelativeCameraSectionY = relativeCameraSectionY;
             this.lastRelativeCameraSectionZ = relativeCameraSectionZ;
-            // only sort sections if necessary, read directly from bitmap instead of no sorting is required
-            if (!this.addedSectionsAreSorted) {
-                this.sortSections(relativeCameraSectionX, relativeCameraSectionY, relativeCameraSectionZ, sortItemsProvider);
-            }
         }
     }
 
-    private void sortSections(int relativeCameraSectionX, int relativeCameraSectionY, int relativeCameraSectionZ, SortItemsProvider sortItemsProvider) {
-        relativeCameraSectionX = MathHelper.clamp(relativeCameraSectionX, 0, RenderRegion.REGION_WIDTH - 1);
-        relativeCameraSectionY = MathHelper.clamp(relativeCameraSectionY, 0, RenderRegion.REGION_HEIGHT - 1);
-        relativeCameraSectionZ = MathHelper.clamp(relativeCameraSectionZ, 0, RenderRegion.REGION_LENGTH - 1);
-
-        // Render-thread only; reused across invocations so re-sorting many regions on a
-        // visibility change does not allocate per region.
-        int[] histogram = SORT_HISTOGRAM;
-        Arrays.fill(histogram, 0);
-        var sortItems = sortItemsProvider.ensureSortItemsOfLength(this.sectionsWithGeometryCount);
-
-        this.sectionsWithGeometryCount = 0;
-        for (int mapIndex = 0; mapIndex < this.sectionsWithGeometryMap.length; mapIndex++) {
-            var map = this.sectionsWithGeometryMap[mapIndex];
-            var mapOffset = mapIndex << 6;
-
-            while (map != 0) {
-                var index = Long.numberOfTrailingZeros(map) + mapOffset;
-                map &= map - 1;
-
-                var x = Math.abs(LocalSectionIndex.unpackX(index) - relativeCameraSectionX);
-                var y = Math.abs(LocalSectionIndex.unpackY(index) - relativeCameraSectionY);
-                var z = Math.abs(LocalSectionIndex.unpackZ(index) - relativeCameraSectionZ);
-
-                var distance = x + y + z;
-                histogram[distance]++;
-                sortItems[this.sectionsWithGeometryCount++] = distance << 8 | index;
-            }
-        }
-
-        // prefix sum to calculate indexes
-        for (int i = 1; i < SORTING_HISTOGRAM_SIZE; i++) {
-            histogram[i] += histogram[i - 1];
-        }
-
-        for (int i = 0; i < this.sectionsWithGeometryCount; i++) {
-            var item = sortItems[i];
-            var distance = item >>> 8;
-            this.sectionsWithGeometry[--histogram[distance]] = (byte) item;
-        }
-    }
-
-    public void add(RenderSection render) {
+    public void add(int localSectionIndex) {
         if (this.size >= RenderRegion.REGION_SIZE) {
             throw new ArrayIndexOutOfBoundsException("Render list is full");
         }
 
         this.size++;
 
-        int index = render.getSectionIndex();
-        int flags = render.getFlags();
+        int flags = this.region.getSectionFlags(localSectionIndex);
 
         if (((flags >>> RenderSectionFlags.HAS_BLOCK_GEOMETRY) & 1) == 1) {
-            this.sectionsWithGeometryMap[index >> 6] |= 1L << (index & 0b111111);
-            if (this.addedSectionsAreSorted) {
-                this.sectionsWithGeometry[this.sectionsWithGeometryCount] = (byte) index;
-            }
+            this.sectionsWithGeometryMap[localSectionIndex >> 6] |= 1L << (localSectionIndex & 0b111111);
+            this.sectionsWithGeometry[this.sectionsWithGeometryCount] = (byte) localSectionIndex;
             this.sectionsWithGeometryCount++;
         }
 
-        this.sectionsWithSprites[this.sectionsWithSpritesCount] = (byte) index;
+        this.sectionsWithSprites[this.sectionsWithSpritesCount] = (byte) localSectionIndex;
         this.sectionsWithSpritesCount += (flags >>> RenderSectionFlags.HAS_ANIMATED_SPRITES) & 1;
 
-        this.sectionsWithEntities[this.sectionsWithEntitiesCount] = (byte) index;
+        this.sectionsWithEntities[this.sectionsWithEntitiesCount] = (byte) localSectionIndex;
         this.sectionsWithEntitiesCount += (flags >>> RenderSectionFlags.HAS_BLOCK_ENTITIES) & 1;
     }
 

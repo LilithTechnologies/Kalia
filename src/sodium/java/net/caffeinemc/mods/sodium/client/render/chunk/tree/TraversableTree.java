@@ -1,7 +1,6 @@
 package net.caffeinemc.mods.sodium.client.render.chunk.tree;
 
 import net.caffeinemc.mods.sodium.client.render.chunk.lists.CoordinateSectionVisitor;
-import net.caffeinemc.mods.sodium.client.render.chunk.occlusion.OcclusionCuller;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import org.joml.FrustumIntersection;
 
@@ -38,6 +37,32 @@ public class TraversableTree extends Tree {
             doubleReduced |= reduced == 0 ? 0L : 1L << i;
         }
         this.treeDoubleReduced = doubleReduced;
+    }
+
+    /**
+     * Adds a section to the tree and immediately prepares it for traversal without needing to re-prepare the whole tree.
+     *
+     * @param x x coordinate
+     * @param y y coordinate
+     * @param z z coordinate
+     */
+    public int addPatch(int x, int y, int z) {
+        x -= this.offsetX;
+        y -= this.offsetY;
+        z -= this.offsetZ;
+        if (Tree.isOutOfBounds(x, y, z)) {
+            return OUT_OF_BOUNDS;
+        }
+
+        var bitIndex = Tree.interleave6x3(x, y, z);
+        int entryIndex = bitIndex >> 6;
+        var entry = this.tree[entryIndex];
+        var newEntry = entry | (1L << (bitIndex & 0b111111));
+        this.tree[entryIndex] = newEntry;
+        this.treeReduced[bitIndex >> 12] |= 1L << (entryIndex & 0b111111);
+        this.treeDoubleReduced |= 1L << (bitIndex >> 18);
+
+        return (entry == newEntry) ? PRESENT : NOT_PRESENT;
     }
 
     @Override
@@ -188,7 +213,7 @@ public class TraversableTree extends Tree {
                     (worldX + childHalfDim) - transform.fracX,
                     (worldY + childHalfDim) - transform.fracY,
                     (worldZ + childHalfDim) - transform.fracZ,
-                    childHalfDim + OcclusionCuller.CHUNK_SECTION_MARGIN);
+                    childHalfDim + Viewport.CHUNK_SECTION_MARGIN);
             if (intersectionResult == FrustumIntersection.INSIDE) {
                 inside |= INSIDE_FRUSTUM;
             } else {
@@ -238,7 +263,7 @@ public class TraversableTree extends Tree {
                 (x + 8) - transform.fracX,
                 (y + 8) - transform.fracY,
                 (z + 8) - transform.fracZ,
-                OcclusionCuller.CHUNK_SECTION_RADIUS)) {
+                Viewport.CHUNK_SECTION_PADDED_RADIUS)) {
             return false;
         }
 

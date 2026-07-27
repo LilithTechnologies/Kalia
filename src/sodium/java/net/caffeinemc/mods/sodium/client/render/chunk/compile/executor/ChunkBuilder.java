@@ -88,14 +88,14 @@ public class ChunkBuilder {
         this.threads.clear();
     }
 
-    public <TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT extends BuilderTaskOutput> ChunkJobTyped<TASK, OUTPUT> scheduleTask(TASK task, boolean important, Consumer<ChunkJobResult<OUTPUT>> consumer, boolean blocking) {
+    public <TASK extends ChunkBuilderTask<OUTPUT>, OUTPUT extends BuilderTaskOutput> ChunkJobTyped<TASK, OUTPUT> scheduleTask(TASK task, boolean important, Consumer<ChunkJobResult<OUTPUT>> consumer) {
         Validate.notNull(task, "Task must be non-null");
 
         if (!this.queue.isRunning()) {
             throw new IllegalStateException("Executor is stopped");
         }
 
-        var job = new ChunkJobTyped<>(task, consumer, blocking);
+        var job = new ChunkJobTyped<>(task, consumer);
 
         this.queue.add(job, important);
 

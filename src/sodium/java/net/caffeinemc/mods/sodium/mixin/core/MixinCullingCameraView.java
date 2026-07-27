@@ -15,4 +15,9 @@ public class MixinCullingCameraView implements ExtendedFrustum {
     public int kalia$intersect(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
         return ((ExtendedFrustum) this.clipper).kalia$intersect(minX, minY, minZ, maxX, maxY, maxZ);
     }
+
+    @Override
+    public float[][] kalia$getPlanes() {
+        return ((ExtendedFrustum)this.clipper).kalia$getPlanes();
+    }
 }
