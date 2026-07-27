@@ -63,15 +63,16 @@ internal class VulkanContext private constructor(
     private fun getVendorName(vendorId: Int): String {
         return when (vendorId) {
             0x10DE -> "NVIDIA Corporation"
-            0x1002 -> "ATI Technologies"
+            0x1002, 0x1022 -> "ATI Technologies" // Apparently, AMD has two. Took this from VulkanMod.
             0x8086 -> "Intel Corporation"
-            0x13B5 -> "Arm Limited"
+            0x13B5 -> "ARM"
             0x5143 -> "Qualcomm Incorporated"
             0x106B -> "Apple Inc."
-            0x1010 -> "Imagination Technologies Limited"
+            0x1010 -> "Imagination Technologies"
             0x144D -> "Samsung"
-            0x5E3A -> "Vivante Corporation"
+            0x5E3A -> "Vivante"
             0x10001 -> "Mesa"
+            0x1AE0 -> "Google"
             else -> "Unknown Vendor (0x${Integer.toHexString(vendorId).uppercase()})"
         }
     }
