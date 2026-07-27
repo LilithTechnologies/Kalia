@@ -41,7 +41,15 @@ object KaliaEngine {
 
         KaliaMod.LOGGER.info("Preferred backend: {}", preferredBackend)
 
-        state = runCatching { Kalia.createDevice(surface, settings, preferredBackend()) }
+        state = runCatching { Kalia.createDevice(surface, settings, preferredBackend()).also {
+            if (it.errors.isNotEmpty()) {
+                KaliaMod.LOGGER.warn("Kalia encountered one or more errors while creating the backends. They are logged below.")
+                it.errors.forEach { error ->
+                    KaliaMod.LOGGER.error("Error while creating the backend", error)
+                }
+                KaliaMod.LOGGER.warn("This is usually not an issue, as we have multiple rendering backends. If both of them fail, please report this to us ASAP.N")
+            }
+        }.device }
             .onSuccess { created ->
                 KaliaMod.LOGGER.info(
                     "Kalia started on {} using {} ({})",

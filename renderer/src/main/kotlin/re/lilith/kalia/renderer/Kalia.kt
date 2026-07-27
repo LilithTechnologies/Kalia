@@ -20,7 +20,7 @@ object Kalia {
         surface: PlatformSurface,
         settings: DeviceSettings = DeviceSettings(),
         preferred: BackendId? = null,
-    ): RenderDevice {
+    ): RenderDeviceResult {
         val candidates = availableBackends.sortedBy { if (it.id == preferred) 0 else 1 }
         check(candidates.isNotEmpty()) { "No Kalia render backend is present on the classpath." }
 
@@ -33,7 +33,9 @@ object Kalia {
                 continue
             }
             runCatching { factory.create(surface, settings) }
-                .onSuccess { return it }
+                .onSuccess {
+                    return RenderDeviceResult(it, failures)
+                }
                 .onFailure(failures::add)
         }
 
