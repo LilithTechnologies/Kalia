@@ -26,6 +26,7 @@
   "icon": "assets/kalia/icon.png",
 
   "environment": "client",
+  "accessWidener": "kalia.accesswidener",
 
   "mixins": [
     "kalia.mixins.json",
