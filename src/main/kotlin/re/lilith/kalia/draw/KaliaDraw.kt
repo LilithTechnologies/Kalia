@@ -35,29 +35,6 @@ object KaliaDraw {
         record(format, glMode, vertexCount, slice.buffer, slice.offsetBytes)
     }
 
-    /**
-     * Like [drawTransient], but samples an explicit texture instead of whatever is
-     * currently bound in [TextureTable]. For drawing Kalia-owned render targets
-     * (e.g. an offscreen cache) that never go through the legacy texture-id path.
-     */
-    fun drawTransientTextured(
-        source: ByteBuffer,
-        format: TranslatedVertexFormat,
-        glMode: Int,
-        vertexCount: Int,
-        texture: GpuTexture,
-    ) {
-        if (vertexCount <= 0) {
-            return
-        }
-        val encoder = GameFrame.current ?: return
-        val resources = FrameResources.of(encoder.device)
-
-        val byteCount = vertexCount * format.format.stride
-        val slice = resources.vertexArena.append(source, byteCount)
-        record(format, glMode, vertexCount, slice.buffer, slice.offsetBytes, BoundTexture(texture, resources.defaultSampler))
-    }
-
     private class BoundTexture(val texture: GpuTexture, val sampler: GpuSampler)
 
     fun drawResident(

@@ -5,6 +5,9 @@ import java.util.*
 
 /**
  * Handles backend discovery & device creation
+ *
+ * @author Lunasa
+ * @since 1.0.0
  */
 object Kalia {
     val availableBackends: List<RenderBackendFactory> by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
@@ -15,6 +18,15 @@ object Kalia {
 
     /**
      * Creates a device on the first backend that supports [surface]
+     *
+     * @param surface The surface to present to.
+     * @param settings The initial settings of the device.
+     * @param preferred The preferred backend to use. Note that this may or
+     * may not be honored, as in case of a failure, the next working backend will be picked.
+     * @return The result with the render device, and any errors during its creation.
+     * This will include details of why an alternate backend was chosen, if that happened.
+     *
+     * @throws IllegalStateException if device creation fails
      */
     fun createDevice(
         surface: PlatformSurface,

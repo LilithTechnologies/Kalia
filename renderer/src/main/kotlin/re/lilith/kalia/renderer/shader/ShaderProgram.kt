@@ -28,8 +28,6 @@ class ShaderProgram(
     }
 
     companion object {
-        // The Vulkan spec guarantees 128, but every desktop driver provides at least 256,
-        // and the terrain shaders need 184. The backend validates against the real limit.
         const val MAX_PUSH_CONSTANT_BYTES: Int = 256
     }
 }
