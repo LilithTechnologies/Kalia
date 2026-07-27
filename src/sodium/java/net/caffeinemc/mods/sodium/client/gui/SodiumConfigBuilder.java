@@ -19,8 +19,6 @@ import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.GameOptions;
 import net.minecraft.text.TranslatableText;
 import net.minecraft.util.Identifier;
-import org.lwjgl.opengl.Display;
-import re.lilith.kalia.KaliaEngine;
 import re.lilith.kalia.KaliaHooks;
 
 import java.io.IOException;

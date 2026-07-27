@@ -45,11 +45,9 @@ public class SodiumOptions {
         public int chunkBuilderThreads = 0;
         public DeferMode chunkBuildDeferMode = DeferMode.ALWAYS;
 
-        //public boolean animateOnlyVisibleTextures = true;
         public boolean useEntityCulling = true;
         public boolean useFogOcclusion = true;
         public boolean useBlockFaceCulling = true;
-        public boolean hudCaching = true;
 
         public boolean smartCull = true;
 
@@ -59,9 +57,6 @@ public class SodiumOptions {
     public static class AdvancedSettings {
         public boolean enableMemoryTracing = false;
         public boolean useAdvancedStagingBuffers = true;
-
-        public boolean cpuRenderAhead = true;
-        public int cpuRenderAheadLimit = 3;
 
         public boolean fpsOverlay = false;
     }
@@ -74,16 +69,11 @@ public class SodiumOptions {
         public GraphicsQuality leavesQuality = GraphicsQuality.DEFAULT;
         public LightingQuality smoothLighting = LightingQuality.HIGH;
 
-        public double chunkSectionFadeInTime = 750;
-
         public int biomeBlendRadius = 2;
 
         public int entityShadowDistance = 24;
 
         public boolean enableVignette = true;
-
-        public boolean brightenFireworks = true;
-        public boolean betterSkies = true;
     }
 
     public static class NotificationSettings {
