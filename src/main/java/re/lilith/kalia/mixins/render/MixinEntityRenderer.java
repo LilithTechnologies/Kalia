@@ -1,5 +1,6 @@
 package re.lilith.kalia.mixins.render;
 
+import net.caffeinemc.mods.sodium.client.SodiumClientMod;
 import net.minecraft.block.Block;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.render.entity.EntityRenderer;
@@ -14,7 +15,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.entity.shadow.ShadowBatcher;
 import re.lilith.kalia.texture.TextureTable;
@@ -118,5 +121,11 @@ public class MixinEntityRenderer<T extends Entity> {
                 r, s, t, u,
                 (float) l
         );
+    }
+
+    @ModifyConstant(method = "postRender", constant = @Constant(doubleValue = 256.0D))
+    private double graphite$extendEntityShadowDistance(double vanillaDistanceSquared) {
+        double distance = SodiumClientMod.options().quality.entityShadowDistance;
+        return distance * distance;
     }
 }
