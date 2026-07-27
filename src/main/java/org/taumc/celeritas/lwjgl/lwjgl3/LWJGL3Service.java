@@ -6,6 +6,7 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.system.Pointer;
 import org.taumc.celeritas.lwjgl.LWJGLService;
 import org.taumc.celeritas.lwjgl.MemoryStack;
+import re.lilith.kalia.utility.MemoryAccess;
 
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
@@ -93,14 +94,14 @@ public class LWJGL3Service implements LWJGLService {
 
     @Override
     public long memAddress(Buffer buffer) {
-        return MemoryUtil.memAddress(buffer);
+        return MemoryAccess.addressOf(buffer);
     }
 
     @Override
     public long memAddress(Buffer buffer, int position) {
         // Generic Buffer doesn't have a positioned memAddress in LWJGL3, compute manually
         // Get base address and add position offset based on element size
-        long base = MemoryUtil.memAddress(buffer);
+        long base = MemoryAccess.addressOf(buffer);
         int elementSize;
         if (buffer instanceof java.nio.ByteBuffer) {
             elementSize = 1;
@@ -123,67 +124,67 @@ public class LWJGL3Service implements LWJGLService {
 
     @Override
     public void memCopy(long src, long dst, long bytes) {
-        MemoryUtil.memCopy(src, dst, bytes);
+        MemoryAccess.copyMemory(src, dst, bytes);
     }
 
     @Override
     public void memPutByte(long address, byte value) {
-        MemoryUtil.memPutByte(address, value);
+        MemoryAccess.putByte(address, value);
     }
 
     @Override
     public void memPutShort(long address, short value) {
-        MemoryUtil.memPutShort(address, value);
+        MemoryAccess.putShort(address, value);
     }
 
     @Override
     public void memPutInt(long address, int value) {
-        MemoryUtil.memPutInt(address, value);
+        MemoryAccess.putInt(address, value);
     }
 
     @Override
     public void memPutFloat(long address, float value) {
-        MemoryUtil.memPutFloat(address, value);
+        MemoryAccess.putFloat(address, value);
     }
 
     @Override
     public void memPutLong(long address, long value) {
-        MemoryUtil.memPutLong(address, value);
+        MemoryAccess.putLong(address, value);
     }
 
     @Override
     public void memPutAddress(long address, long value) {
-        MemoryUtil.memPutAddress(address, value);
+        MemoryAccess.putAddress(address, value);
     }
 
     @Override
     public byte memGetByte(long address) {
-        return MemoryUtil.memGetByte(address);
+        return MemoryAccess.getByte(address);
     }
 
     @Override
     public short memGetShort(long address) {
-        return MemoryUtil.memGetShort(address);
+        return MemoryAccess.getShort(address);
     }
 
     @Override
     public int memGetInt(long address) {
-        return MemoryUtil.memGetInt(address);
+        return MemoryAccess.getInt(address);
     }
 
     @Override
     public float memGetFloat(long address) {
-        return MemoryUtil.memGetFloat(address);
+        return MemoryAccess.getFloat(address);
     }
 
     @Override
     public long memGetLong(long address) {
-        return MemoryUtil.memGetLong(address);
+        return MemoryAccess.getLong(address);
     }
 
     @Override
     public long memGetAddress(long address) {
-        return MemoryUtil.memGetAddress(address);
+        return MemoryAccess.getAddress(address);
     }
 
     @Override

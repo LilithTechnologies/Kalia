@@ -1,5 +1,6 @@
 package re.lilith.kalia.utility
 
+import org.lwjgl.system.Pointer
 import sun.misc.Unsafe
 import java.lang.reflect.Field
 import java.nio.Buffer
@@ -11,6 +12,8 @@ object MemoryAccess {
     @JvmField
     val ARRAY_INT_BASE_OFFSET = Unsafe.ARRAY_INT_BASE_OFFSET
 
+    private val BITS32 = Pointer.BITS32
+
     init {
         try {
             val field = Unsafe::class.java.getDeclaredField("theUnsafe")
@@ -19,7 +22,7 @@ object MemoryAccess {
             UNSAFE = field.get(null) as Unsafe
             BUFFER_ADDRESS_OFFSET = UNSAFE.objectFieldOffset(Buffer::class.java.getDeclaredField("address"))
         } catch (e: Exception) {
-            throw RuntimeException("Could not initialize acquire Unsafe", e)
+            throw RuntimeException("Could not acquire Unsafe", e)
         }
     }
 
@@ -97,4 +100,15 @@ object MemoryAccess {
     fun getByte(address: Long): Byte {
         return UNSAFE.getByte(address)
     }
+
+    @JvmStatic
+    fun putAddress(address: Long, value: Long) {
+        if (BITS32) UNSAFE.putInt(address, value.toInt())
+        else UNSAFE.putLong(address, value)
+    }
+
+    @JvmStatic
+    fun getAddress(address: Long) = (if (BITS32) {
+        UNSAFE.getInt(address)
+    } else UNSAFE.getLong(address)).toLong()
 }
