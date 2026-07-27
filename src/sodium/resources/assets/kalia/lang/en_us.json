@@ -86,5 +86,7 @@
   "sodium.console.core_shaders_info": "Check the game log for more details.",
   "sodium.console.config_not_loaded": "Graphite's configuration file is corrupted or unreadable, so some options were temporarily reset to their defaults. Open the Video Settings screen to fix this.",
   "sodium.console.config_file_was_reset": "The configuration file has been reset to known-good defaults.",
-  "parsing.int.invalid": "Invalid integer: %s"
+  "parsing.int.invalid": "Invalid integer: %s",
+  "options.framerate": "%s fps",
+  "options.gamma.default": "Default"
 }

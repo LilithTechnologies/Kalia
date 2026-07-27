@@ -51,10 +51,6 @@ public class ControlValueFormatterImpls {
         return (v) -> new TranslatableText(key, v);
     }
 
-    public static ControlValueFormatter percentage() {
-        return (v) -> new LiteralText(v + "%");
-    }
-
     public static ControlValueFormatter multiplier() {
         return (v) -> new LiteralText(v + "x");
     }
@@ -67,23 +63,4 @@ public class ControlValueFormatterImpls {
         return (v) -> new LiteralText(String.valueOf(v));
     }
 
-    public static ControlValueFormatter anisotropyBit() {
-        return (v -> {
-            if (v == 0) {
-                return new TranslatableText("options.off");
-            } else {
-                return new LiteralText((1 << v) + "x");
-            }
-        });
-    }
-
-    public static ControlValueFormatter chunkFade() {
-        return (v -> {
-            if (v == 0) {
-                return new TranslatableText("gui.none");
-            } else {
-                return new TranslatableText("sodium.options.chunk_fade_time.value", (double) v / 1000.0);
-            }
-        });
-    }
 }
