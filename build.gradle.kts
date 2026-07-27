@@ -110,19 +110,25 @@ loom {
     runConfigs {
         removeIf { it.name == "Minecraft Client" || it.name == "Minecraft Server" }
 
-        create("client-vulkan") {
+        create("ClientVulkan") {
             client()
             configName = "1.8.9 / Vulkan"
             ideConfigGenerated(true)
             runDir("run")
             jvmArguments.add("-Dkalia.backend=vulkan")
+            jvmArguments.add("-Ddevauth.enabled=true")
         }
-        create("client-opengl") {
+        create("ClientOpenGL") {
             client()
             configName = "1.8.9 / OpenGL"
             ideConfigGenerated(true)
             runDir("run")
             jvmArguments.add("-Dkalia.backend=opengl")
         }
+
     }
+}
+
+tasks.runClientRenderDoc {
+    jvmArgs("-Ddevauth.enabled=true")
 }

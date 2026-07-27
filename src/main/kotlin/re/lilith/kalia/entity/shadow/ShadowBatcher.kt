@@ -26,7 +26,7 @@ import java.nio.ByteOrder
 object ShadowBatcher {
     private const val BYTES_PER_INSTANCE = 88
 
-    private val INSTANCE_FORMAT: VertexFormat = VertexFormat.of(VertexStepMode.INSTANCE) {
+    private val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instOrigin", 2, VertexAttributeFormat.FLOAT3)
         attribute("instSize", 3, VertexAttributeFormat.FLOAT2)
         attribute("instRow0", 4, VertexAttributeFormat.FLOAT4)

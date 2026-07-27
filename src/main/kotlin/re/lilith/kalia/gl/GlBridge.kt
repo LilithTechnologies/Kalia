@@ -134,8 +134,7 @@ object GlBridge {
     @JvmStatic
     fun applyDepthBias() {
         val encoder = GameFrame.current ?: return
-        val (constant, slope) = GlState.effectiveDepthBias()
-        encoder.depthBias(constant, slope)
+        encoder.depthBias(GlState.effectiveDepthBiasConstant(), GlState.effectiveDepthBiasSlope())
     }
 
     @JvmStatic

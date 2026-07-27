@@ -13,7 +13,7 @@ object CuboidMesh {
     const val VERTEX_COUNT: Int = 24
     const val INDEX_COUNT: Int = 36
 
-    val VERTEX_FORMAT: VertexFormat = VertexFormat.of {
+    val VERTEX_FORMAT = VertexFormat.of {
         attribute("position", 0, VertexAttributeFormat.FLOAT3)
         attribute("uv", 1, VertexAttributeFormat.FLOAT2)
     }

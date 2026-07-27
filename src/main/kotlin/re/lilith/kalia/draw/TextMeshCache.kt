@@ -13,6 +13,7 @@ object TextMeshCache {
         @JvmField val page: Int,
         @JvmField val vertexData: ByteBuffer,
         @JvmField val vertexCount: Int,
+        @JvmField val instanceData: FloatArray,
     )
 
     class CachedText(

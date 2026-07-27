@@ -1,4 +1,4 @@
-package re.lilith.kalia.entity.shadow
+package re.lilith.kalia.entity.nametag
 
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
@@ -9,20 +9,18 @@ import re.lilith.kalia.renderer.resource.GpuBuffer
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-object ShadowMesh {
-    const val VERTEX_COUNT: Int = 4
+object NametagMesh {
     const val INDEX_COUNT: Int = 6
 
     val VERTEX_FORMAT = VertexFormat.of {
-        attribute("position", 0, VertexAttributeFormat.FLOAT3)
-        attribute("uvSelect", 1, VertexAttributeFormat.FLOAT2)
+        attribute("position", 0, VertexAttributeFormat.FLOAT2)
     }
 
     private val VERTICES = floatArrayOf(
-        0f, 0f, 0f, 0f, 0f,
-        0f, 0f, 1f, 0f, 1f,
-        1f, 0f, 1f, 1f, 1f,
-        1f, 0f, 0f, 1f, 0f,
+        0f, 0f,
+        1f, 0f,
+        1f, 1f,
+        0f, 1f,
     )
 
     private val INDICES = intArrayOf(0, 1, 2, 2, 3, 0)
@@ -44,7 +42,7 @@ object ShadowMesh {
         vertexBytes.asFloatBuffer().put(VERTICES)
         val vertices = device.createBuffer(
             BufferDescription(
-                label = "kalia/shadow-mesh",
+                label = "kalia/nametag-mesh",
                 sizeBytes = vertexBytes.capacity().toLong(),
                 usage = BufferUsage.STATIC,
                 vertex = true,
@@ -55,7 +53,7 @@ object ShadowMesh {
         indexBytes.asIntBuffer().put(INDICES)
         val indices = device.createBuffer(
             BufferDescription(
-                label = "kalia/shadow-indices",
+                label = "kalia/nametag-indices",
                 sizeBytes = indexBytes.capacity().toLong(),
                 usage = BufferUsage.STATIC,
                 index = true,

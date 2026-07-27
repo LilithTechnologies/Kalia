@@ -1,6 +1,8 @@
 package re.lilith.kalia.draw
 
 import re.lilith.kalia.entity.cuboid.CuboidBatcher
+import re.lilith.kalia.entity.item.ItemBatcher
+import re.lilith.kalia.entity.nametag.NametagBatcher
 import re.lilith.kalia.entity.shadow.ShadowBatcher
 
 object EntityBatchers {
@@ -19,5 +21,7 @@ object EntityBatchers {
     fun flush() {
         CuboidBatcher.flush()
         ShadowBatcher.flush()
+        NametagBatcher.flush()
+        ItemBatcher.flush()
     }
 }

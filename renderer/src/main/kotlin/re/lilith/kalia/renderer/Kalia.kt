@@ -56,5 +56,5 @@ object Kalia {
         ).apply { failures.forEach(::addSuppressed) }
     }
 
-    private val PREFERENCE = listOf(BackendId.OpenGL, BackendId.Vulkan, BackendId.Headless)
+    private val PREFERENCE = listOf(BackendId.Vulkan, BackendId.OpenGL, BackendId.Headless)
 }

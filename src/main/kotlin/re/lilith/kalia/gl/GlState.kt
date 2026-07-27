@@ -203,8 +203,8 @@ object GlState {
         polygonOffsetEnabled = false
     }
 
-    fun effectiveDepthBias(): Pair<Float, Float> =
-        if (polygonOffsetEnabled) polygonOffsetConstant to polygonOffsetSlope else ZERO_BIAS
+    fun effectiveDepthBiasConstant(): Float = if (polygonOffsetEnabled) polygonOffsetConstant else 0f
+    fun effectiveDepthBiasSlope(): Float = if (polygonOffsetEnabled) polygonOffsetSlope else 0f
 
     var lineWidth: Float = 1f
 
@@ -228,6 +228,4 @@ object GlState {
         clearDepth = 1f
         clearColor = Color.BLACK
     }
-
-    private val ZERO_BIAS = 0f to 0f
 }
