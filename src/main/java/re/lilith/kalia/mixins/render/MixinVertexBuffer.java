@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.taumc.celeritas.impl.debug.RenderMetrics;
 import re.lilith.kalia.draw.VertexBufferStore;
 import re.lilith.kalia.vertex.VertexFormatBridge;
 
@@ -38,6 +39,7 @@ public abstract class MixinVertexBuffer {
     @Overwrite
     public void draw(int mode) {
         VertexBufferStore.INSTANCE.draw(this, mode);
+        RenderMetrics.recordDraw();
     }
 
     /**

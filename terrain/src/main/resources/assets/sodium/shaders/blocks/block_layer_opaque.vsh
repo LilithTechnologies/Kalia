@@ -1,35 +1,32 @@
-#version 330 core
+#version 450
 
 #import <sodium:include/fog.glsl>
 #import <sodium:include/chunk_vertex.glsl>
-#import <sodium:include/chunk_matrices.glsl>
+#import <sodium:include/chunk_scene.glsl>
+#import <sodium:include/chunk_push_constants.glsl>
 #import <sodium:include/chunk_material.glsl>
 
-out vec4 v_Color;
-out vec2 v_TexCoord;
+layout(location = 0) out vec4 v_Color;
+layout(location = 1) out vec2 v_TexCoord;
 
 #if defined(USE_FOG) && defined(CHUNK_FADE_IN_DURATION_MS) && CHUNK_FADE_IN_DURATION_MS > 0
-out float v_ChunkAgeMs;
+layout(location = 2) out float v_ChunkAgeMs;
 #endif
 
-out float v_MaterialMipBias;
+layout(location = 3) out float v_MaterialMipBias;
 #ifdef USE_FRAGMENT_DISCARD
-out float v_MaterialAlphaCutoff;
+layout(location = 4) out float v_MaterialAlphaCutoff;
 #endif
 
 #if defined(USE_FOG_POSTMODERN)
-out float v_SphericalFragDistance;
-out float v_CylindricalFragDistance;
+layout(location = 5) out float v_SphericalFragDistance;
+layout(location = 6) out float v_CylindricalFragDistance;
 #elif defined(USE_FOG)
-out float v_FragDistance;
+layout(location = 7) out float v_FragDistance;
 #endif
 
-uniform int u_FogShape;
-
-uniform vec3 u_RegionOffset;
-
 #ifndef CELERITAS_NO_LIGHTMAP
-uniform sampler2D u_LightTex; // The light map texture sampler
+layout(set = 0, binding = 1) uniform sampler2D u_LightTex; // The light map texture sampler
 
 vec4 _sample_lightmap(sampler2D lightMap, ivec2 uv) {
     return texture(lightMap, clamp(uv / 256.0, vec2(0.5 / 16.0), vec2(15.5 / 16.0)));
@@ -37,7 +34,10 @@ vec4 _sample_lightmap(sampler2D lightMap, ivec2 uv) {
 #endif
 
 #if defined(USE_FOG) && defined(CHUNK_FADE_IN_DURATION_MS) && CHUNK_FADE_IN_DURATION_MS > 0
-uniform float celeritas_ChunkAges[REGION_SIZE];
+layout(std140, set = 0, binding = 3) uniform ChunkRegionAges {
+    vec4 celeritas_ChunkAgesPacked[REGION_SIZE / 4];
+};
+#define celeritas_ChunkAges(i) celeritas_ChunkAgesPacked[(i) >> 2][int((i) & 3u)]
 #endif
 
 void main() {
@@ -70,6 +70,6 @@ void main() {
     v_MaterialAlphaCutoff = _material_alpha_cutoff(_material_params);
 #endif
 #if defined(USE_FOG) && defined(CHUNK_FADE_IN_DURATION_MS) && CHUNK_FADE_IN_DURATION_MS > 0
-    v_ChunkAgeMs = celeritas_ChunkAges[_draw_id];
+    v_ChunkAgeMs = celeritas_ChunkAges(_draw_id);
 #endif
 }

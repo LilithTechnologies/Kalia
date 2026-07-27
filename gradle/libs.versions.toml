@@ -10,6 +10,10 @@ yarn = "1.8.9+build.4"
 legacy-lwjgl3 = "1.4.0-beta.11"
 devauth = "1.2.2"
 fastutil = "7.1.0"
+asm = "9.6"
+annotations = "24.1.0"
+lombok = "1.18.46"
+gson = "2.10.1"
 
 [libraries]
 minecraft = { module = "com.mojang:minecraft", version.ref = "minecraft" }
@@ -27,9 +31,19 @@ joml = { module = "org.joml:joml", version.ref = "joml" }
 legacy-yarn = { module = "net.legacyfabric:legacy-yarn", version.ref = "yarn" }
 legacy-lwjgl3 = { module = "io.github.moehreag:legacy-lwjgl3", version.ref = "legacy-lwjgl3" }
 fastutil = { module = "it.unimi.dsi:fastutil", version.ref = "fastutil" }
+log4j-core = { module = "org.apache.logging.log4j:log4j-api", version = "2.0-beta9" }
+annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
+lombok = { module = "org.projectlombok:lombok", version.ref = "lombok" }
+gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
+asm = { module = "org.ow2.asm:asm", version.ref = "asm" }
+asm-tree = { module = "org.ow2.asm:asm-tree", version.ref = "asm" }
+asm-util = { module = "org.ow2.asm:asm-util", version.ref = "asm" }
 devauth-fabric = { module = "me.djtheredstoner:DevAuth-fabric", version = "1.2.2" }
 
 [plugins]
 fabric-loom = { id = "net.fabricmc.fabric-loom-remap", version.ref = "fabric-loom" }
 ploceus = { id = "ploceus", version.ref = "fabric-loom" }
 kotlin = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+
+[bundles]
+asm = ["asm", "asm-tree", "asm-util"]

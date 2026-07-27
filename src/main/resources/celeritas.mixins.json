@@ -1,0 +1,36 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.taumc.celeritas.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "verbose": true,
+  "mixins": [
+    "core.collections.TypeInstanceMultimapMixin",
+    "core.render.BufferBuilderMixin",
+    "core.render.DebugOverlayMixin",
+    "core.render.FrustumCullerMixin",
+    "core.render.GameRendererMixin",
+    "core.render.GlStateManagerMixin",
+    "core.render.WorldRendererMixin",
+    "core.world.ChunkAccessor",
+    "core.world.ChunkCacheMixin",
+    "core.world.WorldMixin",
+    "features.options.OptionPageFrameMixin",
+    "features.terrain.ChunkRenderListMixin",
+    "features.terrain.RenderListManagerMixin",
+    "features.terrain.VisibleChunkCollectorMixin"
+  ],
+  "client": [
+    "core.world.ClientChunkCacheAccessor",
+    "core.world.MultiplayerChunkCacheMixin",
+    "features.options.OptionsScreenMixin",
+    "features.particle.ParticleManagerMixin",
+    "features.particle.ParticleMixin",
+    "features.terrain.BakedQuadMixin",
+    "features.terrain.BiomeColorsMixin",
+    "features.texture.TextureAtlasMixin",
+    "features.texture.TextureAtlasSpriteMixin",
+    "features.texture.TextureBindingCaptureMixin",
+    "features.texture.TextureManagerMixin"
+  ]
+}

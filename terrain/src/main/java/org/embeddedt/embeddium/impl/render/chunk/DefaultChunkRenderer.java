@@ -2,43 +2,36 @@ package org.embeddedt.embeddium.impl.render.chunk;
 
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceMap;
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
-import org.embeddedt.embeddium.impl.gl.array.GlVertexArray;
-import org.embeddedt.embeddium.impl.gl.attribute.GlVertexFormat;
-import org.embeddedt.embeddium.impl.gl.debug.GLDebug;
-import org.embeddedt.embeddium.impl.gl.device.CommandList;
-import org.embeddedt.embeddium.impl.gl.device.RenderDevice;
-import org.embeddedt.embeddium.impl.gl.tessellation.*;
 import org.embeddedt.embeddium.impl.model.quad.properties.ModelQuadFacing;
 import org.embeddedt.embeddium.impl.render.chunk.compile.sorting.ChunkPrimitiveType;
 import org.embeddedt.embeddium.impl.render.chunk.data.SectionRenderDataStorage;
 import org.embeddedt.embeddium.impl.render.chunk.data.SectionRenderDataUnsafe;
 import org.embeddedt.embeddium.impl.render.chunk.lists.ChunkRenderListIterable;
 import org.embeddedt.embeddium.impl.render.chunk.lists.ChunkRenderList;
-import org.embeddedt.embeddium.impl.render.chunk.multidraw.DirectMultiDrawEmitter;
-import org.embeddedt.embeddium.impl.render.chunk.multidraw.MultiDrawEmitter;
+import org.embeddedt.embeddium.impl.render.chunk.multidraw.ChunkMultiDrawEmitter;
 import org.embeddedt.embeddium.impl.render.chunk.region.RenderRegion;
-import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderInterface;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
 import org.embeddedt.embeddium.impl.render.viewport.CameraTransform;
 import org.embeddedt.embeddium.impl.util.BitwiseMath;
+import re.lilith.kalia.renderer.command.PassContext;
+import re.lilith.kalia.renderer.device.RenderDevice;
+import re.lilith.kalia.renderer.format.IndexFormat;
+import re.lilith.kalia.renderer.format.VertexFormat;
+import re.lilith.kalia.renderer.resource.GpuBuffer;
+
 import java.util.Iterator;
 
 public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
-    private final MultiDrawEmitter emitter;
+    private final ChunkMultiDrawEmitter emitter = new ChunkMultiDrawEmitter();
 
     private final Reference2ReferenceMap<ChunkPrimitiveType, SharedQuadIndexBuffer> sharedIndexBuffers;
 
     private TerrainRenderPass currentRenderPass;
-    private GlVertexFormat currentVertexFormat;
+    private VertexFormat currentVertexFormat;
 
     public DefaultChunkRenderer(RenderDevice device, RenderPassConfiguration<?> renderPassConfiguration) {
-        this(device, renderPassConfiguration, new DirectMultiDrawEmitter());
-    }
-
-    public DefaultChunkRenderer(RenderDevice device, RenderPassConfiguration<?> renderPassConfiguration, MultiDrawEmitter emitter) {
         super(device, renderPassConfiguration);
 
-        this.emitter = emitter;
         this.sharedIndexBuffers = new Reference2ReferenceOpenHashMap<>();
     }
 
@@ -46,20 +39,20 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         return true;
     }
 
-    protected final SharedQuadIndexBuffer getSharedIndexBuffer(ChunkPrimitiveType type, CommandList commandList) {
+    protected final SharedQuadIndexBuffer getSharedIndexBuffer(ChunkPrimitiveType type) {
         var buffer = this.sharedIndexBuffers.get(type);
         if (buffer == null) {
-            buffer = new SharedQuadIndexBuffer(commandList, type);
+            buffer = new SharedQuadIndexBuffer(type);
             this.sharedIndexBuffers.put(type, buffer);
         }
         return buffer;
     }
 
-    protected abstract void configureShaderInterface(ChunkShaderInterface shader);
+    protected abstract void bindTextures(PassContext pass, TerrainRenderPass renderPass);
 
     @Override
     public void render(ChunkRenderMatrices matrices,
-                       CommandList commandList,
+                       PassContext passContext,
                        ChunkRenderListIterable renderLists,
                        TerrainRenderPass renderPass,
                        CameraTransform occlusionCamera,
@@ -68,26 +61,23 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
             return;
         }
 
-        this.begin(renderPass);
+        this.begin(passContext, renderPass);
 
-        // If there is no active program, shader compilation probably failed, and we can't render anything.
-        if (this.activeProgram != null) {
+        // If there is no active pipeline, shader compilation probably failed, and we can't render anything.
+        if (this.activeVariant != null) {
             boolean useBlockFaceCulling = this.useBlockFaceCulling();
 
-            GLDebug.pushGroup(770, renderPass.name() + " terrain pass");
+            this.uniforms.setProjectionMatrix(matrices.projection());
+            this.uniforms.setModelViewMatrix(matrices.modelView());
+            this.uniforms.syncSceneUniforms();
 
-            ChunkShaderInterface shader = this.activeProgram.getInterface();
-            shader.setProjectionMatrix(matrices.projection());
-            shader.setModelViewMatrix(matrices.modelView());
-
-            var primitiveType = shader.getPrimitiveType();
+            this.bindTextures(passContext, renderPass);
+            this.uniforms.bindSceneUniforms(passContext);
 
             Iterator<ChunkRenderList> iterator = renderLists.iterator(renderPass.isReverseOrder());
 
             this.currentRenderPass = renderPass;
-            this.currentVertexFormat = this.renderPassConfiguration.getVertexTypeForPass(this.currentRenderPass).getVertexFormat();
-
-            this.configureShaderInterface(shader);
+            this.currentVertexFormat = renderPass.vertexType().getVertexFormat();
 
             long timestamp = System.nanoTime();
 
@@ -107,27 +97,36 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
                     continue;
                 }
 
-                if (!renderPass.isSorted()) {
-                   getSharedIndexBuffer(renderPassConfiguration.getPrimitiveTypeForPass(renderPass), commandList).ensureCapacity(commandList, this.emitter.getIndexBufferSize());
+                var resources = region.getResources(this.currentVertexFormat);
+
+                GpuBuffer indexBuffer;
+                if (renderPass.isSorted()) {
+                    indexBuffer = resources.getIndexBuffer();
+                } else {
+                    var sharedIndexBuffer = this.getSharedIndexBuffer(this.renderPassConfiguration.getPrimitiveTypeForPass(renderPass));
+                    sharedIndexBuffer.ensureCapacity(this.device, this.emitter.getIndexBufferSize());
+                    indexBuffer = sharedIndexBuffer.getBufferObject();
                 }
 
-                var tessellation = this.prepareTessellation(commandList, region);
+                setRegionOffsetUniform(this.uniforms, region, camera);
+                this.uniforms.setSectionAges(timestamp, region.getSectionLoadTimes());
 
-                setModelMatrixUniforms(shader, region, camera);
-                shader.setSectionAges(timestamp, region.getSectionLoadTimes());
-                this.emitter.executeBatch(commandList, tessellation, primitiveType);
+                passContext.bindVertexBuffer(0, resources.getVertexBuffer());
+                passContext.bindIndexBuffer(indexBuffer, IndexFormat.UINT32);
+                this.uniforms.bindRegionAges(passContext);
+                this.uniforms.pushToPass(passContext);
+
+                this.emitter.executeBatch(passContext);
             }
 
             this.currentVertexFormat = null;
             this.currentRenderPass = null;
-
-            GLDebug.popGroup();
         }
 
         this.end(renderPass);
     }
 
-    private static void fillCommandBuffer(MultiDrawEmitter emitter,
+    private static void fillCommandBuffer(ChunkMultiDrawEmitter emitter,
                                           RenderRegion renderRegion,
                                           SectionRenderDataStorage renderDataStorage,
                                           ChunkRenderList renderList,
@@ -241,54 +240,23 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         return planes;
     }
 
-    private static void setModelMatrixUniforms(ChunkShaderInterface shader, RenderRegion region, CameraTransform camera) {
+    private static void setRegionOffsetUniform(org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderUniforms uniforms, RenderRegion region, CameraTransform camera) {
         float x = getCameraTranslation(region.getOriginX(), camera.intX, camera.fracX);
         float y = getCameraTranslation(region.getOriginY(), camera.intY, camera.fracY);
         float z = getCameraTranslation(region.getOriginZ(), camera.intZ, camera.fracZ);
 
-        shader.setRegionOffset(x, y, z);
+        uniforms.setRegionOffset(x, y, z);
     }
 
     private static float getCameraTranslation(int chunkBlockPos, int cameraBlockPos, float cameraPos) {
         return (chunkBlockPos - cameraBlockPos) - cameraPos;
     }
 
-    private GlTessellation prepareTessellation(CommandList commandList, RenderRegion region) {
-        var resources = region.getResources(this.currentVertexFormat);
-        var tessellation = this.currentRenderPass.isSorted() ? resources.getIndexedTessellation() : resources.getTessellation();
-
-        if (tessellation == null) {
-            tessellation = this.createRegionTessellation(commandList, resources);
-            if (this.currentRenderPass.isSorted()) {
-                resources.updateIndexedTessellation(commandList, tessellation);
-            } else {
-                resources.updateTessellation(commandList, tessellation);
-            }
-        }
-
-        return tessellation;
-    }
-
-    protected TessellationBinding[] makeTessellationBindingArray(CommandList commandList, RenderRegion.DeviceResources resources) {
-        return new TessellationBinding[] {
-                TessellationBinding.forVertexBuffer(resources.getVertexBuffer(), this.currentVertexFormat),
-                TessellationBinding.forElementBuffer(this.currentRenderPass.isSorted() ? resources.getIndexBuffer() : this.getSharedIndexBuffer(this.renderPassConfiguration.getPrimitiveTypeForPass(this.currentRenderPass), commandList).getBufferObject())
-        };
-    }
-
-    protected GlTessellation createRegionTessellation(CommandList commandList, RenderRegion.DeviceResources resources) {
-        var bindings = makeTessellationBindingArray(commandList, resources);
-        GlVertexArrayTessellation tessellation = new GlVertexArrayTessellation(new GlVertexArray(), bindings);
-        tessellation.init(commandList);
-
-        return tessellation;
-    }
-
     @Override
-    public void delete(CommandList commandList) {
-        super.delete(commandList);
+    public void delete() {
+        super.delete();
 
-        this.sharedIndexBuffers.values().forEach(buffer -> buffer.delete(commandList));
-        this.emitter.delete();
+        this.sharedIndexBuffers.values().forEach(SharedQuadIndexBuffer::delete);
+        this.sharedIndexBuffers.clear();
     }
 }

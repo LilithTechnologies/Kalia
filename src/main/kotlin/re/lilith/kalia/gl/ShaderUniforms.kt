@@ -29,15 +29,15 @@ object ShaderUniforms {
     private var offsetZ = 0f
     private var alphaCutout = -1f
 
-    private var fogRed = 0f
-    private var fogGreen = 0f
-    private var fogBlue = 0f
-    private var fogAlpha = 1f
-    private var fogStart = 0f
-    private var fogEnd = 1f
-    private var fogDensity = 0f
-    private var fogEnabled = false
-    private var fogMode = GlEnums.FogMode.EXP
+    private var fogRedInternal = 0f
+    private var fogGreenInternal = 0f
+    private var fogBlueInternal = 0f
+    private var fogAlphaInternal = 1f
+    private var fogStartInternal = 0f
+    private var fogEndInternal = 1f
+    private var fogDensityInternal = 0f
+    private var fogEnabledInternal = false
+    private var fogModeInternal = GlEnums.FogMode.EXP
 
     private var light0X = 0f
     private var light0Y = 1f
@@ -155,59 +155,59 @@ object ShaderUniforms {
     fun alphaCutout(): Float = alphaCutout
 
     fun setFogColor(red: Float, green: Float, blue: Float, alpha: Float) {
-        if (fogRed == red && fogGreen == green && fogBlue == blue && fogAlpha == alpha) return
-        fogRed = red
-        fogGreen = green
-        fogBlue = blue
-        fogAlpha = alpha
+        if (fogRedInternal == red && fogGreenInternal == green && fogBlueInternal == blue && fogAlphaInternal == alpha) return
+        fogRedInternal = red
+        fogGreenInternal = green
+        fogBlueInternal = blue
+        fogAlphaInternal = alpha
         pushDirty = true
         markEnvironmentDirty()
     }
 
     fun setFogRange(start: Float, end: Float) {
-        if (fogStart == start && fogEnd == end) return
-        fogStart = start
-        fogEnd = end
+        if (fogStartInternal == start && fogEndInternal == end) return
+        fogStartInternal = start
+        fogEndInternal = end
         pushDirty = true
         markEnvironmentDirty()
     }
 
     fun setFogDensity(value: Float) {
-        if (fogDensity == value) return
-        fogDensity = value
+        if (fogDensityInternal == value) return
+        fogDensityInternal = value
         pushDirty = true
         markEnvironmentDirty()
     }
 
     fun setFogEnabled(value: Boolean) {
-        if (fogEnabled == value) return
-        fogEnabled = value
+        if (fogEnabledInternal == value) return
+        fogEnabledInternal = value
         pushDirty = true
         markEnvironmentDirty()
     }
 
     fun setFogMode(value: GlEnums.FogMode) {
-        if (fogMode == value) return
-        fogMode = value
+        if (fogModeInternal == value) return
+        fogModeInternal = value
         pushDirty = true
         markEnvironmentDirty()
     }
 
-    fun isFogEnabled(): Boolean = fogEnabled
+    fun isFogEnabled(): Boolean = fogEnabledInternal
 
-    fun fogMode(): GlEnums.FogMode = fogMode
+    fun fogMode(): GlEnums.FogMode = fogModeInternal
 
-    fun fogStart(): Float = fogStart
+    fun fogStart(): Float = fogStartInternal
 
-    fun fogEnd(): Float = fogEnd
+    fun fogEnd(): Float = fogEndInternal
 
-    fun fogDensity(): Float = fogDensity
+    fun fogDensity(): Float = fogDensityInternal
 
-    fun fogRed(): Float = fogRed
+    fun fogRed(): Float = fogRedInternal
 
-    fun fogGreen(): Float = fogGreen
+    fun fogGreen(): Float = fogGreenInternal
 
-    fun fogBlue(): Float = fogBlue
+    fun fogBlue(): Float = fogBlueInternal
 
     fun setLightDirections(
         firstX: Float, firstY: Float, firstZ: Float,
@@ -306,9 +306,9 @@ object ShaderUniforms {
             push.position(64)
             push.putFloat(shaderRed).putFloat(shaderGreen).putFloat(shaderBlue).putFloat(shaderAlpha)
             push.putFloat(offsetX).putFloat(offsetY).putFloat(offsetZ).putFloat(alphaCutout)
-            push.putFloat(fogRed).putFloat(fogGreen).putFloat(fogBlue).putFloat(fogAlpha)
-            push.putFloat(fogStart).putFloat(fogEnd).putFloat(fogDensity)
-            push.putFloat(if (fogEnabled) (fogMode.ordinal + 1).toFloat() else 0f)
+            push.putFloat(fogRedInternal).putFloat(fogGreenInternal).putFloat(fogBlueInternal).putFloat(fogAlphaInternal)
+            push.putFloat(fogStartInternal).putFloat(fogEndInternal).putFloat(fogDensityInternal)
+            push.putFloat(if (fogEnabledInternal) (fogModeInternal.ordinal + 1).toFloat() else 0f)
             pushDirty = false
         }
         push.position(0).limit(PUSH_CONSTANT_BYTES)

@@ -1,29 +1,29 @@
 package org.embeddedt.embeddium.impl.render.chunk;
 
-import org.embeddedt.embeddium.impl.gl.buffer.GlBuffer;
-import org.embeddedt.embeddium.impl.gl.buffer.GlBufferMapFlags;
-import org.embeddedt.embeddium.impl.gl.buffer.GlBufferUsage;
-import org.embeddedt.embeddium.impl.gl.buffer.GlMutableBuffer;
-import org.embeddedt.embeddium.impl.gl.device.CommandList;
-import org.embeddedt.embeddium.impl.gl.util.EnumBitField;
 import org.embeddedt.embeddium.impl.render.chunk.compile.sorting.ChunkPrimitiveType;
+import re.lilith.kalia.renderer.device.RenderDevice;
+import re.lilith.kalia.renderer.resource.BufferDescription;
+import re.lilith.kalia.renderer.resource.BufferUsage;
+import re.lilith.kalia.renderer.resource.GpuBuffer;
+
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 public class SharedQuadIndexBuffer {
-    private final GlMutableBuffer buffer;
     private final ChunkPrimitiveType primitiveType;
 
+    private GpuBuffer buffer;
     private int maxPrimitives;
 
-    public SharedQuadIndexBuffer(CommandList commandList, ChunkPrimitiveType primitiveType) {
-        this.buffer = commandList.createMutableBuffer();
+    public SharedQuadIndexBuffer(ChunkPrimitiveType primitiveType) {
         this.primitiveType = primitiveType;
     }
 
-    public void ensureCapacity(CommandList commandList, int elementCount) {
+    public void ensureCapacity(RenderDevice device, int elementCount) {
         int primitiveCount = elementCount / primitiveType.getIndexBufferElementsPerPrimitive();
 
         if (primitiveCount > this.maxPrimitives) {
-            this.grow(commandList, this.getNextSize(primitiveCount));
+            this.grow(device, this.getNextSize(primitiveCount));
         }
     }
 
@@ -31,25 +31,30 @@ public class SharedQuadIndexBuffer {
         return Math.max(this.maxPrimitives * 2, primitiveCount + 16384);
     }
 
-    private void grow(CommandList commandList, int primitiveCount) {
-        var bufferSize = primitiveType.getIndexBufferSize(primitiveCount);
+    private void grow(RenderDevice device, int primitiveCount) {
+        int bufferSize = this.primitiveType.getIndexBufferSize(primitiveCount);
 
-        commandList.allocateStorage(this.buffer, bufferSize, GlBufferUsage.STATIC_DRAW);
+        ByteBuffer data = ByteBuffer.allocateDirect(bufferSize).order(ByteOrder.nativeOrder());
+        this.primitiveType.generateSimpleIndexBuffer(data, primitiveCount);
 
-        var mapped = commandList.mapBuffer(this.buffer, 0, bufferSize, EnumBitField.of(GlBufferMapFlags.INVALIDATE_BUFFER, GlBufferMapFlags.WRITE, GlBufferMapFlags.UNSYNCHRONIZED));
-        this.primitiveType.generateSimpleIndexBuffer(mapped.getMemoryBuffer(), primitiveCount);
+        if (this.buffer != null) {
+            this.buffer.close();
+        }
 
-        commandList.unmap(mapped);
+        this.buffer = device.createBuffer(new BufferDescription("shared-quad-index", bufferSize, BufferUsage.STATIC,
+                /* vertex */ false, /* index */ true, /* uniform */ false, /* indirect */ false, /* transfer */ false));
+        this.buffer.write(data);
 
         this.maxPrimitives = primitiveCount;
     }
 
-
-    public GlBuffer getBufferObject() {
+    public GpuBuffer getBufferObject() {
         return this.buffer;
     }
 
-    public void delete(CommandList commandList) {
-        commandList.deleteBuffer(this.buffer);
+    public void delete() {
+        if (this.buffer != null) {
+            this.buffer.close();
+        }
     }
 }

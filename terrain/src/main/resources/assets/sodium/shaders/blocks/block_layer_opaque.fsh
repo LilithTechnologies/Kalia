@@ -1,51 +1,31 @@
-#version 330 core
+#version 450
 
 #import <sodium:include/fog.glsl>
+#import <sodium:include/chunk_scene.glsl>
 
-in vec4 v_Color;
-in vec2 v_TexCoord;
+// Locations must match block_layer_opaque.vsh's matching `out` declarations exactly.
+layout(location = 0) in vec4 v_Color;
+layout(location = 1) in vec2 v_TexCoord;
 
 #if defined(USE_FOG) && defined(CHUNK_FADE_IN_DURATION_MS) && CHUNK_FADE_IN_DURATION_MS > 0
-in float v_ChunkAgeMs;
+layout(location = 2) in float v_ChunkAgeMs;
 #endif
 
-in float v_MaterialMipBias;
+layout(location = 3) in float v_MaterialMipBias;
 #ifdef USE_FRAGMENT_DISCARD
-in float v_MaterialAlphaCutoff;
+layout(location = 4) in float v_MaterialAlphaCutoff;
 #endif
 
 #if defined(USE_FOG_POSTMODERN)
-in float v_SphericalFragDistance;
-in float v_CylindricalFragDistance;
+layout(location = 5) in float v_SphericalFragDistance;
+layout(location = 6) in float v_CylindricalFragDistance;
 #elif defined(USE_FOG)
-in float v_FragDistance;
+layout(location = 7) in float v_FragDistance;
 #endif
 
-uniform sampler2D u_BlockTex; // The block texture
+layout(set = 0, binding = 0) uniform sampler2D u_BlockTex; // The block texture
 
-uniform vec4 u_FogColor; // The color of the shader fog
-
-#ifdef USE_FOG_SMOOTH
-uniform float u_FogStart; // The starting position of the shader fog
-uniform float u_FogEnd; // The ending position of the shader fog
-#endif
-
-#ifdef USE_FOG_POSTMODERN
-uniform float u_RenderDistFogStart;
-uniform float u_RenderDistFogEnd;
-uniform float u_EnvFogStart;
-uniform float u_EnvFogEnd;
-#endif
-
-#ifdef USE_FOG_EXP2
-uniform float u_FogDensity; // The density of the shader fog
-#endif
-
-#ifndef LEGACY
-out vec4 fragColor; // The output fragment for the color framebuffer
-#else
-#define fragColor gl_FragColor
-#endif
+layout(location = 0) out vec4 fragColor; // The output fragment for the color framebuffer
 
 void main() {
     vec4 diffuseColor = texture(u_BlockTex, v_TexCoord, v_MaterialMipBias);

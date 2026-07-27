@@ -3,12 +3,6 @@ package org.embeddedt.embeddium.impl.render.chunk.region;
 import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.objects.*;
 import org.embeddedt.embeddium.impl.gl.arena.PendingUpload;
-import org.embeddedt.embeddium.impl.gl.arena.staging.FallbackStagingBuffer;
-import org.embeddedt.embeddium.impl.gl.arena.staging.MappedStagingBuffer;
-import org.embeddedt.embeddium.impl.gl.arena.staging.StagingBuffer;
-import org.embeddedt.embeddium.impl.gl.attribute.GlVertexFormat;
-import org.embeddedt.embeddium.impl.gl.device.CommandList;
-import org.embeddedt.embeddium.impl.gl.device.RenderDevice;
 import org.embeddedt.embeddium.impl.render.chunk.RenderPassConfiguration;
 import org.embeddedt.embeddium.impl.render.chunk.RenderSection;
 import org.embeddedt.embeddium.impl.render.chunk.compile.ChunkBuildOutput;
@@ -18,6 +12,8 @@ import org.embeddedt.embeddium.impl.render.chunk.compile.executor.ChunkJobResult
 import org.embeddedt.embeddium.impl.render.chunk.data.BuiltSectionMeshParts;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
 import org.jetbrains.annotations.NotNull;
+import re.lilith.kalia.renderer.device.RenderDevice;
+import re.lilith.kalia.renderer.format.VertexFormat;
 
 import java.util.*;
 
@@ -26,41 +22,34 @@ public class RenderRegionManager {
     private final BitSet regionIds = new BitSet();
     private int nextFreeId = 0;
 
-    private final StagingBuffer stagingBuffer;
-
     private final RenderPassConfiguration<?> renderPassConfiguration;
 
-    public RenderRegionManager(CommandList commandList, RenderPassConfiguration<?> renderPassConfiguration) {
-        this.stagingBuffer = createStagingBuffer(commandList);
+    public RenderRegionManager(RenderPassConfiguration<?> renderPassConfiguration) {
         this.renderPassConfiguration = renderPassConfiguration;
     }
 
     public void update() {
-        this.stagingBuffer.flip();
+        Iterator<RenderRegion> it = this.regions.values()
+                .iterator();
 
-        try (CommandList commandList = RenderDevice.INSTANCE.createCommandList()) {
-            Iterator<RenderRegion> it = this.regions.values()
-                    .iterator();
+        while (it.hasNext()) {
+            RenderRegion region = it.next();
+            region.update();
 
-            while (it.hasNext()) {
-                RenderRegion region = it.next();
-                region.update(commandList);
+            if (region.isEmpty()) {
+                region.delete();
 
-                if (region.isEmpty()) {
-                    region.delete(commandList);
+                it.remove();
 
-                    it.remove();
-
-                    this.regionIds.clear(region.getId());
-                    this.nextFreeId = Math.min(this.nextFreeId, region.getId());
-                }
+                this.regionIds.clear(region.getId());
+                this.nextFreeId = Math.min(this.nextFreeId, region.getId());
             }
         }
     }
 
-    public void uploadMeshes(CommandList commandList, Collection<ChunkJobResult.Success<? extends ChunkTaskOutput>> results, Runnable graphUpdateTrigger) {
+    public void uploadMeshes(RenderDevice device, Collection<ChunkJobResult.Success<? extends ChunkTaskOutput>> results, Runnable graphUpdateTrigger) {
         for (var entry : this.createMeshUploadQueues(results)) {
-            new MeshUploader(commandList, entry.getKey(), graphUpdateTrigger).processResults(entry.getValue());
+            new MeshUploader(device, entry.getKey(), graphUpdateTrigger).processResults(entry.getValue());
         }
     }
 
@@ -71,15 +60,15 @@ public class RenderRegionManager {
     }
 
     private class MeshUploader {
-        private final Map<GlVertexFormat, ArrayList<PendingSectionUpload>> uploadsByFormat = new Object2ObjectOpenHashMap<>(2);
-        private final CommandList commandList;
+        private final Map<VertexFormat, ArrayList<PendingSectionUpload>> uploadsByFormat = new Object2ObjectOpenHashMap<>(2);
+        private final RenderDevice device;
         private final RenderRegion region;
         private final Runnable graphUpdateTrigger;
 
         private boolean needIndexBuffer;
 
-        private MeshUploader(CommandList commandList, RenderRegion region, Runnable graphUpdateTrigger) {
-            this.commandList = commandList;
+        private MeshUploader(RenderDevice device, RenderRegion region, Runnable graphUpdateTrigger) {
+            this.device = device;
             this.region = region;
             this.graphUpdateTrigger = graphUpdateTrigger;
         }
@@ -139,15 +128,15 @@ public class RenderRegionManager {
             boolean bufferChanged = false;
 
             for (var entry : uploadsByFormat.entrySet()) {
-                var resources = region.createResources(entry.getKey(), commandList);
+                var resources = region.createResources(entry.getKey(), device);
                 var uploads = entry.getValue();
                 var geometryArena = resources.getGeometryArena();
 
-                bufferChanged |= geometryArena.upload(commandList, uploads.stream()
+                bufferChanged |= geometryArena.upload(device, uploads.stream()
                         .map(PendingSectionUpload::vertexUpload).filter(Objects::nonNull));
 
                 if (needIndexBuffer) {
-                    bufferChanged |= resources.getOrCreateIndexArena(commandList).upload(commandList, uploads.stream()
+                    bufferChanged |= resources.getOrCreateIndexArena(device).upload(device, uploads.stream()
                             .map(PendingSectionUpload::indexUpload).filter(Objects::nonNull));
                 }
             }
@@ -156,7 +145,7 @@ public class RenderRegionManager {
             // If any of the buffers changed, the tessellation will need to be updated
             // Once invalidated the tessellation will be re-created on the next attempted use
             if (bufferChanged) {
-                region.refresh(commandList);
+                region.refresh();
             }
 
             int previousPassCookie = region.getPassSetUpdateCount();
@@ -199,21 +188,16 @@ public class RenderRegionManager {
         return map.reference2ReferenceEntrySet();
     }
 
-    public void delete(CommandList commandList) {
+    public void delete() {
         for (RenderRegion region : this.regions.values()) {
-            region.delete(commandList);
+            region.delete();
         }
 
         this.regions.clear();
-        this.stagingBuffer.delete(commandList);
     }
 
     public Collection<RenderRegion> getLoadedRegions() {
         return this.regions.values();
-    }
-
-    public StagingBuffer getStagingBuffer() {
-        return this.stagingBuffer;
     }
 
     public RenderRegion createForChunk(int chunkX, int chunkY, int chunkZ) {
@@ -235,7 +219,7 @@ public class RenderRegionManager {
         var instance = this.regions.get(key);
 
         if (instance == null) {
-            this.regions.put(key, instance = new RenderRegion(x, y, z, this.getNextId(), this.stagingBuffer));
+            this.regions.put(key, instance = new RenderRegion(x, y, z, this.getNextId()));
         }
 
         return instance;
@@ -260,14 +244,5 @@ public class RenderRegionManager {
         public PendingUpload vertexUpload() {
             return null;
         }
-    }
-
-
-    private static StagingBuffer createStagingBuffer(CommandList commandList) {
-        if (MappedStagingBuffer.isSupported(RenderDevice.INSTANCE)) {
-            return new MappedStagingBuffer(commandList);
-        }
-
-        return new FallbackStagingBuffer(commandList);
     }
 }

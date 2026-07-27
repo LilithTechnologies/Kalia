@@ -1,21 +1,22 @@
 package org.embeddedt.embeddium.impl.render.chunk.vertex.format.impl;
 
-import org.embeddedt.embeddium.impl.gl.attribute.GlVertexAttributeFormat;
-import org.embeddedt.embeddium.impl.gl.attribute.GlVertexFormat;
 import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexEncoder;
 import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexType;
+import re.lilith.kalia.renderer.format.VertexAttributeFormat;
+import re.lilith.kalia.renderer.format.VertexFormat;
+import re.lilith.kalia.renderer.format.VertexStepMode;
 import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 
-import java.util.List;
 import java.util.Map;
 
 public class CompactChunkVertex implements ChunkVertexType {
-    public static final GlVertexFormat VERTEX_FORMAT = GlVertexFormat.builder(20)
-            .addElement("a_PosId", 0, GlVertexAttributeFormat.UNSIGNED_SHORT, 4, false, true)
-            .addElement("a_Color", 8, GlVertexAttributeFormat.UNSIGNED_BYTE, 4, true, false)
-            .addElement("a_TexCoord", 12, GlVertexAttributeFormat.UNSIGNED_SHORT, 2, false, false)
-            .addElement("a_LightCoord", 16, GlVertexAttributeFormat.UNSIGNED_SHORT, 2, false, true)
-            .build();
+    public static final VertexFormat VERTEX_FORMAT = new VertexFormat.Builder(VertexStepMode.VERTEX)
+            .attributeAt("a_PosXY", 0, VertexAttributeFormat.UINT16X2, 0)
+            .attributeAt("a_PosZW", 1, VertexAttributeFormat.UINT16X2, 4)
+            .attributeAt("a_Color", 2, VertexAttributeFormat.UNORM8X4, 8)
+            .attributeAt("a_TexCoord", 3, VertexAttributeFormat.USHORT2_FLOAT, 12)
+            .attributeAt("a_LightCoord", 4, VertexAttributeFormat.UINT16X2, 16)
+            .build(20);
 
     public static final int STRIDE = 20;
 
@@ -45,7 +46,7 @@ public class CompactChunkVertex implements ChunkVertexType {
     }
 
     @Override
-    public GlVertexFormat getVertexFormat() {
+    public VertexFormat getVertexFormat() {
         return VERTEX_FORMAT;
     }
 

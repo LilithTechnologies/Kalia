@@ -4,10 +4,8 @@ import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import it.unimi.dsi.fastutil.longs.Long2ReferenceOpenHashMap;
 import it.unimi.dsi.fastutil.objects.*;
 import lombok.Getter;
-import org.embeddedt.embeddium.impl.common.util.TimeUtil;
-import org.embeddedt.embeddium.impl.gl.device.CommandList;
-import org.embeddedt.embeddium.impl.gl.device.RenderDevice;
-import org.embeddedt.embeddium.impl.gl.profiling.TimerQueryManager;
+import re.lilith.kalia.renderer.device.RenderDevice;
+import re.lilith.kalia.sodium.KaliaAccess;
 import org.embeddedt.embeddium.impl.render.chunk.compile.ChunkBuildContext;
 import org.embeddedt.embeddium.impl.render.chunk.compile.ChunkBuildOutput;
 import org.embeddedt.embeddium.impl.render.chunk.compile.ChunkTaskOutput;
@@ -37,7 +35,6 @@ import org.embeddedt.embeddium.impl.render.viewport.Viewport;
 import org.embeddedt.embeddium.impl.util.PositionUtil;
 import org.embeddedt.embeddium.impl.util.iterator.ByteIterator;
 import org.embeddedt.embeddium.impl.render.chunk.sorting.TranslucentQuadAnalyzer;
-import org.embeddedt.embeddium.impl.util.suppliers.ExpiringSupplier;
 import org.jetbrains.annotations.MustBeInvokedByOverriders;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3d;
@@ -90,8 +87,6 @@ public abstract class RenderSectionManager {
 
     protected final ReferenceSet<RenderSection> sectionsWithGlobalEntities = new ReferenceOpenHashSet<>();
 
-    private final Object2ObjectOpenHashMap<TerrainRenderPass, TimerQueryManager> renderPassDrawTimers = new Object2ObjectOpenHashMap<>();
-
     protected final ReferenceSet<RenderSection> sectionsRequestingUpdate = new ReferenceOpenHashSet<>();
 
     @Getter
@@ -103,16 +98,16 @@ public abstract class RenderSectionManager {
     @Deprecated
     public RenderSectionManager(RenderPassConfiguration<?> configuration, Supplier<ChunkBuildContext> contextSupplier,
                                 BiFunction<RenderDevice, RenderPassConfiguration<?>, ChunkRenderer> chunkRenderer,
-                                int renderDistance, CommandList commandList, int minSection, int maxSection,
+                                int renderDistance, RenderDevice device, int minSection, int maxSection,
                                 int requestedThreads) {
-        this(configuration, contextSupplier, chunkRenderer, renderDistance, commandList, minSection, maxSection, requestedThreads, false);
+        this(configuration, contextSupplier, chunkRenderer, renderDistance, device, minSection, maxSection, requestedThreads, false);
     }
 
     public RenderSectionManager(RenderPassConfiguration<?> configuration, Supplier<ChunkBuildContext> contextSupplier,
                                 BiFunction<RenderDevice, RenderPassConfiguration<?>, ChunkRenderer> chunkRenderer,
-                                int renderDistance, CommandList commandList, int minSection, int maxSection,
+                                int renderDistance, RenderDevice device, int minSection, int maxSection,
                                 int requestedThreads, boolean hasShadowPass) {
-        this.chunkRenderer = chunkRenderer.apply(RenderDevice.INSTANCE, configuration);
+        this.chunkRenderer = chunkRenderer.apply(device, configuration);
 
         this.renderPassConfiguration = configuration;
 
@@ -120,7 +115,7 @@ public abstract class RenderSectionManager {
 
         this.renderDistance = renderDistance;
 
-        this.regions = new RenderRegionManager(commandList, this.renderPassConfiguration);
+        this.regions = new RenderRegionManager(this.renderPassConfiguration);
 
         this.minSection = minSection;
         this.maxSection = maxSection;
@@ -157,8 +152,6 @@ public abstract class RenderSectionManager {
         while ((task = this.asyncSubmittedTasks.poll()) != null) {
             task.run();
         }
-
-        this.renderPassDrawTimers.values().forEach(TimerQueryManager::updateTime);
     }
 
     /**
@@ -371,25 +364,7 @@ public abstract class RenderSectionManager {
             return;
         }
 
-        RenderDevice device = RenderDevice.INSTANCE;
-        CommandList commandList = device.createCommandList();
-
-        boolean shouldProfile = isDebugInfoShown();
-
-        TimerQueryManager timer = null;
-
-        if (shouldProfile) {
-            timer = renderPassDrawTimers.computeIfAbsent(pass, $ -> new TimerQueryManager());
-            timer.startProfiling();
-        }
-
-        this.chunkRenderer.render(matrices, commandList, this.getCurrentRenderListManager().getRenderLists(), pass, occlusionCamera, camera);
-
-        if (shouldProfile) {
-            timer.finishProfiling();
-        }
-
-        commandList.flush();
+        this.chunkRenderer.render(matrices, KaliaAccess.INSTANCE.pass(), this.getCurrentRenderListManager().getRenderLists(), pass, occlusionCamera, camera);
     }
 
     public boolean isSectionVisible(int x, int y, int z) {
@@ -506,7 +481,7 @@ public abstract class RenderSectionManager {
     private void processChunkBuildResults(ArrayList<ChunkJobResult.Success<? extends ChunkTaskOutput>> results) {
         var filtered = filterChunkBuildResults(results);
 
-        this.regions.uploadMeshes(RenderDevice.INSTANCE.createCommandList(), filtered, this::markGraphDirty);
+        this.regions.uploadMeshes(KaliaAccess.INSTANCE.device(), filtered, this::markGraphDirty);
 
         for (var holder : filtered) {
             var result = holder.output();
@@ -711,13 +686,8 @@ public abstract class RenderSectionManager {
             this.shadowRenderListManager.destroy();
         }
 
-        try (CommandList commandList = RenderDevice.INSTANCE.createCommandList()) {
-            this.regions.delete(commandList);
-            this.chunkRenderer.delete(commandList);
-        }
-
-        this.renderPassDrawTimers.values().forEach(TimerQueryManager::close);
-        this.renderPassDrawTimers.clear();
+        this.regions.delete();
+        this.chunkRenderer.delete();
 
         this.sectionsWithGlobalEntities.clear();
     }
@@ -879,16 +849,6 @@ public abstract class RenderSectionManager {
         return list;
     }
 
-    private Object2LongMap<TerrainRenderPass> computeRenderPassTimingsMap() {
-        Object2LongOpenHashMap<TerrainRenderPass> map = new Object2LongOpenHashMap<>();
-        for (var entry : renderPassDrawTimers.entrySet()) {
-            map.put(entry.getKey(), entry.getValue().getLastTime());
-        }
-        return map;
-    }
-
-    protected final Supplier<Object2LongMap<TerrainRenderPass>> renderPassTimingsDebounced = new ExpiringSupplier<>(this::computeRenderPassTimingsMap, 1, TimeUnit.SECONDS);
-
     public Collection<String> getDebugStrings() {
         List<String> list = new ArrayList<>();
 
@@ -919,7 +879,6 @@ public abstract class RenderSectionManager {
         }
 
         list.add(String.format("G: %d/%d, I: %d/%d MiB (%d buffers)", MathUtil.toMib(deviceUsed), MathUtil.toMib(deviceAllocated), MathUtil.toMib(indexUsed), MathUtil.toMib(indexAllocated), count));
-        list.add(String.format("Transfer Queue: %s", this.regions.getStagingBuffer().toString()));
 
         var rebuildLists = this.getCurrentRenderListManager().getRebuildLists();
 
@@ -934,19 +893,9 @@ public abstract class RenderSectionManager {
 
         var counts = debugStats.renderPassCounts().object2IntEntrySet().stream().sorted(Comparator.comparingInt(e -> -e.getIntValue())).iterator();
 
-        var timingMap = renderPassTimingsDebounced.get();
-
         while (counts.hasNext()) {
             var entry = counts.next();
-            var duration = timingMap.getLong(entry.getKey());
-            String time;
-            if (duration == 0) {
-                time = "?? ms";
-            } else {
-                time = TimeUtil.stringifyTime(duration, TimeUnit.NANOSECONDS);
-            }
-
-            list.add(entry.getKey().name() + " - " + entry.getIntValue() + " sections, " + time);
+            list.add(entry.getKey().name() + " - " + entry.getIntValue() + " sections");
         }
 
         if (renderListManager.getRenderLists().getPasses().stream().anyMatch(TerrainRenderPass::isSorted)) {

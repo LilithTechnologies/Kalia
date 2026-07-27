@@ -2,8 +2,8 @@ package org.embeddedt.embeddium.impl.render.terrain;
 
 import lombok.Getter;
 import org.embeddedt.embeddium.impl.common.util.NativeBuffer;
-import org.embeddedt.embeddium.impl.gl.device.CommandList;
-import org.embeddedt.embeddium.impl.gl.device.RenderDevice;
+import re.lilith.kalia.renderer.device.RenderDevice;
+import re.lilith.kalia.sodium.KaliaAccess;
 import org.embeddedt.embeddium.impl.render.chunk.ChunkRenderMatrices;
 import org.embeddedt.embeddium.impl.render.chunk.RenderPassConfiguration;
 import org.embeddedt.embeddium.impl.render.chunk.RenderSectionManager;
@@ -58,9 +58,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
     protected void loadWorld(WORLD world) {
         this.world = world;
 
-        try (CommandList commandList = RenderDevice.INSTANCE.createCommandList()) {
-            this.initRenderer(commandList);
-        }
+        this.initRenderer(KaliaAccess.INSTANCE.device());
     }
 
     protected void unloadWorld() {
@@ -186,14 +184,12 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
             return;
         }
 
-        try (CommandList commandList = RenderDevice.INSTANCE.createCommandList()) {
-            this.initRenderer(commandList);
-        }
+        this.initRenderer(KaliaAccess.INSTANCE.device());
     }
 
-    protected abstract SECTIONMANAGER createRenderSectionManager(CommandList commandList);
+    protected abstract SECTIONMANAGER createRenderSectionManager(RenderDevice device);
 
-    protected void initRenderer(CommandList commandList) {
+    protected void initRenderer(RenderDevice device) {
         if (this.renderSectionManager != null) {
             this.renderSectionManager.destroy();
             this.renderSectionManager = null;
@@ -201,7 +197,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
 
         this.renderDistance = getEffectiveRenderDistance();
 
-        this.renderSectionManager = this.createRenderSectionManager(commandList);
+        this.renderSectionManager = this.createRenderSectionManager(device);
 
         var tracker = ChunkTrackerHolder.get(this.world);
         ChunkTracker.forEachChunk(tracker.getReadyChunks(), this.renderSectionManager::onChunkAdded);

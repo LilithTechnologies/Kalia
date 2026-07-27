@@ -6,8 +6,11 @@ data class DepthState(
     val compare: CompareFunction = CompareFunction.LESS_EQUAL,
 ) {
     companion object {
+        @JvmField
         val DISABLED: DepthState = DepthState()
+        @JvmField
         val READ_WRITE: DepthState = DepthState(test = true, write = true)
+        @JvmField
         val READ_ONLY: DepthState = DepthState(test = true, write = false)
     }
 }

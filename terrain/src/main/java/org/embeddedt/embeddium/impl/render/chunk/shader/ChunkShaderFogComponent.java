@@ -1,9 +1,5 @@
 package org.embeddedt.embeddium.impl.render.chunk.shader;
 
-import org.embeddedt.embeddium.impl.gl.shader.ShaderBindingContext;
-import org.embeddedt.embeddium.impl.gl.shader.uniform.GlUniformFloat;
-import org.embeddedt.embeddium.impl.gl.shader.uniform.GlUniformFloat4v;
-import org.embeddedt.embeddium.impl.gl.shader.uniform.GlUniformInt;
 import org.embeddedt.embeddium.impl.render.chunk.fog.FogService;
 
 import java.util.ServiceLoader;
@@ -21,55 +17,46 @@ import java.util.ServiceLoader;
 public abstract class ChunkShaderFogComponent implements ChunkShaderComponent {
     public static final FogService FOG_SERVICE = ServiceLoader.load(FogService.class).findFirst().orElseThrow();
 
-    public static class None extends ChunkShaderFogComponent {
-        public None(ShaderBindingContext context) {
+    protected final ChunkShaderUniforms uniforms;
 
+    protected ChunkShaderFogComponent(ChunkShaderUniforms uniforms) {
+        this.uniforms = uniforms;
+    }
+
+    public static class None extends ChunkShaderFogComponent {
+        public None(ChunkShaderUniforms uniforms) {
+            super(uniforms);
         }
 
         @Override
         public void setup() {
-
+            this.uniforms.setFogShape(0);
         }
     }
 
     public static class Exp2 extends ChunkShaderFogComponent {
-        private final GlUniformFloat4v uFogColor;
-        private final GlUniformFloat uFogDensity;
-
-        public Exp2(ShaderBindingContext context) {
-            this.uFogColor = context.bindUniform("u_FogColor", GlUniformFloat4v::new);
-            this.uFogDensity = context.bindUniform("u_FogDensity", GlUniformFloat::new);
+        public Exp2(ChunkShaderUniforms uniforms) {
+            super(uniforms);
         }
 
         @Override
         public void setup() {
-            this.uFogColor.set(FOG_SERVICE.getFogColor());
-            this.uFogDensity.set(FOG_SERVICE.getFogDensity());
+            this.uniforms.setFogShape(0);
+            this.uniforms.setFogColor(FOG_SERVICE.getFogColor());
+            this.uniforms.setFogDensity(FOG_SERVICE.getFogDensity());
         }
     }
 
     public static class Smooth extends ChunkShaderFogComponent {
-        private final GlUniformFloat4v uFogColor;
-
-        private final GlUniformInt uFogShape;
-        private final GlUniformFloat uFogStart;
-        private final GlUniformFloat uFogEnd;
-
-        public Smooth(ShaderBindingContext context) {
-            this.uFogColor = context.bindUniform("u_FogColor", GlUniformFloat4v::new);
-            this.uFogShape = context.bindUniform("u_FogShape", GlUniformInt::new);
-            this.uFogStart = context.bindUniform("u_FogStart", GlUniformFloat::new);
-            this.uFogEnd = context.bindUniform("u_FogEnd", GlUniformFloat::new);
+        public Smooth(ChunkShaderUniforms uniforms) {
+            super(uniforms);
         }
 
         @Override
         public void setup() {
-            this.uFogColor.set(FOG_SERVICE.getFogColor());
-            this.uFogShape.set(FOG_SERVICE.getFogShapeIndex());
-
-            this.uFogStart.set(FOG_SERVICE.getFogStart());
-            this.uFogEnd.set(FOG_SERVICE.getFogEnd());
+            this.uniforms.setFogColor(FOG_SERVICE.getFogColor());
+            this.uniforms.setFogShape(FOG_SERVICE.getFogShapeIndex());
+            this.uniforms.setFogRange(FOG_SERVICE.getFogStart(), FOG_SERVICE.getFogEnd());
         }
     }
-
 }

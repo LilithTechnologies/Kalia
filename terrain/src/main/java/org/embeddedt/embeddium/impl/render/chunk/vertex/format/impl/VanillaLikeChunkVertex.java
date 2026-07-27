@@ -1,10 +1,11 @@
 package org.embeddedt.embeddium.impl.render.chunk.vertex.format.impl;
 
-import org.embeddedt.embeddium.impl.gl.attribute.GlVertexAttributeFormat;
-import org.embeddedt.embeddium.impl.gl.attribute.GlVertexFormat;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.material.Material;
 import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexEncoder;
 import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexType;
+import re.lilith.kalia.renderer.format.VertexAttributeFormat;
+import re.lilith.kalia.renderer.format.VertexFormat;
+import re.lilith.kalia.renderer.format.VertexStepMode;
 import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 
 /**
@@ -14,12 +15,12 @@ import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
 public class VanillaLikeChunkVertex implements ChunkVertexType {
     public static final int STRIDE = 28;
 
-    public static final GlVertexFormat VERTEX_FORMAT = GlVertexFormat.builder(STRIDE)
-            .addElement("a_PosId", 0, GlVertexAttributeFormat.FLOAT, 3, false, false)
-            .addElement("a_Color", 12, GlVertexAttributeFormat.UNSIGNED_BYTE, 4, true, false)
-            .addElement("a_TexCoord", 16, GlVertexAttributeFormat.FLOAT, 2, false, false)
-            .addElement("a_LightCoord", 24, GlVertexAttributeFormat.UNSIGNED_INT, 1, false, true)
-            .build();
+    public static final VertexFormat VERTEX_FORMAT = new VertexFormat.Builder(VertexStepMode.VERTEX)
+            .attributeAt("a_PosId", 0, VertexAttributeFormat.FLOAT3, 0)
+            .attributeAt("a_Color", 1, VertexAttributeFormat.UNORM8X4, 12)
+            .attributeAt("a_TexCoord", 2, VertexAttributeFormat.FLOAT2, 16)
+            .attributeAt("a_LightCoord", 3, VertexAttributeFormat.UINT, 24)
+            .build(STRIDE);
 
     @Override
     public float getPositionScale() {
@@ -37,7 +38,7 @@ public class VanillaLikeChunkVertex implements ChunkVertexType {
     }
 
     @Override
-    public GlVertexFormat getVertexFormat() {
+    public VertexFormat getVertexFormat() {
         return VERTEX_FORMAT;
     }
 

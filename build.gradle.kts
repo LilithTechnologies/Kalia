@@ -24,10 +24,8 @@ configurations.configureEach {
 
 sourceSets {
     named("main") {
-        java.srcDir("src/lwjgl3/java")
-        resources.srcDir("src/lwjgl3/resources")
-        java.srcDir("src/sodium/java")
-        resources.srcDir("src/sodium/resources")
+        java.srcDir("src/argentum/java")
+        resources.srcDir("src/argentum/resources")
     }
 }
 
@@ -46,6 +44,7 @@ dependencies {
     implementation(include(project(":renderer"))!!)
     implementation(include(project(":renderer:vulkan"))!!)
     implementation(include(project(":renderer:opengl"))!!)
+    implementation(include(project(":terrain"))!!)
 
     testImplementation(kotlin("test"))
     testImplementation(project(":renderer:headless")) // the headless renderer is not shipped

@@ -9,6 +9,9 @@ import org.embeddedt.embeddium.impl.render.chunk.compile.sorting.ChunkPrimitiveT
 import org.embeddedt.embeddium.impl.render.chunk.terrain.material.Material;
 import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexType;
 import org.jetbrains.annotations.NotNull;
+import re.lilith.kalia.renderer.pipeline.BlendState;
+import re.lilith.kalia.renderer.pipeline.DepthState;
+import re.lilith.kalia.renderer.pipeline.RasterState;
 
 import java.util.Map;
 import java.util.Objects;
@@ -31,10 +34,14 @@ public class TerrainRenderPass {
     @EqualsAndHashCode.Exclude
     private final String name;
 
-    /**
-     * A callback used to set up/clear GPU pipeline state.
-     */
-    private final PipelineState pipelineState;
+    @Getter
+    private final RasterState raster;
+
+    @Getter
+    private final DepthState depth;
+
+    @Getter
+    private final BlendState blend;
 
     /**
      * Whether sections on this render pass should be rendered farthest-to-nearest, rather than nearest-to-farthest.
@@ -60,7 +67,9 @@ public class TerrainRenderPass {
 
     @Builder
     public TerrainRenderPass(String name,
-                             PipelineState pipelineState,
+                             RasterState raster,
+                             DepthState depth,
+                             BlendState blend,
                              boolean useReverseOrder,
                              boolean fragmentDiscard,
                              boolean useTranslucencySorting,
@@ -75,7 +84,9 @@ public class TerrainRenderPass {
         Objects.requireNonNull(primitiveType);
 
         this.name = name;
-        this.pipelineState = pipelineState;
+        this.raster = raster != null ? raster : new RasterState();
+        this.depth = depth != null ? depth : DepthState.READ_WRITE;
+        this.blend = blend != null ? blend : BlendState.OPAQUE;
         this.useReverseOrder = useReverseOrder;
         this.fragmentDiscard = fragmentDiscard;
         this.useTranslucencySorting = useTranslucencySorting;
@@ -97,14 +108,6 @@ public class TerrainRenderPass {
         return this.hasNoLightmap;
     }
 
-    public void startDrawing() {
-        this.pipelineState.setup();
-    }
-
-    public void endDrawing() {
-        this.pipelineState.clear();
-    }
-
     public boolean supportsFragmentDiscard() {
         return this.fragmentDiscard;
     }
@@ -124,22 +127,5 @@ public class TerrainRenderPass {
     @Override
     public String toString() {
         return "TerrainRenderPass[name=" + this.name + "]";
-    }
-
-    public interface PipelineState {
-        PipelineState DEFAULT = new PipelineState() {
-            @Override
-            public void setup() {
-
-            }
-
-            @Override
-            public void clear() {
-
-            }
-        };
-
-        void setup();
-        void clear();
     }
 }

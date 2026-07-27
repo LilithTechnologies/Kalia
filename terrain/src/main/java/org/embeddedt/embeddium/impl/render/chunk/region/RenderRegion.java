@@ -2,12 +2,7 @@ package org.embeddedt.embeddium.impl.render.chunk.region;
 
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
 import lombok.Getter;
-import org.embeddedt.embeddium.impl.gl.arena.GlBufferArena;
-import org.embeddedt.embeddium.impl.gl.arena.staging.StagingBuffer;
-import org.embeddedt.embeddium.impl.gl.attribute.GlVertexFormat;
-import org.embeddedt.embeddium.impl.gl.buffer.GlBuffer;
-import org.embeddedt.embeddium.impl.gl.device.CommandList;
-import org.embeddedt.embeddium.impl.gl.tessellation.GlTessellation;
+import org.embeddedt.embeddium.impl.gl.arena.BufferArena;
 import org.embeddedt.embeddium.impl.render.chunk.RenderPassConfiguration;
 import org.embeddedt.embeddium.impl.render.chunk.RenderSection;
 import org.embeddedt.embeddium.impl.render.chunk.data.SectionRenderDataStorage;
@@ -16,6 +11,9 @@ import org.embeddedt.embeddium.impl.common.util.MathUtil;
 import org.embeddedt.embeddium.impl.util.PositionUtil;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.annotations.Unmodifiable;
+import re.lilith.kalia.renderer.device.RenderDevice;
+import re.lilith.kalia.renderer.format.VertexFormat;
+import re.lilith.kalia.renderer.resource.GpuBuffer;
 
 import java.util.*;
 
@@ -40,7 +38,6 @@ public class RenderRegion {
         }
     }
 
-    private final StagingBuffer stagingBuffer;
     private final int x, y, z;
 
     @Getter
@@ -65,13 +62,12 @@ public class RenderRegion {
     @Getter
     private int passSetUpdateCount = 0;
 
-    RenderRegion(int x, int y, int z, int id, StagingBuffer stagingBuffer) {
+    RenderRegion(int x, int y, int z, int id) {
         this.x = x;
         this.y = y;
         this.z = z;
 
         this.id = id;
-        this.stagingBuffer = stagingBuffer;
     }
 
     public static long key(int x, int y, int z) {
@@ -114,14 +110,14 @@ public class RenderRegion {
         return (this.getChunkZ() + REGION_LENGTH / 2) << 4;
     }
 
-    public void delete(CommandList commandList) {
+    public void delete() {
         for (var storage : this.sectionRenderData.values()) {
             storage.delete();
         }
 
         this.sectionRenderData.clear();
 
-        this.allDeviceResources.forEach(resources -> resources.delete(commandList));
+        this.allDeviceResources.forEach(DeviceResources::delete);
         this.allDeviceResources = List.of();
 
         Arrays.fill(this.sections, null);
@@ -183,9 +179,7 @@ public class RenderRegion {
         return this.sectionRenderData.keySet();
     }
 
-    public void refresh(CommandList commandList) {
-        this.allDeviceResources.forEach(resources -> resources.deleteTessellations(commandList));
-
+    public void refresh() {
         for (var storage : this.sectionRenderData.values()) {
             storage.onBufferResized();
         }
@@ -238,7 +232,7 @@ public class RenderRegion {
         return this.allDeviceResources;
     }
 
-    public DeviceResources getResources(GlVertexFormat format) {
+    public DeviceResources getResources(VertexFormat format) {
         var stride = format.getStride();
         var list = this.allDeviceResources;
         //noinspection ForLoopReplaceableByForEach
@@ -251,10 +245,10 @@ public class RenderRegion {
         return null;
     }
 
-    public DeviceResources createResources(GlVertexFormat format, CommandList commandList) {
+    public DeviceResources createResources(VertexFormat format, RenderDevice device) {
         var resources = getResources(format);
         if (resources == null) {
-            resources = new DeviceResources(commandList, this.stagingBuffer, format.getStride());
+            resources = new DeviceResources(device, format.getStride());
 
             var newList = new ArrayList<>(this.allDeviceResources);
             newList.add(resources);
@@ -264,17 +258,17 @@ public class RenderRegion {
         return resources;
     }
 
-    public void update(CommandList commandList) {
+    public void update() {
         var oldList = this.allDeviceResources;
         boolean needListUpdate = false;
         //noinspection ForLoopReplaceableByForEach
         for (int i = 0; i < oldList.size(); i++) {
             var resources = oldList.get(i);
             if (resources.shouldDelete()) {
-                resources.delete(commandList);
+                resources.delete();
                 needListUpdate = true;
             } else {
-                resources.deleteIndexArenaIfPossible(commandList);
+                resources.deleteIndexArenaIfPossible();
             }
         }
         // Skip the list copy in the common case that nothing was deleted.
@@ -286,71 +280,30 @@ public class RenderRegion {
     }
 
     public static class DeviceResources {
-        private final GlBufferArena geometryArena;
-        private final StagingBuffer stagingBuffer;
+        private final BufferArena geometryArena;
         private final int stride;
-        private GlBufferArena indexArena;
-        private GlTessellation tessellation;
-        private GlTessellation indexedTessellation;
+        private BufferArena indexArena;
 
-        public DeviceResources(CommandList commandList, StagingBuffer stagingBuffer, int stride) {
-            this.geometryArena = new GlBufferArena(commandList, REGION_SIZE * 756, stride, stagingBuffer);
-            this.stagingBuffer = stagingBuffer;
+        public DeviceResources(RenderDevice device, int stride) {
+            this.geometryArena = new BufferArena(device, "region-geometry", REGION_SIZE * 756, stride, false);
             this.stride = stride;
         }
 
-        public void updateTessellation(CommandList commandList, GlTessellation tessellation) {
-            if (this.tessellation != null) {
-                this.tessellation.delete(commandList);
-            }
-
-            this.tessellation = tessellation;
-        }
-
-        public GlTessellation getTessellation() {
-            return this.tessellation;
-        }
-
-        public void updateIndexedTessellation(CommandList commandList, GlTessellation tessellation) {
-            if (this.indexedTessellation != null) {
-                this.indexedTessellation.delete(commandList);
-            }
-
-            this.indexedTessellation = tessellation;
-        }
-
-        public GlTessellation getIndexedTessellation() {
-            return this.indexedTessellation;
-        }
-
-        public void deleteTessellations(CommandList commandList) {
-            if (this.tessellation != null) {
-                this.tessellation.delete(commandList);
-                this.tessellation = null;
-            }
-
-            if (this.indexedTessellation != null) {
-                this.indexedTessellation.delete(commandList);
-                this.indexedTessellation = null;
-            }
-        }
-
-        public GlBuffer getVertexBuffer() {
+        public GpuBuffer getVertexBuffer() {
             return this.geometryArena.getBufferObject();
         }
 
-        public GlBuffer getIndexBuffer() {
+        public GpuBuffer getIndexBuffer() {
             if (this.indexArena == null) {
                 throw new IllegalStateException("Attempted to retrieve index buffer for a non-indexed region");
             }
             return this.indexArena.getBufferObject();
         }
 
-        public void delete(CommandList commandList) {
-            this.deleteTessellations(commandList);
-            this.geometryArena.delete(commandList);
+        public void delete() {
+            this.geometryArena.delete();
             if (this.indexArena != null) {
-                this.indexArena.delete(commandList);
+                this.indexArena.delete();
             }
         }
 
@@ -358,18 +311,18 @@ public class RenderRegion {
             return this.geometryArena.isDeleted();
         }
 
-        public GlBufferArena getGeometryArena() {
+        public BufferArena getGeometryArena() {
             return this.geometryArena;
         }
 
 
-        public GlBufferArena getIndexArena() {
+        public BufferArena getIndexArena() {
             return this.indexArena;
         }
 
-        public GlBufferArena getOrCreateIndexArena(CommandList commandList) {
+        public BufferArena getOrCreateIndexArena(RenderDevice device) {
             if (this.indexArena == null) {
-                this.indexArena = new GlBufferArena(commandList, (REGION_SIZE * 126) / 4 * 6, 4, this.stagingBuffer);
+                this.indexArena = new BufferArena(device, "region-index", (REGION_SIZE * 126) / 4 * 6, 4, true);
             }
             return this.indexArena;
         }
@@ -378,10 +331,9 @@ public class RenderRegion {
             return this.geometryArena.isEmpty();
         }
 
-        public void deleteIndexArenaIfPossible(CommandList commandList) {
+        public void deleteIndexArenaIfPossible() {
             if (this.indexArena != null && this.indexArena.isEmpty()) {
-                this.updateIndexedTessellation(commandList, null);
-                this.indexArena.delete(commandList);
+                this.indexArena.delete();
                 this.indexArena = null;
             }
         }

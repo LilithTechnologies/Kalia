@@ -5,6 +5,7 @@ import net.minecraft.client.render.BufferRenderer;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
+import org.taumc.celeritas.impl.debug.RenderMetrics;
 import re.lilith.kalia.KaliaHooks;
 import re.lilith.kalia.draw.TessellatorBridge;
 
@@ -20,5 +21,7 @@ public class MixinBufferRenderer {
             TessellatorBridge.INSTANCE.draw(builder);
         }
         builder.reset();
+
+        RenderMetrics.recordDraw();
     }
 }

@@ -11,6 +11,16 @@ dependencies {
     implementation(project(":renderer"))
     implementation(libs.joml)
     implementation(libs.fastutil)
+    implementation(libs.bundles.asm)
+    implementation(libs.gson)
+    implementation(libs.annotations)
+    implementation(libs.log4j.core)
+
+    implementation(libs.lombok)
+    annotationProcessor(libs.lombok)
+
+    testImplementation(kotlin("test"))
+    testImplementation(project(":renderer:headless"))
 }
 
 kotlin {

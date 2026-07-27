@@ -92,10 +92,10 @@ object GlEnums {
         else -> FogMode.EXP // GL_EXP
     }
 
-    enum class FogMode {
-        EXP,
-        EXP2,
-        LINEAR,
+    enum class FogMode(val glMode: Int) {
+        EXP(0x0800),
+        EXP2(0x0801),
+        LINEAR(0x2601),
         ;
     }
 

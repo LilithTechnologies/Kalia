@@ -3,115 +3,117 @@ package org.embeddedt.embeddium.impl.render.chunk;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.embeddedt.embeddium.impl.gl.attribute.GlVertexFormat;
-import org.embeddedt.embeddium.impl.gl.device.CommandList;
-import org.embeddedt.embeddium.impl.gl.device.RenderDevice;
-import org.embeddedt.embeddium.impl.gl.shader.*;
-import org.embeddedt.embeddium.impl.render.chunk.shader.*;
+import org.embeddedt.embeddium.impl.gl.shader.ShaderConstants;
+import org.embeddedt.embeddium.impl.gl.shader.ShaderParser;
+import org.embeddedt.embeddium.impl.gl.shader.ShaderType;
+import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderComponent;
+import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderFogComponent;
+import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderOptions;
+import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderUniforms;
+import org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderVariant;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
-import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexType;
 import org.embeddedt.embeddium.impl.render.shader.ShaderLoader;
 import org.jetbrains.annotations.Nullable;
+import re.lilith.kalia.renderer.command.PassContext;
+import re.lilith.kalia.renderer.device.RenderDevice;
+import re.lilith.kalia.renderer.pipeline.AttachmentLayout;
+import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription;
+import re.lilith.kalia.renderer.resource.GpuPipeline;
+import re.lilith.kalia.renderer.shader.BindingKind;
+import re.lilith.kalia.renderer.shader.ShaderBinding;
+import re.lilith.kalia.renderer.shader.ShaderProgram;
+import re.lilith.kalia.renderer.shader.ShaderSource;
+import re.lilith.kalia.renderer.shader.ShaderStage;
+import re.lilith.kalia.sodium.KaliaAccess;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.regex.Pattern;
-
-import static org.taumc.celeritas.lwjgl.LWJGLServiceProvider.LWJGL;
+import java.util.Set;
 
 public abstract class ShaderChunkRenderer implements ChunkRenderer {
     private static final Logger LOGGER = LogManager.getLogger(ShaderChunkRenderer.class);
 
-    private final Map<ChunkShaderOptions, @Nullable GlProgram<ChunkShaderInterface>> programs = new Object2ObjectOpenHashMap<>();
+    private static final int PUSH_CONSTANT_BYTES = 16;
+
+    private final Map<ChunkShaderOptions, @Nullable ChunkShaderVariant> variants = new Object2ObjectOpenHashMap<>();
 
     protected final RenderPassConfiguration<?> renderPassConfiguration;
-
     protected final RenderDevice device;
+    protected final ChunkShaderUniforms uniforms;
 
-    protected GlProgram<ChunkShaderInterface> activeProgram;
-
-    protected final boolean enableLegacyGLPatches;
+    protected ChunkShaderVariant activeVariant;
 
     public ShaderChunkRenderer(RenderDevice device, RenderPassConfiguration<?> renderPassConfiguration) {
         this.device = device;
         this.renderPassConfiguration = renderPassConfiguration;
-        this.enableLegacyGLPatches = !LWJGL.isOpenGLVersionSupported(3, 2);
-        if (this.enableLegacyGLPatches) {
-            LOGGER.warn("System does not support modern GLSL, will attempt to patch terrain shaders");
-        }
+        this.uniforms = new ChunkShaderUniforms(device);
     }
 
-    protected @Nullable GlProgram<ChunkShaderInterface> compileProgram(ChunkShaderOptions options) {
-        GlProgram<ChunkShaderInterface> program = this.programs.get(options);
+    protected @Nullable ChunkShaderVariant compileVariant(ChunkShaderOptions options) {
+        ChunkShaderVariant variant = this.variants.get(options);
 
-        if (program == null && !this.programs.containsKey(options)) {
+        if (variant == null && !this.variants.containsKey(options)) {
             try {
-                program = this.createShader("blocks/block_layer_opaque", options);
-            } catch(Exception e) {
+                variant = this.createVariant(options);
+            } catch (Exception e) {
                 LOGGER.error("There was an error creating a chunk program. Terrain will not render until this is fixed.", e);
             }
-            this.programs.put(options, program);
+            this.variants.put(options, variant);
         }
 
-        return program;
+        return variant;
     }
 
-    private static final Pattern VERSION_DIRECTIVE = Pattern.compile("^#version.*$", Pattern.MULTILINE);
-    private static final Pattern IN_PARAM = Pattern.compile("^in ", Pattern.MULTILINE);
-    private static final Pattern OUT_PARAM = Pattern.compile("^out ", Pattern.MULTILINE);
-    private static final String LEGACY_PREAMBLE = String.join("\n",
-            "#version 120",
-            "#extension GL_EXT_gpu_shader4 : require",
-            "#define LEGACY",
-            "#define uint unsigned int",
-            "#define texture texture2D"
-    ) + "\n";
-
-    private GlShader loadShader(ShaderType type, String path, ShaderConstants constants) {
-        String shaderSource = ShaderParser.parseShader(ShaderLoader.getShaderSource(path), ShaderLoader::getShaderSource, constants);
-        if (this.enableLegacyGLPatches) {
-            if (type != ShaderType.VERTEX && type != ShaderType.FRAGMENT) {
-                throw new IllegalStateException("Cannot load non-vertex/fragment shader on old GL");
-            }
-            // Downlevel to GLSL 1.20
-            shaderSource = VERSION_DIRECTIVE.matcher(shaderSource).replaceFirst(LEGACY_PREAMBLE);
-            if (type == ShaderType.VERTEX) {
-                shaderSource = IN_PARAM.matcher(shaderSource).replaceAll("attribute ");
-            } else {
-                shaderSource = IN_PARAM.matcher(shaderSource).replaceAll("varying ");
-            }
-            shaderSource = OUT_PARAM.matcher(shaderSource).replaceAll("varying ");
-        }
-        return new GlShader(type, path, shaderSource);
+    private static String loadShaderSource(ShaderType type, ShaderConstants constants) {
+        String path = "sodium:blocks/block_layer_opaque." + type.fileExtension;
+        return ShaderParser.parseShader(ShaderLoader.getShaderSource(path), ShaderLoader::getShaderSource, constants);
     }
 
-    protected GlProgram<ChunkShaderInterface> createShader(String path, ChunkShaderOptions options) {
+    protected ChunkShaderVariant createVariant(ChunkShaderOptions options) {
         ShaderConstants constants = options.constants();
+        TerrainRenderPass pass = options.pass();
 
-        List<GlShader> loadedShaders = new ArrayList<>();
+        String vertexSource = loadShaderSource(ShaderType.VERTEX, constants);
+        String fragmentSource = loadShaderSource(ShaderType.FRAGMENT, constants);
 
-        loadedShaders.add(loadShader(ShaderType.VERTEX,
-                "sodium:" + path + ".vsh", constants));
-
-        loadedShaders.add(loadShader(ShaderType.FRAGMENT,
-                "sodium:" + path + ".fsh", constants));
-
-        try {
-            var builder = GlProgram.builder("sodium:chunk_shader");
-            loadedShaders.forEach(builder::attachShader);
-            int i = 0;
-            for (var attr : options.pass().vertexType().getVertexFormat().getAttributes()) {
-                builder.bindAttribute(attr.getName(), i++);
-            }
-            if (!this.enableLegacyGLPatches) {
-                builder.bindFragmentData("fragColor", ChunkShaderBindingPoints.FRAG_COLOR);
-            }
-            return builder.link((shader) -> new DefaultChunkShaderInterface(shader, options));
-        } finally {
-            loadedShaders.forEach(GlShader::delete);
+        List<ShaderBinding> bindings = new ArrayList<>();
+        bindings.add(new ShaderBinding("u_BlockTex", ChunkShaderUniforms.BLOCK_TEXTURE_BINDING, BindingKind.TEXTURE, Set.of(ShaderStage.FRAGMENT)));
+        if (!pass.hasNoLightmap()) {
+            bindings.add(new ShaderBinding("u_LightTex", ChunkShaderUniforms.LIGHT_TEXTURE_BINDING, BindingKind.TEXTURE, Set.of(ShaderStage.VERTEX)));
         }
+        bindings.add(new ShaderBinding("ChunkSceneUniforms", ChunkShaderUniforms.SCENE_UNIFORMS_BINDING, BindingKind.UNIFORM_BUFFER, Set.of(ShaderStage.VERTEX, ShaderStage.FRAGMENT)));
+        bindings.add(new ShaderBinding("ChunkRegionAges", ChunkShaderUniforms.REGION_AGES_BINDING, BindingKind.UNIFORM_BUFFER, Set.of(ShaderStage.VERTEX)));
+
+        ShaderProgram program = new ShaderProgram(
+                "sodium:chunk_shader",
+                Map.of(
+                        ShaderStage.VERTEX, new ShaderSource.Glsl("sodium:blocks/block_layer_opaque.vsh", vertexSource),
+                        ShaderStage.FRAGMENT, new ShaderSource.Glsl("sodium:blocks/block_layer_opaque.fsh", fragmentSource)
+                ),
+                bindings,
+                PUSH_CONSTANT_BYTES
+        );
+
+        AttachmentLayout attachments = new AttachmentLayout(
+                List.of(KaliaAccess.INSTANCE.sceneColorFormat()),
+                KaliaAccess.INSTANCE.sceneDepthFormat());
+
+        GpuPipeline pipeline = this.device.createPipeline(new GraphicsPipelineDescription(
+                program,
+                pass.vertexType().getVertexFormat(),
+                attachments,
+                pass.raster(),
+                pass.depth(),
+                pass.blend()
+        ));
+
+        List<? extends ChunkShaderComponent> components = options.components().stream()
+                .map(c -> c.create(this.uniforms))
+                .toList();
+
+        return new ChunkShaderVariant(pipeline, components);
     }
 
     protected List<ChunkShaderComponent.Factory<?>> getShaderComponents() {
@@ -120,35 +122,27 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
         return componentFactories;
     }
 
-    protected void begin(TerrainRenderPass pass) {
-        pass.startDrawing();
-
+    protected void begin(PassContext passContext, TerrainRenderPass pass) {
         ChunkShaderOptions options = new ChunkShaderOptions(getShaderComponents(), pass);
 
-        this.activeProgram = this.compileProgram(options);
+        this.activeVariant = this.compileVariant(options);
 
-        if (this.activeProgram != null) {
-            this.activeProgram.bind();
-            this.activeProgram.getInterface()
-                    .setupState(pass);
+        if (this.activeVariant != null) {
+            passContext.bindPipeline(this.activeVariant.pipeline());
+            this.activeVariant.setup();
         }
     }
 
     protected void end(TerrainRenderPass pass) {
-        if (this.activeProgram != null) {
-            this.activeProgram.getInterface().restoreState();
-            this.activeProgram.unbind();
-            this.activeProgram = null;
-        }
-
-
-        pass.endDrawing();
+        this.activeVariant = null;
     }
 
     @Override
-    public void delete(CommandList commandList) {
-        this.programs.values().stream().filter(Objects::nonNull)
-                .forEach(GlProgram::delete);
+    public void delete() {
+        this.variants.values().stream().filter(Objects::nonNull)
+                .forEach(variant -> variant.pipeline().close());
+        this.variants.clear();
+        this.uniforms.delete();
     }
 
     @Override

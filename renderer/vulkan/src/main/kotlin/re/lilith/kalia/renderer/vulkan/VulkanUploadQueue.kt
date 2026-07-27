@@ -1,5 +1,8 @@
 package re.lilith.kalia.renderer.vulkan
 
+import org.lwjgl.system.MemoryStack
+import org.lwjgl.vulkan.VK10
+import org.lwjgl.vulkan.VkMemoryBarrier
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.vulkan.api.command.CommandRecorder
 import re.lilith.vulkan.api.types.enum.ImageLayout
@@ -75,6 +78,7 @@ internal class VulkanUploadQueue(private val context: VulkanContext) {
 
             when (upload) {
                 is PendingUpload.BufferCopyUpload -> {
+                    insertTransferBarrier(recorder)
                     recorder.copyBuffer(
                         source = upload.staging,
                         destination = upload.target2,
@@ -83,11 +87,14 @@ internal class VulkanUploadQueue(private val context: VulkanContext) {
                     retire(upload.staging)
                 }
 
-                is PendingUpload.BufferToBufferCopy -> recorder.copyBuffer(
-                    source = upload.source,
-                    destination = upload.destination,
-                    regions = listOf(BufferCopy(upload.readOffset, upload.writeOffset, upload.sizeBytes)),
-                )
+                is PendingUpload.BufferToBufferCopy -> {
+                    insertTransferBarrier(recorder)
+                    recorder.copyBuffer(
+                        source = upload.source,
+                        destination = upload.destination,
+                        regions = listOf(BufferCopy(upload.readOffset, upload.writeOffset, upload.sizeBytes)),
+                    )
+                }
 
                 is PendingUpload.TextureUpload -> {
                     recorder.recordTextureUpload(
@@ -116,6 +123,25 @@ internal class VulkanUploadQueue(private val context: VulkanContext) {
     @Synchronized
     fun forget(texture: VulkanTexture) {
         pending.removeAll { it.target === texture }
+    }
+
+    private fun insertTransferBarrier(recorder: CommandRecorder) {
+        MemoryStack.stackPush().use { stack ->
+            val barrier = VkMemoryBarrier.calloc(1, stack)
+            barrier[0]
+                .sType(VK10.VK_STRUCTURE_TYPE_MEMORY_BARRIER)
+                .srcAccessMask(VK10.VK_ACCESS_TRANSFER_WRITE_BIT)
+                .dstAccessMask(VK10.VK_ACCESS_TRANSFER_READ_BIT or VK10.VK_ACCESS_TRANSFER_WRITE_BIT)
+            VK10.vkCmdPipelineBarrier(
+                recorder.commandBuffer.handle,
+                VK10.VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK10.VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                barrier,
+                null,
+                null,
+            )
+        }
     }
 
     private sealed interface PendingUpload {

@@ -29,14 +29,16 @@
   "accessWidener": "kalia.accesswidener",
 
   "mixins": [
-    "kalia.mixins.json"
+    "kalia.mixins.json",
+    "celeritas.mixins.json"
   ],
   "entrypoints": {
     "preLaunch": [
       "re.lilith.kalia.KaliaPreLaunch"
     ],
     "client": [
-      "re.lilith.kalia.KaliaMod"
+      "re.lilith.kalia.KaliaMod",
+      "org.taumc.celeritas.impl.Celeritas"
     ]
   },
 

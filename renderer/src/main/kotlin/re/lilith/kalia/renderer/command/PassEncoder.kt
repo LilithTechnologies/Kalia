@@ -71,6 +71,14 @@ interface PassEncoder {
     fun bindUniformBuffer(binding: Int, buffer: GpuBuffer, offsetBytes: Long = 0L, sizeBytes: Long = buffer.sizeBytes)
 
     /**
+     * Binds a uniform buffer range to a shader binding slot.
+     *
+     * @param binding The shader binding index.
+     * @param buffer The buffer to bind.
+     */
+    fun bindUniformBuffer(binding: Int, buffer: GpuBuffer) = bindUniformBuffer(binding, buffer, 0L, buffer.sizeBytes)
+
+    /**
      * Binds a storage buffer range to a shader binding slot.
      *
      * @param binding The shader binding index.
@@ -97,6 +105,14 @@ interface PassEncoder {
     fun bindVertexBuffer(slot: Int, buffer: GpuBuffer, offsetBytes: Long = 0L)
 
     /**
+     * Binds a vertex buffer to the specified input slot.
+     *
+     * @param slot The vertex buffer slot.
+     * @param buffer The buffer to bind.
+     */
+    fun bindVertexBuffer(slot: Int, buffer: GpuBuffer) = bindVertexBuffer(slot, buffer, 0L)
+
+    /**
      * Binds an index buffer for indexed draw operations.
      *
      * @param buffer The index buffer.
@@ -104,6 +120,14 @@ interface PassEncoder {
      * @param offsetBytes Byte offset into the buffer.
      */
     fun bindIndexBuffer(buffer: GpuBuffer, format: IndexFormat, offsetBytes: Long = 0L)
+
+    /**
+     * Binds an index buffer for indexed draw operations.
+     *
+     * @param buffer The index buffer.
+     * @param format The index element format.
+     */
+    fun bindIndexBuffer(buffer: GpuBuffer, format: IndexFormat) = bindIndexBuffer(buffer, format, 0L)
 
     /**
      * Issues a non-indexed draw.

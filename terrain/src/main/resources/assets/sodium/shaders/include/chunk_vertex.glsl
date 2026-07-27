@@ -28,10 +28,11 @@ vec3 _get_draw_translation(uint pos) {
 }
 
 #ifdef USE_VERTEX_COMPRESSION
-in uvec4 a_PosId;
-in vec4 a_Color;
-in vec2 a_TexCoord;
-in ivec2 a_LightCoord;
+layout(location = 0) in uvec2 a_PosXY;
+layout(location = 1) in uvec2 a_PosZW;
+layout(location = 2) in vec4 a_Color;
+layout(location = 3) in vec2 a_TexCoord;
+layout(location = 4) in ivec2 a_LightCoord;
 
 #if !defined(VERT_POS_SCALE)
 #error "VERT_POS_SCALE not defined"
@@ -42,21 +43,21 @@ in ivec2 a_LightCoord;
 #endif
 
 void _vert_init() {
-    _vert_position = (vec3(a_PosId.xyz) * VERT_POS_SCALE + VERT_POS_OFFSET);
+    _vert_position = (vec3(a_PosXY, a_PosZW.x) * VERT_POS_SCALE + VERT_POS_OFFSET);
     _vert_tex_diffuse_coord = (a_TexCoord * VERT_TEX_SCALE);
     _vert_tex_light_coord = a_LightCoord;
     _vert_color = a_Color;
 
-    _draw_id = (a_PosId.w >> 8u) & 0xFFu;
-    _material_params = (a_PosId.w >> 0u) & 0xFFu;
+    _draw_id = (a_PosZW.y >> 8u) & 0xFFu;
+    _material_params = (a_PosZW.y >> 0u) & 0xFFu;
 }
 
 #else
 
-in vec3 a_PosId;
-in vec4 a_Color;
-in vec2 a_TexCoord;
-in uint a_LightCoord;
+layout(location = 0) in vec3 a_PosId;
+layout(location = 1) in vec4 a_Color;
+layout(location = 2) in vec2 a_TexCoord;
+layout(location = 3) in uint a_LightCoord;
 
 void _vert_init() {
     _vert_position = a_PosId;
