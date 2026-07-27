@@ -224,10 +224,6 @@ public class ScrollableTooltip extends DrawableHelper {
             int y2 = this.visibleDim.getLimitY();
 
             DrawableHelper.fill(x1, y1, x2, y2, VANILLA_TOOLTIP_BACKGROUND);
-            this.fillGradient(x1, y1 + 1, x1 + 1, y2 - 1, VANILLA_TOOLTIP_BORDER_TOP, VANILLA_TOOLTIP_BORDER_BOTTOM);
-            this.fillGradient(x2 - 1, y1 + 1, x2, y2 - 1, VANILLA_TOOLTIP_BORDER_TOP, VANILLA_TOOLTIP_BORDER_BOTTOM);
-            DrawableHelper.fill(x1, y1, x2, y1 + 1, VANILLA_TOOLTIP_BORDER_TOP);
-            DrawableHelper.fill(x1, y2 - 1, x2, y2, VANILLA_TOOLTIP_BORDER_BOTTOM);
 
             for (int i = 0; i < this.content.size(); i++) {
                 this.font.drawWithShadow(this.content.get(i),
