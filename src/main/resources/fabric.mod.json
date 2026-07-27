@@ -5,7 +5,7 @@
   "version": "1.0.0",
 
   "name": "Kalia",
-  "description": "Cross-backend, high-performance rendering engine for MC",
+  "description": "A high-performance, cross-backend rendering engine for Minecraft",
 
   "authors": [
     {
