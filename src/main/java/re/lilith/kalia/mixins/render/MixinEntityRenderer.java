@@ -16,15 +16,13 @@ import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Constant;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.draw.NametagTextRenderer;
 import re.lilith.kalia.entity.nametag.NametagBatcher;
 import re.lilith.kalia.entity.shadow.ShadowBatcher;
 import re.lilith.kalia.gl.MatrixState;
-import re.lilith.kalia.texture.TextureTable;
+import re.lilith.kalia.gl.tables.TextureTable;
 
 @Mixin(EntityRenderer.class)
 public class MixinEntityRenderer<T extends Entity> {

@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 
 import org.taumc.celeritas.impl.debug.RenderMetrics;
 import re.lilith.kalia.KaliaHooks;
-import re.lilith.kalia.draw.TessellatorBridge;
+import re.lilith.kalia.frame.draw.TessellatorBridge;
 
 @Mixin(BufferRenderer.class)
 public class MixinBufferRenderer {

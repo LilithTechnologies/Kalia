@@ -18,8 +18,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.buffer.PersistentMesh;
-import re.lilith.kalia.draw.EntityBatchers;
-import re.lilith.kalia.draw.ItemMeshCache;
+import re.lilith.kalia.frame.draw.EntityBatchers;
+import re.lilith.kalia.frame.draw.ItemMeshCache;
 import re.lilith.kalia.entity.item.ItemBatcher;
 import re.lilith.kalia.gl.MatrixState;
 

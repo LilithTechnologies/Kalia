@@ -5,7 +5,6 @@ import org.embeddedt.embeddium.impl.common.util.MathUtil;
 import org.embeddedt.embeddium.impl.common.util.NativeBuffer;
 import org.taumc.celeritas.impl.Celeritas;
 import org.taumc.celeritas.impl.render.terrain.CeleritasWorldRenderer;
-import re.lilith.kalia.draw.EntityBatchers;
 import re.lilith.kalia.entity.cuboid.CuboidBatcher;
 
 import java.lang.management.ManagementFactory;

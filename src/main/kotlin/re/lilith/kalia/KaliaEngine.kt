@@ -3,6 +3,7 @@ package re.lilith.kalia
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrameGraph
 import re.lilith.kalia.gl.GlBridge
+import re.lilith.kalia.platform.KaliaMod
 import re.lilith.kalia.platform.MinecraftSurface
 import re.lilith.kalia.renderer.Kalia
 import re.lilith.kalia.renderer.device.BackendId

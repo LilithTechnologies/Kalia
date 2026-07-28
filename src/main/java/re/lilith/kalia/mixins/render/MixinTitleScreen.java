@@ -6,13 +6,12 @@ import net.minecraft.util.Identifier;
 import org.lwjgl.util.glu.Project;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import re.lilith.kalia.gl.GlBridge;
-import re.lilith.kalia.ui.Panorama;
+import re.lilith.kalia.frame.graph.ui.Panorama;
 
 @Mixin(TitleScreen.class)
 public abstract class MixinTitleScreen extends Screen {

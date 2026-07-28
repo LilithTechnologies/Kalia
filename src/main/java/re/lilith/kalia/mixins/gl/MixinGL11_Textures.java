@@ -4,7 +4,7 @@ import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Unique;
-import re.lilith.kalia.texture.TextureTable;
+import re.lilith.kalia.gl.tables.TextureTable;
 
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;

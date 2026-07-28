@@ -1,6 +1,6 @@
 package re.lilith.kalia.frame
 
-import re.lilith.kalia.draw.EntityBatchers
+import re.lilith.kalia.frame.draw.EntityBatchers
 import re.lilith.kalia.renderer.command.PassContext
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.geometry.Rect

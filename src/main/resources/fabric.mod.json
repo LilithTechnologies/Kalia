@@ -34,10 +34,10 @@
   ],
   "entrypoints": {
     "preLaunch": [
-      "re.lilith.kalia.KaliaPreLaunch"
+      "re.lilith.kalia.platform.KaliaPreLaunch"
     ],
     "client": [
-      "re.lilith.kalia.KaliaMod",
+      "re.lilith.kalia.platform.KaliaMod",
       "org.taumc.celeritas.impl.Celeritas"
     ]
   },

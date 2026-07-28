@@ -13,7 +13,7 @@ import org.taumc.celeritas.impl.debug.RenderMetrics;
 
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.render.GameRenderer;
-import re.lilith.kalia.frame.FPSCounter;
+import re.lilith.kalia.frame.FrameCounter;
 
 @Mixin(GameRenderer.class)
 public class GameRendererMixin {
@@ -65,7 +65,7 @@ public class GameRendererMixin {
         if (!this.client.options.debugEnabled) {
             client.profiler.push("radium_fps_overlay");
 
-            FPSCounter.INSTANCE.render();
+            FrameCounter.INSTANCE.render();
 
             client.profiler.pop();
         }

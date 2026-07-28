@@ -6,10 +6,9 @@ import re.lilith.kalia.renderer.device.WindowSystem
 import re.lilith.kalia.renderer.geometry.Extent
 
 class MinecraftSurface private constructor(override val nativeHandle: Long) : PlatformSurface {
-    override val windowSystem: WindowSystem = WindowSystem.SDL
+    override val windowSystem = WindowSystem.SDL
 
-    override val framebufferExtent: Extent
-        get() = Extent(
+    override val framebufferExtent get() = Extent(
             width = Display.getWidth().coerceAtLeast(1),
             height = Display.getHeight().coerceAtLeast(1),
         )

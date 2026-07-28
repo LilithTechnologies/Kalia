@@ -3,7 +3,7 @@ package re.lilith.kalia.mixins.gl;
 import org.lwjgl.opengl.GL11;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
-import re.lilith.kalia.draw.ImmediateMode;
+import re.lilith.kalia.frame.draw.ImmediateMode;
 
 @Mixin(GL11.class)
 public class MixinGL11_ImmediateMode {

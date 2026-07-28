@@ -3,7 +3,7 @@ package re.lilith.kalia.mixins.gl;
 import com.mojang.blaze3d.platform.GlStateManager;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
-import re.lilith.kalia.draw.DisplayLists;
+import re.lilith.kalia.frame.draw.DisplayLists;
 import re.lilith.kalia.gl.GlBridge;
 import re.lilith.kalia.gl.TextureUnits;
 
