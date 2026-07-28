@@ -68,7 +68,11 @@ internal class VulkanUploadQueue(private val context: VulkanContext) {
      * Records everything queued so far and hands the staging buffers to [retire]
      */
     @Synchronized
-    fun flush(recorder: CommandRecorder, retire: (AutoCloseable) -> Unit) {
+    fun flush(recorder: CommandRecorder, retire: (AutoCloseable) -> Unit): Boolean {
+        if (pending.isEmpty()) {
+            return false
+        }
+
         while (pending.isNotEmpty()) {
             val upload = pending.poll()
             if (upload.target?.isClosed == true) {
@@ -118,6 +122,8 @@ internal class VulkanUploadQueue(private val context: VulkanContext) {
                 )
             }
         }
+
+        return true
     }
 
     @Synchronized

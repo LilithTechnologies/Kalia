@@ -15,6 +15,7 @@ import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.resource.*
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.kalia.renderer.vulkan.utils.TransientTexturePool
+import re.lilith.vulkan.api.command.CommandBuffer
 import re.lilith.vulkan.api.core.VulkanResultException
 import re.lilith.vulkan.api.descriptor.DescriptorSetLayoutBinding
 import re.lilith.vulkan.api.descriptor.DescriptorSetLayoutConfig
@@ -331,36 +332,69 @@ internal class VulkanRenderDevice(
         swapchain.recordPresentBlit(recorder, acquired)
         val recorded = recorder.end()
 
-        frame.uploadCommandBuffer.reset()
-        val uploadRecorder = frame.uploadCommandBuffer.begin()
-        uploads.flush(uploadRecorder, frame::retire)
-        val recordedUploads = uploadRecorder.end()
+        var recordedUploads: CommandBuffer? = null
+
+        val hasUploads = uploads.hasWork
+
+        if (hasUploads) {
+            frame.uploadCommandBuffer.reset()
+
+            val uploadRecorder =
+                frame.uploadCommandBuffer.begin()
+
+            uploads.flush(uploadRecorder, frame::retire)
+
+            recordedUploads = uploadRecorder.end()
+        }
 
         frame.inFlightFence.reset()
         val renderFinished = swapchain.renderFinishedSemaphore(acquired.index)
 
         context.withQueueLock {
             context.graphicsQueue.submit(
-                submissions = listOf(
-                    QueueSubmission(
-                        commandBuffers = listOf(recordedUploads),
-                        signalSemaphores = listOf(SemaphoreSignal(frame.uploadsFinished)),
-                    ),
-                    QueueSubmission(
-                        commandBuffers = listOf(recorded),
-                        waitSemaphores = listOf(
-                            SemaphoreWait(
-                                semaphore = frame.imageAvailable,
-                                stageMask = PipelineStageMask.ColorAttachmentOutput + PipelineStageMask.Transfer,
-                            ),
-                            SemaphoreWait(
-                                semaphore = frame.uploadsFinished,
-                                stageMask = PipelineStageMask.AllCommands,
+                submissions = if (hasUploads) {
+                    listOf(
+                        QueueSubmission(
+                            commandBuffers = recordedUploads?.let { listOf(it) } ?: emptyList(),
+                            signalSemaphores = listOf(
+                                SemaphoreSignal(frame.uploadsFinished)
                             ),
                         ),
-                        signalSemaphores = listOf(SemaphoreSignal(renderFinished)),
-                    ),
-                ),
+                        QueueSubmission(
+                            commandBuffers = listOf(recorded),
+                            waitSemaphores = listOf(
+                                SemaphoreWait(
+                                    frame.imageAvailable,
+                                    PipelineStageMask.ColorAttachmentOutput +
+                                            PipelineStageMask.Transfer,
+                                ),
+                                SemaphoreWait(
+                                    frame.uploadsFinished,
+                                    PipelineStageMask.VertexInput,
+                                ),
+                            ),
+                            signalSemaphores = listOf(
+                                SemaphoreSignal(renderFinished)
+                            ),
+                        ),
+                    )
+                } else {
+                    listOf(
+                        QueueSubmission(
+                            commandBuffers = listOf(recorded),
+                            waitSemaphores = listOf(
+                                SemaphoreWait(
+                                    frame.imageAvailable,
+                                    PipelineStageMask.ColorAttachmentOutput +
+                                            PipelineStageMask.Transfer,
+                                ),
+                            ),
+                            signalSemaphores = listOf(
+                                SemaphoreSignal(renderFinished)
+                            ),
+                        ),
+                    )
+                },
                 fence = frame.inFlightFence,
             )
         }
@@ -436,7 +470,7 @@ internal class VulkanRenderDevice(
     }
 
     private companion object {
-        const val FRAMES_IN_FLIGHT = 2
+        const val FRAMES_IN_FLIGHT = 3
     }
 }
 
