@@ -29,7 +29,7 @@ class KaliaFogService : FogService {
     }
 
     override fun getFogCutoff(): Float {
-        return getFogEnd()
+        return fogEnd
     }
 
     override fun getFogColor(): FloatArray? {

@@ -19,8 +19,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.draw.NametagTextRenderer;
-import re.lilith.kalia.entity.nametag.NametagBatcher;
-import re.lilith.kalia.entity.shadow.ShadowBatcher;
+import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher;
+import re.lilith.kalia.frame.graph.entity.shadow.ShadowBatcher;
 import re.lilith.kalia.gl.MatrixState;
 import re.lilith.kalia.gl.tables.TextureTable;
 

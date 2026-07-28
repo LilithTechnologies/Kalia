@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
-import re.lilith.kalia.entity.particle.ParticleBatcher;
+import re.lilith.kalia.frame.graph.particle.ParticleBatcher;
 import re.lilith.kalia.gl.MatrixState;
 
 @Mixin(Particle.class)
