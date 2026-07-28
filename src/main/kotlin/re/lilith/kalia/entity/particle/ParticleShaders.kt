@@ -15,8 +15,8 @@ object ParticleShaders {
     fun program(): ShaderProgram = cached ?: ShaderProgram(
         label = "kalia/particle",
         stages = mapOf(
-            ShaderStage.VERTEX to ShaderSource.Glsl("particle.vert", ShaderAssets.assemble("particle.vert", emptyList())),
-            ShaderStage.FRAGMENT to ShaderSource.Glsl("particle.frag", ShaderAssets.assemble("particle.frag", emptyList())),
+            ShaderStage.VERTEX to ShaderSource.Glsl("particle.vert", ShaderAssets.assemble("kalia:particle.vert", emptyList())),
+            ShaderStage.FRAGMENT to ShaderSource.Glsl("particle.frag", ShaderAssets.assemble("kalia:particle.frag", emptyList())),
         ),
         bindings = listOf(
             ShaderBinding(

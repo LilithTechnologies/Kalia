@@ -18,8 +18,8 @@ object CuboidShaders {
         ShaderProgram(
             label = "kalia/$key",
             stages = mapOf(
-                ShaderStage.VERTEX to ShaderSource.Glsl("$key.vert", ShaderAssets.assemble("cuboid.vert", defines)),
-                ShaderStage.FRAGMENT to ShaderSource.Glsl("$key.frag", ShaderAssets.assemble("cuboid.frag", defines)),
+                ShaderStage.VERTEX to ShaderSource.Glsl("$key.vert", ShaderAssets.assemble("kalia:cuboid.vert", defines)),
+                ShaderStage.FRAGMENT to ShaderSource.Glsl("$key.frag", ShaderAssets.assemble("kalia:cuboid.frag", defines)),
             ),
             bindings = listOf(
                 ShaderBinding(

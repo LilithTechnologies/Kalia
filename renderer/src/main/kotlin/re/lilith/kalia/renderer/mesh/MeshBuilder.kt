@@ -13,6 +13,7 @@ import java.nio.ByteOrder
 class MeshBuilder(
     val vertexFormat: VertexFormat,
     initialVertexCapacity: Int = 256,
+    builder: MeshBuilder.() -> Unit = {}
 ) {
     private var vertices: ByteBuffer = direct(initialVertexCapacity * vertexFormat.stride)
     private var indices: ByteBuffer = direct(initialVertexCapacity * 6)
@@ -25,6 +26,10 @@ class MeshBuilder(
         private set
 
     val isEmpty: Boolean get() = indexCount == 0 && vertexCount == 0
+
+    init {
+        builder()
+    }
 
     fun clear() {
         vertices.clear()
@@ -43,6 +48,8 @@ class MeshBuilder(
 
     fun vec4(x: Float, y: Float, z: Float, w: Float): MeshBuilder =
         apply { reserveVertex(16).putFloat(x).putFloat(y).putFloat(z).putFloat(w) }
+
+    fun addVertex(x: Float, y: Float, z: Float): MeshBuilder = apply { vec3(x, y, z); endVertex() }
 
     fun colorArgb(packed: Int): MeshBuilder = apply {
         reserveVertex(4)
@@ -65,7 +72,7 @@ class MeshBuilder(
     fun endVertex(): MeshBuilder = apply {
         val written = vertices.position() - vertexStart
         require(written == vertexFormat.stride) {
-            "Vertex ${vertexCount} wrote $written bytes but the format stride is ${vertexFormat.stride}."
+            "Vertex $vertexCount wrote $written bytes but the format stride is ${vertexFormat.stride}."
         }
         vertexStart = vertices.position()
         vertexCount++

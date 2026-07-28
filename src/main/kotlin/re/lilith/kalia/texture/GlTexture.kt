@@ -12,7 +12,6 @@ import java.nio.ByteBuffer
 
 class GlTexture(val id: Int) : AutoCloseable {
     var texture: GpuTexture? = null
-        private set
 
     var sampler: SamplerDescription = SamplerDescription.NEAREST_CLAMP
         private set

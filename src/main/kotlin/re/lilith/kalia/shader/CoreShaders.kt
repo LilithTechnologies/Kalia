@@ -66,8 +66,8 @@ object CoreShaders {
         return ShaderProgram(
             label = label,
             stages = mapOf(
-                ShaderStage.VERTEX to ShaderSource.Glsl("$key.vert", ShaderAssets.assemble("$file.vert", defines)),
-                ShaderStage.FRAGMENT to ShaderSource.Glsl("$key.frag", ShaderAssets.assemble("$file.frag", defines)),
+                ShaderStage.VERTEX to ShaderSource.Glsl("$key.vert", ShaderAssets.assemble("kalia:$file.vert", defines)),
+                ShaderStage.FRAGMENT to ShaderSource.Glsl("$key.frag", ShaderAssets.assemble("kalia:$file.frag", defines)),
             ),
             bindings = buildList {
                 if (format.hasTexture || texGen) {

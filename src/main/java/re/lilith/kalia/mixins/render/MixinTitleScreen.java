@@ -2,22 +2,21 @@ package re.lilith.kalia.mixins.render;
 
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.TitleScreen;
+import net.minecraft.util.Identifier;
 import org.lwjgl.util.glu.Project;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
 
 import re.lilith.kalia.gl.GlBridge;
+import re.lilith.kalia.ui.Panorama;
 
 @Mixin(TitleScreen.class)
 public abstract class MixinTitleScreen extends Screen {
-
-    @Shadow
-    private void renderPanorama(int mouseX, int mouseY, float tickDelta) {
-        throw new AssertionError();
-    }
+    @Unique private final Panorama PANORAMA = new Panorama(new Identifier("kalia", "textures/gui/background/panorama"));
 
     /**
      * @author Lunasa
@@ -25,7 +24,7 @@ public abstract class MixinTitleScreen extends Screen {
      */
     @Overwrite
     private void renderBackground(int mouseX, int mouseY, float tickDelta) {
-        renderPanorama(mouseX, mouseY, tickDelta);
+        PANORAMA.render(true);
     }
 
     @Redirect(

@@ -9,6 +9,7 @@ import re.lilith.kalia.renderer.shader.ShaderSource
 object ShaderAssets {
     private val dumpDirectory = Paths.get(".kalia", "shaders", "source").apply { Files.createDirectories(this) }
 
+    @JvmStatic
     fun assemble(fileName: String, defines: List<String> = emptyList()): String = buildString {
         appendLine("#version 450")
         defines.forEach { appendLine("#define $it") }
@@ -26,8 +27,16 @@ object ShaderAssets {
     }
 
     private fun readAsset(name: String): String {
-        val stream = ShaderAssets::class.java.getResourceAsStream("/assets/kalia/shaders/$name")
-            ?: error("Missing shader asset 'assets/kalia/shaders/$name'.")
+        val (namespace, path) = if (':' in name) {
+            name.substringBefore(':') to name.substringAfter(':')
+        } else {
+            "kalia" to name
+        }
+
+        val stream = ShaderAssets::class.java
+            .getResourceAsStream("/assets/$namespace/shaders/$path")
+            ?: error("Missing shader asset 'assets/$namespace/shaders/$path'.")
+
         return stream.use { it.readBytes().decodeToString() }
     }
 

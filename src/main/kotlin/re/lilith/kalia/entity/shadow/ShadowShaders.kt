@@ -14,8 +14,8 @@ object ShadowShaders {
         ShaderProgram(
             label = "kalia/shadow",
             stages = mapOf(
-                ShaderStage.VERTEX to ShaderSource.Glsl("shadow.vert", ShaderAssets.assemble("shadow.vert")),
-                ShaderStage.FRAGMENT to ShaderSource.Glsl("shadow.frag", ShaderAssets.assemble("shadow.frag")),
+                ShaderStage.VERTEX to ShaderSource.Glsl("shadow.vert", ShaderAssets.assemble("kalia:shadow.vert")),
+                ShaderStage.FRAGMENT to ShaderSource.Glsl("shadow.frag", ShaderAssets.assemble("kalia:shadow.frag")),
             ),
             bindings = listOf(
                 ShaderBinding(

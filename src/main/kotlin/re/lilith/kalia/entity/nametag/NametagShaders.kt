@@ -15,8 +15,8 @@ object NametagShaders {
     fun program(): ShaderProgram = cached ?: ShaderProgram(
         label = "kalia/nametag",
         stages = mapOf(
-            ShaderStage.VERTEX to ShaderSource.Glsl("nametag.vert", ShaderAssets.assemble("nametag.vert", emptyList())),
-            ShaderStage.FRAGMENT to ShaderSource.Glsl("nametag.frag", ShaderAssets.assemble("nametag.frag", emptyList())),
+            ShaderStage.VERTEX to ShaderSource.Glsl("nametag.vert", ShaderAssets.assemble("kalia:nametag.vert", emptyList())),
+            ShaderStage.FRAGMENT to ShaderSource.Glsl("nametag.frag", ShaderAssets.assemble("kalia:nametag.frag", emptyList())),
         ),
         bindings = listOf(
             ShaderBinding(

@@ -1,6 +1,7 @@
 package re.lilith.vulkan.api.internal.vk
 
 import org.lwjgl.vulkan.*
+import org.lwjgl.vulkan.VK10.VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
 
 internal object VulkanConstants {
     object QueueCapabilities {
@@ -131,6 +132,10 @@ internal object VulkanConstants {
         const val x16: Int = VK10.VK_SAMPLE_COUNT_16_BIT
         const val x32: Int = VK10.VK_SAMPLE_COUNT_32_BIT
         const val x64: Int = VK10.VK_SAMPLE_COUNT_64_BIT
+    }
+
+    object ImageFlags {
+        const val cubemapCompatible: Int = VK10.VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
     }
 
     object Formats {
