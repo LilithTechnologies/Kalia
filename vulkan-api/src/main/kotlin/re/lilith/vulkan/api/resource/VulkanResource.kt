@@ -8,7 +8,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 abstract class VulkanResource : AutoCloseable {
     private val closed = AtomicBoolean(false)
-    private val ownedResources = ArrayDeque<VulkanResource>()
+    private val ownedResources = LinkedHashSet<VulkanResource>()
 
     /**
      * Registers [resource] as owned by this resource.
