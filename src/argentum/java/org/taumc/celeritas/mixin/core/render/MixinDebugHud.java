@@ -12,7 +12,7 @@ import org.taumc.celeritas.impl.debug.CeleritasDebugStrings;
 import java.util.List;
 
 @Mixin(DebugHud.class)
-public class DebugOverlayMixin {
+public class MixinDebugHud {
     @Inject(method = "getRightText", at = @At("RETURN"))
     private void appendCeleritasSystemInfo(CallbackInfoReturnable<List<String>> cir) {
         var strings = cir.getReturnValue();

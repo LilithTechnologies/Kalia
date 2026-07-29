@@ -14,7 +14,7 @@ import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 
 @Mixin(ClientChunkProvider.class)
-public class MultiplayerChunkCacheMixin {
+public class MixinClientChunkProvider {
     @Shadow
     private World world;
 

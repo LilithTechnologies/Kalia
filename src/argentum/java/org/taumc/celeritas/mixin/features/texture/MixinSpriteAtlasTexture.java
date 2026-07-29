@@ -8,25 +8,29 @@ import org.embeddedt.embeddium.impl.util.collections.quadtree.Rect2i;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.taumc.celeritas.impl.Celeritas;
 import org.taumc.celeritas.impl.extensions.SpriteExtension;
-import org.taumc.celeritas.impl.extensions.TextureAtlasExtension;
+import org.taumc.celeritas.impl.extensions.SpriteAtlasTextureExtension;
 
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 @Mixin(SpriteAtlasTexture.class)
-public class TextureAtlasMixin implements TextureAtlasExtension {
+public class MixinSpriteAtlasTexture implements SpriteAtlasTextureExtension {
     @Shadow @Final
     private Map<String, Sprite> sprites;
 
+    @Unique
     private QuadTree<Sprite> celeritas$quadTree;
+    @Unique
     private int celeritas$width;
+    @Unique
     private int celeritas$height;
 
     @Inject(method = "m_46857130", at = @At("RETURN"))
@@ -55,15 +59,11 @@ public class TextureAtlasMixin implements TextureAtlasExtension {
     }
 
     @Override
-    public QuadTree<Sprite> celeritas$getQuadTree() {
-        return this.celeritas$quadTree;
-    }
-
-    @Override
     public Sprite celeritas$findFromUV(float u, float v) {
         return this.celeritas$quadTree.find(Math.round(u * this.celeritas$width), Math.round(v * this.celeritas$height));
     }
 
+    @Unique
     private static int nextPowerOfTwo(int value) {
         return value <= 1 ? 1 : Integer.highestOneBit(value - 1) << 1;
     }

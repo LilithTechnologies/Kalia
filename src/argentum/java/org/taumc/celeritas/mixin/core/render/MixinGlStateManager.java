@@ -8,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.taumc.celeritas.impl.debug.RenderMetrics;
 
 @Mixin(GlStateManager.class)
-public abstract class GlStateManagerMixin {
+public abstract class MixinGlStateManager {
     @Inject(method = "callList", at = @At("HEAD"))
     private static void celeritas$countDisplayListDraw(int list, CallbackInfo ci) {
         RenderMetrics.recordDraw();

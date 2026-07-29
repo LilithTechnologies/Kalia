@@ -16,16 +16,7 @@ import net.minecraft.client.render.GameRenderer;
 import re.lilith.kalia.frame.FrameCounter;
 
 @Mixin(GameRenderer.class)
-public class GameRendererMixin {
-    @Shadow
-    private float fogRed;
-
-    @Shadow
-    private float fogGreen;
-
-    @Shadow
-    private float fogBlue;
-
+public class MixinGameRenderer {
     @Shadow
     private MinecraftClient client;
 
@@ -70,12 +61,4 @@ public class GameRendererMixin {
             client.profiler.pop();
         }
     }
-
-    // kalia already captures this
-//    @Inject(method = "setupClearColor", at = @At("RETURN"))
-//    private void captureFogColor(float par1, CallbackInfo ci) {
-//        GLStateManagerFogService.fogColorRed = this.fogRed;
-//        GLStateManagerFogService.fogColorGreen = this.fogGreen;
-//        GLStateManagerFogService.fogColorBlue = this.fogBlue;
-//    }
 }

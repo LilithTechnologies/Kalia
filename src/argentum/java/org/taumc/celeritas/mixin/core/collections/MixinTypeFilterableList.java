@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 @Mixin(TypeFilterableList.class)
-public abstract class TypeInstanceMultimapMixin<T> extends AbstractSet<T> {
+public abstract class MixinTypeFilterableList<T> extends AbstractSet<T> {
     @Shadow
     @Final
     private List<T> allElements;

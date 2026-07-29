@@ -1,4 +1,4 @@
-package org.taumc.celeritas.mixin.core.world;
+package org.taumc.celeritas.mixin.core.access;
 
 import net.minecraft.world.chunk.ClientChunkProvider;
 import org.spongepowered.asm.mixin.Mixin;
@@ -9,7 +9,7 @@ import net.minecraft.world.chunk.Chunk;
 import java.util.List;
 
 @Mixin(ClientChunkProvider.class)
-public interface ClientChunkCacheAccessor {
+public interface ClientChunkProviderAccessor {
     @Accessor("chunks")
     List<Chunk> getAllChunks();
 }

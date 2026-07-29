@@ -17,13 +17,21 @@ import org.taumc.celeritas.impl.render.terrain.texture.GLStateManagerTextureServ
 import java.util.Map;
 
 @Mixin(TextureManager.class)
-public abstract class TextureBindingCaptureMixin {
+public abstract class MixinTextureManager {
     @Unique
     private static final String BLOCK_ATLAS_PATH = "textures/atlas/blocks.png";
 
     @Shadow
     @Final
     private Map<Identifier, Texture> textures;
+
+    @Inject(
+            method = "close",
+            at = @At(value = "INVOKE", target = "Lnet/minecraft/client/texture/TextureUtil;deleteTexture(I)V")
+    )
+    private void celeritas$removeClosedTexture(Identifier identifier, CallbackInfo ci) {
+        this.textures.remove(identifier);
+    }
 
     @Inject(method = "bindTexture", at = @At("HEAD"))
     private void celeritas$captureBoundTexture(Identifier identifier, CallbackInfo ci) {

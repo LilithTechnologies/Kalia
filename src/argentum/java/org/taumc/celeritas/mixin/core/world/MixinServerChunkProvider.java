@@ -16,7 +16,7 @@ import net.minecraft.server.world.ServerWorld;
 import net.minecraft.world.chunk.Chunk;
 
 @Mixin(ServerChunkProvider.class)
-public class ChunkCacheMixin {
+public class MixinServerChunkProvider {
     @Shadow
     private ServerWorld world;
 

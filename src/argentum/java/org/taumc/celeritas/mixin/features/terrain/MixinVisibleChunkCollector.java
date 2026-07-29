@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 import org.taumc.celeritas.impl.render.terrain.ChunkRenderListPool;
 
 @Mixin(VisibleChunkCollector.class)
-public abstract class VisibleChunkCollectorMixin {
+public abstract class MixinVisibleChunkCollector {
     @Redirect(
             method = "createRenderList",
             at = @At(

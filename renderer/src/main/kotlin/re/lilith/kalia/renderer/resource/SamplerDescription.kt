@@ -21,5 +21,14 @@ data class SamplerDescription(
             magFilter = FilterMode.LINEAR,
             mipFilter = FilterMode.LINEAR,
         )
+
+        val LINEAR_REPEAT = SamplerDescription(
+            label = "linear-repeat",
+            minFilter = FilterMode.LINEAR,
+            magFilter = FilterMode.LINEAR,
+            mipFilter = FilterMode.LINEAR,
+            wrapU = WrapMode.REPEAT,
+            wrapV = WrapMode.REPEAT,
+        )
     }
 }

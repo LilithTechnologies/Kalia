@@ -16,7 +16,7 @@ import org.embeddedt.embeddium.impl.util.QuadUtil;
 import org.lwjgl.opengl.GL11C;
 
 import java.nio.IntBuffer;
-import org.taumc.celeritas.impl.extensions.TextureAtlasExtension;
+import org.taumc.celeritas.impl.extensions.SpriteAtlasTextureExtension;
 import org.taumc.celeritas.impl.Celeritas;
 import org.taumc.celeritas.impl.render.terrain.compile.light.PrimitiveLightDataCache;
 import org.taumc.celeritas.impl.render.terrain.compile.pipeline.FastBlockRenderer;
@@ -29,7 +29,7 @@ public class PrimitiveChunkBuildContext extends ChunkBuildContext {
 
     private final BufferBuilder[] layerBuffers = new BufferBuilder[LAYERS.length];
     private final boolean[] usedLayerBuffers = new boolean[LAYERS.length];
-    private final TextureAtlasExtension textureAtlas;
+    private final SpriteAtlasTextureExtension textureAtlas;
     private final RenderPassConfiguration<?> renderPassConfiguration;
     private final PrimitiveLightDataCache lightCache = new PrimitiveLightDataCache();
     private final short[] renderLightCache = new short[20 * 20 * 20];
@@ -43,7 +43,7 @@ public class PrimitiveChunkBuildContext extends ChunkBuildContext {
     public PrimitiveChunkBuildContext(RenderPassConfiguration renderPassConfiguration) {
         super(renderPassConfiguration);
         this.renderPassConfiguration = renderPassConfiguration;
-        this.textureAtlas = (TextureAtlasExtension) MinecraftClient.getInstance().getSpriteAtlasTexture();
+        this.textureAtlas = (SpriteAtlasTextureExtension) MinecraftClient.getInstance().getSpriteAtlasTexture();
     }
 
     public void beginSection(ChunkRenderContext world, int x, int y, int z) {

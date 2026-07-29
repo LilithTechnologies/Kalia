@@ -15,7 +15,7 @@ import org.taumc.celeritas.impl.extensions.ParticleExtension;
 import org.taumc.celeritas.impl.debug.RenderMetrics;
 
 @Mixin(ParticleManager.class)
-public abstract class ParticleManagerMixin {
+public abstract class MixinParticleManager {
     @Unique
     private RenderMetrics.Category celeritas$previousCategory;
 

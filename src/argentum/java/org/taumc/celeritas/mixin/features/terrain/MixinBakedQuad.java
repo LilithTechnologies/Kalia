@@ -12,11 +12,12 @@ import org.embeddedt.embeddium.impl.util.ModelQuadUtil;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
-import org.taumc.celeritas.impl.extensions.TextureAtlasExtension;
+import org.spongepowered.asm.mixin.Unique;
+import org.taumc.celeritas.impl.extensions.SpriteAtlasTextureExtension;
 import org.taumc.celeritas.impl.render.terrain.compile.PrimitiveModelUtil;
 
 @Mixin(BakedQuad.class)
-public abstract class BakedQuadMixin implements BakedQuadView {
+public abstract class MixinBakedQuad implements BakedQuadView {
     @Shadow @Final
     protected int[] vertexData;
     @Shadow @Final
@@ -24,9 +25,13 @@ public abstract class BakedQuadMixin implements BakedQuadView {
     @Shadow @Final
     protected Direction direction;
 
+    @Unique
     private int celeritas$flags;
+    @Unique
     private int celeritas$normal;
+    @Unique
     private ModelQuadFacing celeritas$normalFace;
+    @Unique
     private Sprite celeritas$sprite;
 
     @Override
@@ -92,7 +97,7 @@ public abstract class BakedQuadMixin implements BakedQuadView {
                 u += this.getTexU(i);
                 v += this.getTexV(i);
             }
-            TextureAtlasExtension atlas = (TextureAtlasExtension) MinecraftClient.getInstance().getSpriteAtlasTexture();
+            SpriteAtlasTextureExtension atlas = (SpriteAtlasTextureExtension) MinecraftClient.getInstance().getSpriteAtlasTexture();
             Sprite sprite = atlas.celeritas$findFromUV(u * 0.25F, v * 0.25F);
             this.celeritas$sprite = sprite;
             if (sprite != null && this.isInside(sprite)) {

@@ -14,6 +14,7 @@
   ],
   "client": [
     "access.BufferBuilderAccess",
+    "access.GameRendererAccess",
     "gl.MixinGL11_Compat",
     "gl.MixinGL11_DisplayLists",
     "gl.MixinGL11_FFP",

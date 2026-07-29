@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.taumc.celeritas.impl.gui.CeleritasVideoOptionsScreen;
 
 @Mixin(SettingsScreen.class)
-public abstract class OptionsScreenMixin extends Screen {
+public abstract class MixinSettingsScreen extends Screen {
     @Inject(method = "buttonClicked", at = @At("HEAD"), cancellable = true)
     private void celeritas$openVideoOptions(ButtonWidget button, CallbackInfo ci) {
         if (button.active && button.id == 101) {

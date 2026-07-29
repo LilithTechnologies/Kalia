@@ -9,7 +9,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.taumc.celeritas.impl.render.terrain.ChunkRenderListPool;
 
 @Mixin(ChunkRenderList.class)
-public abstract class ChunkRenderListMixin implements ChunkRenderListPool.Resettable {
+public abstract class MixinChunkRenderList implements ChunkRenderListPool.Resettable {
     @Mutable
     @Shadow
     @Final

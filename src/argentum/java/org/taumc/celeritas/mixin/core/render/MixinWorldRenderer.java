@@ -16,7 +16,7 @@ import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.taumc.celeritas.impl.extensions.RenderGlobalExtension;
+import org.taumc.celeritas.impl.extensions.WorldRendererExtension;
 import org.taumc.celeritas.impl.debug.RenderMetrics;
 import org.taumc.celeritas.impl.render.entity.EntityGatherer;
 import org.taumc.celeritas.impl.render.terrain.CeleritasWorldRenderer;
@@ -36,7 +36,7 @@ import java.util.Iterator;
 import java.util.List;
 
 @Mixin(value = WorldRenderer.class, priority = 900)
-public abstract class WorldRendererMixin implements RenderGlobalExtension {
+public abstract class MixinWorldRenderer implements WorldRendererExtension {
 
     @Shadow
     @Final
@@ -121,6 +121,7 @@ public abstract class WorldRendererMixin implements RenderGlobalExtension {
         updateFrustums(culler, (float)tickDelta);
     }
 
+    @Unique
     public void updateFrustums(CameraView camera, float tick) {
         this.renderer.setupTerrain(((ViewportProvider)camera).sodium$createViewport(),
                 CeleritasWorldRenderer.captureCameraState(tick),
@@ -168,6 +169,7 @@ public abstract class WorldRendererMixin implements RenderGlobalExtension {
         this.renderer.renderBlockEntities(partialTicks);
     }
 
+    @Unique
     private final EntityGatherer celeritas$entityGatherer = new EntityGatherer();
 
     @Inject(method = "renderEntities", at = @At(value = "INVOKE_STRING", target = "Lnet/minecraft/util/profiler/Profiler;swap(Ljava/lang/String;)V", args = "ldc=entities"))

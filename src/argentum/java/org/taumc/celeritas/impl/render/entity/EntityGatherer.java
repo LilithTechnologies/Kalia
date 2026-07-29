@@ -2,8 +2,8 @@ package org.taumc.celeritas.impl.render.entity;
 
 import net.minecraft.util.TypeFilterableList;
 import net.minecraft.world.chunk.Chunk;
-import org.taumc.celeritas.mixin.core.world.ChunkAccessor;
-import org.taumc.celeritas.mixin.core.world.ClientChunkCacheAccessor;
+import org.taumc.celeritas.mixin.core.access.ChunkAccessor;
+import org.taumc.celeritas.mixin.core.access.ClientChunkProviderAccessor;
 
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.entity.Entity;
@@ -29,7 +29,7 @@ public class EntityGatherer {
         Consumer<Entity> addEntity = this.addEntity;
         // Iterate directly over chunk entity lists where possible - mods may create multipart entities that are not
         // added to the main loadedEntityList.
-        if (world.getChunkProvider() instanceof ClientChunkCacheAccessor provider) {
+        if (world.getChunkProvider() instanceof ClientChunkProviderAccessor provider) {
             var loadedChunks = provider.getAllChunks();
             for (Chunk chunk : loadedChunks) {
                 if (!((ChunkAccessor)chunk).getHasEntities()) {

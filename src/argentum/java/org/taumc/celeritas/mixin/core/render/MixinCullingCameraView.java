@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.taumc.celeritas.impl.render.terrain.matrix.PrimitiveChunkMatrixGetter;
 
 @Mixin(CullingCameraView.class)
-public class FrustumCullerMixin implements ViewportProvider {
+public class MixinCullingCameraView implements ViewportProvider {
     @Shadow
     private BaseFrustum clipper;
 

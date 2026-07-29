@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.taumc.celeritas.impl.render.terrain.ChunkRenderListPool;
 
 @Mixin(RenderListManager.class)
-public abstract class RenderListManagerMixin {
+public abstract class MixinRenderListManager {
     @Shadow
     private SortedRenderLists renderLists;
 

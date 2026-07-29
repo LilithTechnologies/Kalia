@@ -14,7 +14,7 @@ import org.taumc.celeritas.impl.world.biome.BiomeColorCache.ColorType;
 import org.taumc.celeritas.impl.world.cloned.ChunkRenderContext;
 
 @Mixin(BiomeColors.class)
-public class BiomeColorsMixin {
+public class MixinBiomeColors {
     @Inject(method = "getGrassColor", at = @At("HEAD"), cancellable = true)
     private static void celeritas$getGrassColor(BlockView world, BlockPos pos, CallbackInfoReturnable<Integer> cir) {
         if (world instanceof ChunkRenderContext context) {

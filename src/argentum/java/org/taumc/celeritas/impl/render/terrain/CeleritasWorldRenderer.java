@@ -11,7 +11,7 @@ import org.embeddedt.embeddium.impl.render.chunk.map.ChunkTrackerHolder;
 import org.embeddedt.embeddium.impl.render.terrain.SimpleWorldRenderer;
 import org.taumc.celeritas.impl.Celeritas;
 import org.taumc.celeritas.impl.debug.RenderMetrics;
-import org.taumc.celeritas.impl.extensions.RenderGlobalExtension;
+import org.taumc.celeritas.impl.extensions.WorldRendererExtension;
 import org.taumc.celeritas.impl.render.terrain.matrix.PrimitiveChunkMatrixGetter;
 import re.lilith.kalia.renderer.device.RenderDevice;
 
@@ -46,7 +46,7 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
     public static CeleritasWorldRenderer instanceNullable() {
         var world = MinecraftClient.getInstance().worldRenderer;
 
-        if (world instanceof RenderGlobalExtension extension) {
+        if (world instanceof WorldRendererExtension extension) {
             return extension.sodium$getWorldRenderer();
         }
 

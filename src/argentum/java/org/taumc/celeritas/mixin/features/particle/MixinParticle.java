@@ -10,7 +10,7 @@ import org.taumc.celeritas.impl.extensions.ParticleExtension;
 import org.taumc.celeritas.impl.render.terrain.CeleritasWorldRenderer;
 
 @Mixin(Particle.class)
-public abstract class ParticleMixin implements ParticleExtension {
+public abstract class MixinParticle implements ParticleExtension {
     @Unique
     private boolean celeritas$visible = true;
 
