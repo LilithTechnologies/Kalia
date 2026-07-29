@@ -1,5 +1,7 @@
 package re.lilith.kalia.renderer.command
 
+import org.lwjgl.system.MemoryUtil
+import re.lilith.kalia.renderer.utility.MemoryAccess
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -10,9 +12,7 @@ import java.nio.ByteOrder
  * @since 1.0.0
  */
 class MultiDrawList(val capacity: Int) {
-    val buffer: ByteBuffer = ByteBuffer
-        .allocateDirect(capacity * STRIDE)
-        .order(ByteOrder.nativeOrder())
+    val buffer = MemoryUtil.nmemAlloc((capacity * STRIDE).toLong())
 
     var size: Int = 0
         private set
@@ -25,18 +25,18 @@ class MultiDrawList(val capacity: Int) {
 
     fun addDraw(indexCount: Int, firstIndex: Int, vertexOffset: Int) {
         check(size < capacity) { "MultiDrawList capacity ($capacity) exceeded." }
-        val base = size * STRIDE
-        buffer.putInt(base, firstIndex)
-        buffer.putInt(base + 4, indexCount)
-        buffer.putInt(base + 8, vertexOffset)
+        val base = buffer + (size * STRIDE)
+        MemoryAccess.putInt(base, firstIndex)
+        MemoryAccess.putInt(base + 4, indexCount)
+        MemoryAccess.putInt(base + 8, vertexOffset)
         size++
     }
 
-    fun firstIndex(draw: Int): Int = buffer.getInt(draw * STRIDE)
+    fun firstIndex(draw: Int): Int = MemoryAccess.getInt(buffer + (draw * STRIDE))
 
-    fun indexCount(draw: Int): Int = buffer.getInt(draw * STRIDE + 4)
+    fun indexCount(draw: Int): Int = MemoryAccess.getInt(buffer + (draw * STRIDE + 4))
 
-    fun vertexOffset(draw: Int): Int = buffer.getInt(draw * STRIDE + 8)
+    fun vertexOffset(draw: Int): Int = MemoryAccess.getInt(buffer + (draw * STRIDE + 8))
 
     fun maxIndexCount(): Int {
         var largest = 0

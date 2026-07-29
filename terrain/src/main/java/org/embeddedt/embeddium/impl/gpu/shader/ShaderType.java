@@ -1,4 +1,4 @@
-package org.embeddedt.embeddium.impl.gl.shader;
+package org.embeddedt.embeddium.impl.gpu.shader;
 
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -9,9 +9,8 @@ import re.lilith.kalia.renderer.shader.ShaderStage;
  */
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 public enum ShaderType {
-    VERTEX(ShaderStage.VERTEX, "vsh"),
-    FRAGMENT(ShaderStage.FRAGMENT, "fsh");
+    VERTEX("vsh"),
+    FRAGMENT("fsh");
 
-    public final ShaderStage stage;
     public final String fileExtension;
 }

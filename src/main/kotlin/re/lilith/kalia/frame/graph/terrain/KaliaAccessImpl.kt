@@ -15,14 +15,11 @@ class KaliaAccessImpl : KaliaAccess {
         return KaliaEngine.device ?: error("Kalia has not started yet! No window/surface is available.")
     }
 
-    override fun pass(): PassContext =
-        GameFrame.current ?: error("No Kalia pass is currently recording.")
+    override fun pass() = GameFrame.current ?: error("No Kalia pass is currently recording.")
 
-    override fun getSubTexelBits(): Int = 8
+    override fun sceneColorFormat() = GameFrameGraph.sceneFormat
 
-    override fun sceneColorFormat(): TextureFormat = GameFrameGraph.sceneFormat
-
-    override fun sceneDepthFormat(): TextureFormat = GameFrameGraph.sceneDepthFormat(device())
+    override fun sceneDepthFormat() = GameFrameGraph.sceneDepthFormat(device())
 
     override fun resolveTexture(texture: Int, out: KaliaAccess.TextureBinding): Boolean {
         val glTexture = TextureTable.get(texture) ?: return false

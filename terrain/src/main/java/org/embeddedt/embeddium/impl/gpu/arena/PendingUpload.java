@@ -1,4 +1,4 @@
-package org.embeddedt.embeddium.impl.gl.arena;
+package org.embeddedt.embeddium.impl.gpu.arena;
 
 import org.embeddedt.embeddium.impl.common.util.NativeBuffer;
 import org.jetbrains.annotations.Nullable;

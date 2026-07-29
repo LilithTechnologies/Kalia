@@ -6,7 +6,7 @@ import org.lwjgl.system.MemoryUtil;
 import org.lwjgl.system.Pointer;
 import org.taumc.celeritas.lwjgl.LWJGLService;
 import org.taumc.celeritas.lwjgl.MemoryStack;
-import re.lilith.kalia.utility.MemoryAccess;
+import re.lilith.kalia.renderer.utility.MemoryAccess;
 
 import java.nio.Buffer;
 import java.nio.ByteBuffer;

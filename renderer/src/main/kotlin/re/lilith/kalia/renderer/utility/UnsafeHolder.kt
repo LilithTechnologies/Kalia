@@ -1,4 +1,4 @@
-package re.lilith.kalia.utility
+package re.lilith.kalia.renderer.utility
 
 import sun.misc.Unsafe
 

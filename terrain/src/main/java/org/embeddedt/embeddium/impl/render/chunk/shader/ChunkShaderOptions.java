@@ -1,6 +1,6 @@
 package org.embeddedt.embeddium.impl.render.chunk.shader;
 
-import org.embeddedt.embeddium.impl.gl.shader.ShaderConstants;
+import org.embeddedt.embeddium.impl.gpu.shader.ShaderConstants;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
 
 import java.util.List;

@@ -15,6 +15,7 @@ import re.lilith.kalia.renderer.graph.TextureHandle
 import re.lilith.kalia.renderer.pipeline.AttachmentLayout
 import re.lilith.kalia.renderer.resource.*
 import re.lilith.kalia.renderer.shader.BindingKind
+import re.lilith.kalia.renderer.utility.MemoryAccess
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.vulkan.api.command.*
 import re.lilith.vulkan.api.descriptor.BufferDescriptorInfo
@@ -296,7 +297,7 @@ internal class VulkanPassEncoder(
         val context = backend.context
         when {
             context.supportsMultiDraw -> {
-                val base = MemoryUtil.memAddress0(draws.buffer)
+                val base = draws.buffer
                 val maxPerCall = context.maxMultiDrawCount.coerceAtLeast(1)
                 var start = 0
                 while (start < drawCount) {
@@ -325,15 +326,25 @@ internal class VulkanPassEncoder(
     private fun drawIndirect(draws: MultiDrawList, drawCount: Int) {
         val bytes = drawCount.toLong() * INDIRECT_STRIDE
         val buffer = reserveIndirect(bytes)
-        val target = requireNotNull(buffer.mapped())
-        var write = indirectOffset.toInt()
-        for (draw in 0 until drawCount) {
-            target.putInt(write, draws.indexCount(draw))
-            target.putInt(write + 4, 1)
-            target.putInt(write + 8, draws.firstIndex(draw))
-            target.putInt(write + 12, draws.vertexOffset(draw))
-            target.putInt(write + 16, 0)
-            write += INDIRECT_STRIDE
+
+        val dstBase = MemoryUtil.memAddress(requireNotNull(buffer.mapped()))
+        var dst = dstBase + indirectOffset
+
+        var src = draws.buffer
+
+        repeat(drawCount) {
+            val firstIndex = MemoryAccess.getInt(src)
+            val indexCount = MemoryAccess.getInt(src + 4)
+            val vertexOffset = MemoryAccess.getInt(src + 8)
+
+            MemoryAccess.putInt(dst, indexCount)
+            MemoryAccess.putInt(dst + 4, 1)
+            MemoryAccess.putInt(dst + 8, firstIndex)
+            MemoryAccess.putInt(dst + 12, vertexOffset)
+            MemoryAccess.putInt(dst + 16, 0)
+
+            src += MultiDrawList.STRIDE.toLong()
+            dst += INDIRECT_STRIDE.toLong()
         }
 
         VK10.vkCmdDrawIndexedIndirect(
@@ -343,6 +354,7 @@ internal class VulkanPassEncoder(
             drawCount,
             INDIRECT_STRIDE,
         )
+
         indirectOffset += bytes
     }
 

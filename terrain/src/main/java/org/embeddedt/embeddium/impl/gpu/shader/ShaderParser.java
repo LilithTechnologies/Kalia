@@ -1,4 +1,4 @@
-package org.embeddedt.embeddium.impl.gl.shader;
+package org.embeddedt.embeddium.impl.gpu.shader;
 
 import java.io.BufferedReader;
 import java.io.IOException;

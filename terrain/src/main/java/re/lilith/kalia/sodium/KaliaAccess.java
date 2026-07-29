@@ -13,8 +13,6 @@ public interface KaliaAccess {
 
     PassContext pass();
 
-    int getSubTexelBits();
-
     TextureFormat sceneColorFormat();
 
     TextureFormat sceneDepthFormat();

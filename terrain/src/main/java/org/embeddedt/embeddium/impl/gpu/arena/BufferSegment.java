@@ -1,4 +1,4 @@
-package org.embeddedt.embeddium.impl.gl.arena;
+package org.embeddedt.embeddium.impl.gpu.arena;
 
 import lombok.Getter;
 

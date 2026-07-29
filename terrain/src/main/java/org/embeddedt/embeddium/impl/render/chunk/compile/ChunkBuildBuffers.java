@@ -2,10 +2,9 @@ package org.embeddedt.embeddium.impl.render.chunk.compile;
 
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
 import lombok.Getter;
-import org.embeddedt.embeddium.impl.gl.util.VertexRange;
+import org.embeddedt.embeddium.impl.gpu.util.VertexRange;
 import org.embeddedt.embeddium.impl.model.quad.properties.ModelQuadFacing;
 import org.embeddedt.embeddium.impl.render.chunk.RenderPassConfiguration;
-import org.embeddedt.embeddium.impl.render.chunk.RenderSection;
 import org.embeddedt.embeddium.impl.render.chunk.compile.buffers.BakedChunkModelBuilder;
 import org.embeddedt.embeddium.impl.render.chunk.compile.buffers.ChunkModelBuilder;
 import org.embeddedt.embeddium.impl.render.chunk.data.BuiltRenderSectionData;
@@ -14,7 +13,6 @@ import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.material.Material;
 import org.embeddedt.embeddium.impl.common.util.NativeBuffer;
 import org.embeddedt.embeddium.impl.render.chunk.sorting.TranslucentQuadAnalyzer;
-import org.embeddedt.embeddium.impl.render.chunk.vertex.format.ChunkVertexEncoder;
 
 import java.nio.ByteBuffer;
 import java.util.*;

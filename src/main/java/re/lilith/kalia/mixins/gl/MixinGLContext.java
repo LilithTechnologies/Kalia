@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
-import re.lilith.kalia.utility.UnsafeHolder;
+import re.lilith.kalia.renderer.utility.UnsafeHolder;
 
 // "this is a great idea bro trust me"
 @Mixin(GLContext.class)

@@ -9,6 +9,9 @@ repositories.mavenCentral()
 
 dependencies {
     api(libs.joml)
+
+    // We need this for MemoryUtil
+    implementation(libs.lwjgl)
 }
 
 kotlin {

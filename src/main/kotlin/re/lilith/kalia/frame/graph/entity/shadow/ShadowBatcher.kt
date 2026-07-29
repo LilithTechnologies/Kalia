@@ -19,7 +19,7 @@ import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.gl.emulation.GlTexture
-import re.lilith.kalia.utility.MemoryAccess
+import re.lilith.kalia.renderer.utility.MemoryAccess
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 

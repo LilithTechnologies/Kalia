@@ -1,4 +1,4 @@
-package org.embeddedt.embeddium.impl.gl.arena;
+package org.embeddedt.embeddium.impl.gpu.arena;
 
 import org.jetbrains.annotations.Nullable;
 import re.lilith.kalia.renderer.device.RenderDevice;
@@ -78,7 +78,7 @@ public class BufferArena {
         if (usedSegments.isEmpty()) {
             this.head.setNext(null);
         } else {
-            this.head.setNext(usedSegments.get(0));
+            this.head.setNext(usedSegments.getFirst());
             this.head.getNext()
                     .setPrev(this.head);
         }
