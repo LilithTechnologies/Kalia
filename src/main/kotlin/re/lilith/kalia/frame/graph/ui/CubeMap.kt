@@ -6,6 +6,7 @@ import org.lwjgl.opengl.GL11
 import re.lilith.kalia.KaliaEngine
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
+import re.lilith.kalia.frame.GameFrameGraph
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.gl.MatrixState
@@ -28,7 +29,7 @@ class CubeMap(
 ) {
     private val mesh: UploadedMesh
     private val sampler: GpuSampler
-    private var pipeline: GpuPipeline? = null
+    private val pipeline: GpuPipeline
 
     private var lastDescAttachments: AttachmentLayout? = null
 
@@ -73,15 +74,26 @@ class CubeMap(
             quad()
         }.upload(device, "cube-map-vertices")
 
+        pipeline = device.createPipeline(
+            GraphicsPipelineDescription(
+                CubeMapShaders.program(),
+                VertexFormats.POSITION,
+                AttachmentLayout(colorFormats = listOf(GameFrameGraph.sceneFormat), depthFormat = device.capabilities.supportedDepthFormats.first()),
+                RasterState.TWO_SIDED,
+                DepthState.READ_WRITE,
+            )
+        )
+
         sampler = device.createSampler(SamplerDescription.LINEAR_CLAMP)
     }
 
     fun render(rotationX: Float, rotationY: Float) {
         val encoder = GameFrame.current ?: throw Exception("Kalia isn't initialized yet")
-        if (encoder.attachments != lastDescAttachments || pipeline == null) recreatePipeline(encoder.attachments)
 
-        val nativeTexture = TextureTable.get(MinecraftClient.getInstance().textureManager.getTexture(texture).glId)?.texture ?: throw Exception("Texture '$texture' does not exist")
-            val resources = FrameResources.of(encoder.device)
+        val nativeTexture =
+            TextureTable.get(MinecraftClient.getInstance().textureManager.getTexture(texture).glId)?.texture
+                ?: throw Exception("Texture '$texture' does not exist")
+        val resources = FrameResources.of(encoder.device)
 
         MatrixState.matrixMode(GL11.GL_MODELVIEW)
         MatrixState.pushMatrix()
@@ -91,7 +103,12 @@ class CubeMap(
         MatrixState.pushMatrix()
         MatrixState.loadIdentity()
 
-        MatrixState.perspective(PROJ_FOV, encoder.extent.width.toDouble() / encoder.extent.height.toDouble(), PROJ_Z_NEAR, PROJ_Z_FAR)
+        MatrixState.perspective(
+            PROJ_FOV,
+            encoder.extent.width.toDouble() / encoder.extent.height.toDouble(),
+            PROJ_Z_NEAR,
+            PROJ_Z_FAR
+        )
 
         MatrixState.matrixMode(GL11.GL_MODELVIEW)
         MatrixState.rotate(180f, 1f, 0f, 0f)
@@ -100,48 +117,27 @@ class CubeMap(
 
         MatrixState.flush()
 
-        pipeline?.let {
-            encoder.bindPipeline(it)
-            encoder.lineWidth(GlState.lineWidth)
-            encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, nativeTexture, sampler)
-            resources.sceneUniforms.sync()
-            encoder.bindUniformBuffer(
-                binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-                buffer = resources.sceneUniforms.uniformBuffer,
-                offsetBytes = resources.sceneUniforms.offsetBytes,
-                sizeBytes = resources.sceneUniforms.sizeBytes,
-            )
-            encoder.pushConstants(ShaderUniforms.pushConstants())
+        encoder.bindPipeline(pipeline)
+        encoder.lineWidth(GlState.lineWidth)
+        encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, nativeTexture, sampler)
+        resources.sceneUniforms.sync()
+        encoder.bindUniformBuffer(
+            binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
+            buffer = resources.sceneUniforms.uniformBuffer,
+            offsetBytes = resources.sceneUniforms.offsetBytes,
+            sizeBytes = resources.sceneUniforms.sizeBytes,
+        )
+        encoder.pushConstants(ShaderUniforms.pushConstants())
 
-            mesh.draw(encoder)
-        }
-
-        GlBridge.disableDepthTest()
+        mesh.draw(encoder)
 
         MatrixState.popMatrix()
         MatrixState.matrixMode(GL11.GL_PROJECTION)
         MatrixState.popMatrix()
         MatrixState.matrixMode(GL11.GL_MODELVIEW)
-
-    }
-
-    private fun recreatePipeline(attachments: AttachmentLayout) {
-        pipeline?.close()
-        val device = GameFrame.current?.device ?: throw Exception("Kalia isn't initialized yet")
-        pipeline = device.createPipeline(
-            GraphicsPipelineDescription(
-                CubeMapShaders.program(),
-                VertexFormats.POSITION,
-                attachments,
-                depth = DepthState.READ_WRITE,
-                raster = RasterState.TWO_SIDED
-            )
-        )
-        this.lastDescAttachments = attachments
     }
 
     companion object {
-        private const val SIDES = 6
         private const val PROJ_Z_NEAR = 0.05
         private const val PROJ_Z_FAR = 10.0
         private const val PROJ_FOV = 85.0
