@@ -31,8 +31,6 @@ class CubeMap(
     private val sampler: GpuSampler
     private val pipeline: GpuPipeline
 
-    private var lastDescAttachments: AttachmentLayout? = null
-
     init {
         val device = KaliaEngine.device ?: throw Exception("Kalia isn't initialized yet")
 
