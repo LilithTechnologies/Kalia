@@ -10,7 +10,6 @@ public class CeleritasConfig {
     public AsyncOcclusionMode asyncOcclusion = AsyncOcclusionMode.EVERYTHING;
     public boolean fogCulling = true;
     public boolean entityCulling = true;
-    public boolean entityInstancing = true;
     public int entityOcclusionIntervalMs = 50;
     public boolean particleCulling = true;
     public boolean blockFaceCulling = true;
@@ -23,8 +22,6 @@ public class CeleritasConfig {
     public Set<String> renderPassDowngradeDenylist = new HashSet<>();
     public boolean safeChunkEdges = true;
     public boolean compactVertexFormat = false;
-    public boolean checkGlErrors = false;
-    public boolean fontBatching = true;
     public boolean fpsOverlay = true;
 
 	public void validate() {

@@ -261,32 +261,16 @@ final class CeleritasOptionPages {
                 .add(toggle(StandardOptions.Option.ENTITY_CULLING,
                         "sodium.options.use_entity_culling", OptionImpact.MEDIUM,
                         (config, value) -> config.entityCulling = value, config -> config.entityCulling))
-                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
-                        .setId(id("entity_occlusion_interval"))
-                        .setName(text("entity_occlusion_interval.name"))
-                        .setTooltip(text("entity_occlusion_interval.tooltip"))
-                        .setControl(option -> new SliderControl(option, 0, 500, 10,
-                                value -> text("value.milliseconds", value)))
-                        .setBinding((config, value) -> config.entityOcclusionIntervalMs = value,
-                                config -> config.entityOcclusionIntervalMs)
-                        .setEnabledPredicate(() -> CONFIG.entityCulling)
-                        .setImpact(OptionImpact.VARIES)
-                        .build())
                 .add(toggle("particle_culling", OptionImpact.LOW,
                         (config, value) -> config.particleCulling = value, config -> config.particleCulling))
                 .build();
 
         OptionGroup rendering = OptionGroup.createBuilder()
-                .setId(OptionIdentifier.create("celeritas", "rendering"))
-                .add(toggle("entity_instancing", OptionImpact.HIGH,
-                        (config, value) -> config.entityInstancing = value, config -> config.entityInstancing))
+                .setId(OptionIdentifier.create("kalia", "rendering"))
                 .add(toggle(StandardOptions.Option.ANIMATE_VISIBLE_TEXTURES,
                         "sodium.options.animate_only_visible_textures", OptionImpact.HIGH,
                         (config, value) -> config.animateOnlyVisibleTextures = value,
                         config -> config.animateOnlyVisibleTextures, OptionFlag.REQUIRES_RENDERER_UPDATE))
-                .add(toggle("font_batching", OptionImpact.MEDIUM,
-                        (config, value) -> config.fontBatching = value,
-                        config -> config.fontBatching))
                 .add(toggle(StandardOptions.Option.TRANSLUCENT_FACE_SORTING,
                         "sodium.options.translucent_face_sorting", OptionImpact.VARIES,
                         (config, value) -> config.translucencySorting = value,
@@ -308,26 +292,14 @@ final class CeleritasOptionPages {
     }
 
     static OptionPage advanced() {
-        OptionGroup cpuSaving = OptionGroup.createBuilder()
-                .setId(StandardOptions.Group.CPU_SAVING)
-                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
-                        .setId(StandardOptions.Option.CPU_FRAMES_AHEAD.cast())
-                        .setName(TextComponent.translatable("sodium.options.cpu_render_ahead_limit.name"))
-                        .setTooltip(TextComponent.translatable("sodium.options.cpu_render_ahead_limit.tooltip"))
-                        .setControl(option -> new SliderControl(option, 0, 9, 1,
-                                value -> TextComponent.translatable("sodium.options.cpu_render_ahead_limit.value", value)))
-                        .setBinding((config, value) -> config.cpuRenderAheadLimit = value,
-                                config -> config.cpuRenderAheadLimit)
-                        .build())
-                .build();
 
         OptionGroup diagnostics = OptionGroup.createBuilder()
-                .setId(OptionIdentifier.create("celeritas", "diagnostics"))
+                .setId(OptionIdentifier.create("kalia", "diagnostics"))
                 .add(toggle("fps_overlay", OptionImpact.LOW,
                         (config, value) -> config.fpsOverlay = value, config -> config.fpsOverlay))
                 .build();
         return new OptionPage(StandardOptions.Pages.ADVANCED, text("pages.advanced"),
-                List.of(cpuSaving, diagnostics));
+                List.of(diagnostics));
     }
 
     private static OptionImpl<CeleritasConfig, Boolean> toggle(String id, OptionImpact impact,
@@ -351,7 +323,7 @@ final class CeleritasOptionPages {
     }
 
     private static <T> OptionIdentifier<T> id(String path) {
-        return OptionIdentifier.create("celeritas", path).cast();
+        return OptionIdentifier.create("kalia", path).cast();
     }
 
     private static TextComponent text(String path, Object... args) {

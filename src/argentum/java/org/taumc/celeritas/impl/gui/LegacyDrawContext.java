@@ -128,6 +128,6 @@ final class LegacyDrawContext implements DrawContext {
     @Override
     public @Nullable String getModLogoPath(String modId) {
         // TODO
-        return "celeritas".equals(modId) ? "kalia:textures/gui/icon.png" : null;
+        return "kalia".equals(modId) ? "kalia:textures/gui/icon.png" : null;
     }
 }
