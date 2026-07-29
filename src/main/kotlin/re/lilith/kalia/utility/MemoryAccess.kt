@@ -15,15 +15,8 @@ object MemoryAccess {
     private val BITS32 = Pointer.BITS32
 
     init {
-        try {
-            val field = Unsafe::class.java.getDeclaredField("theUnsafe")
-            field.setAccessible(true)
-
-            UNSAFE = field.get(null) as Unsafe
-            BUFFER_ADDRESS_OFFSET = UNSAFE.objectFieldOffset(Buffer::class.java.getDeclaredField("address"))
-        } catch (e: Exception) {
-            throw RuntimeException("Could not acquire Unsafe", e)
-        }
+        UNSAFE = UnsafeHolder.UNSAFE
+        BUFFER_ADDRESS_OFFSET = UNSAFE.objectFieldOffset(Buffer::class.java.getDeclaredField("address"))
     }
 
     @JvmStatic

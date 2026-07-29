@@ -11,6 +11,7 @@ import net.minecraft.util.Identifier;
 import org.embeddedt.embeddium.impl.gui.framework.DrawContext;
 import org.embeddedt.embeddium.impl.gui.framework.TextComponent;
 import org.embeddedt.embeddium.impl.gui.framework.TextFormattingStyle;
+import org.jetbrains.annotations.NotNull;
 import org.lwjgl.opengl.GL11;
 import org.jetbrains.annotations.Nullable;
 
@@ -35,7 +36,7 @@ final class LegacyDrawContext implements DrawContext {
     }
 
     @Override
-    public void blitWholeImage(String texture, int x, int y, int width, int height) {
+    public void blitWholeImage(@NotNull String texture, int x, int y, int width, int height) {
         this.minecraft.getTextureManager().bindTexture(new Identifier(texture));
         DrawableHelper.drawTexture(x, y, 0.0F, 0.0F, width, height, width, height);
     }
