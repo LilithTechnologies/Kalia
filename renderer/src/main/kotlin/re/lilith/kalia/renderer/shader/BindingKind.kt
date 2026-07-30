@@ -12,6 +12,11 @@ enum class BindingKind {
     UNIFORM_BUFFER,
 
     /**
+     * A uniform block whose offset is supplied when the set is bound rather than baked into descriptor.
+     */
+    UNIFORM_BUFFER_DYNAMIC,
+
+    /**
      * A storage block, `layout(binding = n) buffer Block { ... }`
      */
     STORAGE_BUFFER,

@@ -3,6 +3,7 @@ package re.lilith.kalia.frame
 import re.lilith.kalia.buffer.SharedIndexBuffer
 import re.lilith.kalia.buffer.StreamArena
 import re.lilith.kalia.renderer.device.RenderDevice
+import re.lilith.kalia.renderer.device.RenderStats
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
@@ -52,10 +53,22 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
 
     private val samplerCache = HashMap<SamplerDescription, GpuSampler>()
 
-    fun sampler(description: SamplerDescription): GpuSampler =
-        samplerCache.getOrPut(description) { device.createSampler(description) }
+    private var memoDescription: SamplerDescription? = null
+    private var memoSampler: GpuSampler? = null
+
+    fun sampler(description: SamplerDescription): GpuSampler {
+        val cached = memoSampler
+        if (cached != null && memoDescription === description) {
+            return cached
+        }
+        val resolved = samplerCache.getOrPut(description) { device.createSampler(description) }
+        memoDescription = description
+        memoSampler = resolved
+        return resolved
+    }
 
     fun beginFrame() {
+        RenderStats.beginFrame()
         streamIndex = (streamIndex + 1) % streams.size
         vertexArena.reset()
         sceneUniforms.beginFrame()

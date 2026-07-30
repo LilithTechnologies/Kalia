@@ -1,6 +1,7 @@
 package org.taumc.celeritas.impl.render.terrain.compile.task;
 
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceMap;
+import net.minecraft.block.Blocks;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.util.crash.CrashReportSection;
 import org.embeddedt.embeddium.impl.render.chunk.RenderSection;
@@ -83,7 +84,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                         var blockState = this.renderContext.getBlockState(blockPos);
                         var block = blockState.getBlock();
 
-                        if (block == net.minecraft.block.Blocks.AIR) {
+                        if (block == Blocks.AIR) {
                             continue;
                         }
 

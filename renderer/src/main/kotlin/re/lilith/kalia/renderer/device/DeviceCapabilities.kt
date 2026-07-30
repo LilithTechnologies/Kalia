@@ -53,6 +53,18 @@ data class DeviceCapabilities(
      */
     val framesInFlight: Int,
     /**
+     * Whether uploads run on a queue family independent of graphics.
+     */
+    val dedicatedTransferQueue: Boolean = false,
+    /**
+     * Whether compute can run on a queue family independent of graphics.
+     */
+    val asyncCompute: Boolean = false,
+    /**
+     * Whether the backend can run compute shaders at all
+     */
+    val supportsCompute: Boolean = false,
+    /**
      * The number of fractional bits used to represent coordinates within a
      * single texture element (texel) during texture sampling.
      */

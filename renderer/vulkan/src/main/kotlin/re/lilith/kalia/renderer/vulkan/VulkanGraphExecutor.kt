@@ -6,6 +6,8 @@ import re.lilith.kalia.renderer.graph.*
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.kalia.renderer.vulkan.utils.TransientTexturePool
 import re.lilith.vulkan.api.command.CommandRecorder
+import re.lilith.vulkan.api.debug.beginDebugLabel
+import re.lilith.vulkan.api.debug.endDebugLabel
 import re.lilith.vulkan.api.command.pipelineBarrier
 import re.lilith.vulkan.api.rendering.RenderingAttachmentInfo
 import re.lilith.vulkan.api.rendering.RenderingInfo
@@ -176,6 +178,7 @@ internal class VulkanGraphExecutor(
                 pass.depthAttachment?.let { put(it.target.id, bound.getValue(it.target.id)) }
             },
         )
+        recorder.beginDebugLabel(pass.name)
         encoder.open()
         encoder.viewport(Viewport.of(extent))
         encoder.scissor(null)
@@ -184,6 +187,7 @@ internal class VulkanGraphExecutor(
             pass.body(encoder)
         } finally {
             encoder.finish()
+            recorder.endDebugLabel()
         }
     }
 

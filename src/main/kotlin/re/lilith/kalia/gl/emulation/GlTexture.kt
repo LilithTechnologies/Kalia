@@ -40,6 +40,11 @@ class GlTexture(val id: Int) : AutoCloseable {
     val poolHeight: Int get() = height
     val poolFormat: TextureFormat get() = format
 
+    val hasShadow: Boolean get() = shadow != null
+
+    var pooledSampler: SamplerDescription = sampler.copy(label = POOLED_SAMPLER_LABEL)
+        private set
+
     fun shadowPixels(): ByteBuffer? = shadow?.duplicate()?.also {
         it.position(0)
         it.limit((width * height * format.bytesPerPixel))
@@ -209,6 +214,7 @@ class GlTexture(val id: Int) : AutoCloseable {
             wrapV = wrapMode(wrap),
             maxLod = if (usesMipmaps(minFilter)) maxOf(maxLod, (levels - 1).toFloat()) else 0f,
         )
+        pooledSampler = sampler.copy(label = POOLED_SAMPLER_LABEL)
     }
 
     private fun uploadSubRectangle(
@@ -277,6 +283,8 @@ class GlTexture(val id: Int) : AutoCloseable {
     )
 
     private companion object {
+        const val POOLED_SAMPLER_LABEL = "kalia/texture-array"
+
         fun isLinear(filter: Int): Boolean =
             filter == GL_LINEAR || filter == GL_LINEAR_MIPMAP_NEAREST || filter == GL_LINEAR_MIPMAP_LINEAR
 

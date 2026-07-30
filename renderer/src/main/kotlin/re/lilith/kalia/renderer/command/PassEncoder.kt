@@ -157,6 +157,18 @@ interface PassEncoder {
     )
 
     /**
+     * Issues indexed draws read from a device buffer, for draw arguments produced by compute.
+     *
+     * @param buffer Buffer holding tightly packed `VkDrawIndexedIndirectCommand` records.
+     * @param offsetBytes Byte offset of the first record.
+     * @param drawCount Maximum records to execute.
+     * @param strideBytes Byte distance between records.
+     */
+    fun drawIndexedIndirect(buffer: GpuBuffer, offsetBytes: Long, drawCount: Int, strideBytes: Int = 20) {
+        throw UnsupportedOperationException("This backend does not support indirect draws.")
+    }
+
+    /**
      * Executes multiple indexed draws from a prebuilt [MultiDrawList].
      *
      * The implementation may vary by backend. On Vulkan, the [VK_EXT_multi_draw](https://docs.vulkan.org/refpages/latest/refpages/source/VK_EXT_multi_draw.html) extension is

@@ -11,6 +11,7 @@ object CoreShaders {
     private const val TEXGEN_BIT = 1 shl 8
     private const val INSTANCED_BIT = 1 shl 9
     private const val TEXTURE_ARRAY_BIT = 1 shl 10
+    private const val TEXTURE_SLOTS_BIT = 1 shl 11
 
     private val programs = Int2ObjectOpenHashMap<ShaderProgram>()
 
@@ -25,6 +26,25 @@ object CoreShaders {
                 format = format,
                 texGen = texGen,
                 signature = signature,
+            )
+        }
+    }
+
+    /**
+     * A core program that samples one of [ShaderPrelude.Bindings.TEXTURE_SLOT_COUNT] bound textures per
+     * vertex, so draws differing only in texture can be merged into one.
+     */
+    fun slottedProgramFor(format: TranslatedVertexFormat): ShaderProgram {
+        val signature = signature(format) or TEXTURE_SLOTS_BIT
+        return programs.getOrPut(signature) {
+            build(
+                label = "kalia/core/${format.shaderKey}-slots",
+                key = "${format.shaderKey}-slots",
+                file = "core",
+                format = format,
+                texGen = false,
+                signature = signature,
+                textureSlots = true,
             )
         }
     }
@@ -53,6 +73,7 @@ object CoreShaders {
         texGen: Boolean,
         signature: Int,
         textureArray: Boolean = false,
+        textureSlots: Boolean = false,
     ): ShaderProgram {
         val defines = buildList {
             if (format.hasColor) add("HAS_COLOR")
@@ -62,6 +83,7 @@ object CoreShaders {
             if (format.hasNormal) add("HAS_NORMAL")
             if (texGen) add("TEXGEN")
             if (textureArray) add("TEXTURE_ARRAY")
+            if (textureSlots) add("TEXTURE_SLOTS")
         }
         return ShaderProgram(
             label = label,
@@ -80,6 +102,18 @@ object CoreShaders {
                         ),
                     )
                 }
+                if (textureSlots) {
+                    for (slot in 1 until ShaderPrelude.Bindings.TEXTURE_SLOT_COUNT) {
+                        add(
+                            ShaderBinding(
+                                name = "kaliaSlot$slot",
+                                binding = ShaderPrelude.Bindings.TEXTURE_SLOT_BASE + slot - 1,
+                                kind = BindingKind.TEXTURE,
+                                stages = setOf(ShaderStage.FRAGMENT),
+                            ),
+                        )
+                    }
+                }
                 add(
                     ShaderBinding(
                         name = "kaliaLightmapTexture",
@@ -92,7 +126,7 @@ object CoreShaders {
                     ShaderBinding(
                         name = "KaliaScene",
                         binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-                        kind = BindingKind.UNIFORM_BUFFER,
+                        kind = BindingKind.UNIFORM_BUFFER_DYNAMIC,
                         stages = setOf(ShaderStage.VERTEX, ShaderStage.FRAGMENT),
                     ),
                 )

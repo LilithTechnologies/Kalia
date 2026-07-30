@@ -58,6 +58,22 @@ object KaliaEngine {
                     created.capabilities.adapterName,
                     created.capabilities.apiVersion,
                 )
+                KaliaMod.LOGGER.info(
+                    "Uploads run on {}",
+                    if (created.capabilities.dedicatedTransferQueue) {
+                        "a dedicated transfer queue"
+                    } else {
+                        "the graphics queue (no independent transfer family)"
+                    },
+                )
+                KaliaMod.LOGGER.info(
+                    "Compute: {}",
+                    when {
+                        !created.capabilities.supportsCompute -> "unsupported"
+                        created.capabilities.asyncCompute -> "async on an independent queue"
+                        else -> "inline on the graphics queue (no independent compute family)"
+                    },
+                )
                 val reported = surface.framebufferExtent
                 if (reported != created.surfaceExtent) {
                     KaliaMod.LOGGER.warn(

@@ -7,6 +7,8 @@ import org.taumc.celeritas.impl.Celeritas;
 import org.taumc.celeritas.impl.render.terrain.CeleritasWorldRenderer;
 import re.lilith.kalia.frame.graph.entity.cuboid.CuboidBatcher;
 
+import re.lilith.kalia.renderer.device.RenderStats;
+
 import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,18 @@ public class CeleritasDebugStrings {
 
         if (renderer != null) {
             renderer.getDebugStrings().forEach(str -> stringsToRender.add(Pair.of(str, -1)));
+        }
+
+        stringsToRender.add(Pair.of("", -1));
+        stringsToRender.add(Pair.of("Frame Breakdown", 0xFFFFAA00));
+        for (String line : RenderMetrics.getDebugStrings()) {
+            stringsToRender.add(Pair.of(line, -1));
+        }
+
+        stringsToRender.add(Pair.of("", -1));
+        stringsToRender.add(Pair.of("Kalia Backend", 0xFF55FFFF));
+        for (String line : RenderStats.INSTANCE.summary()) {
+            stringsToRender.add(Pair.of(line, -1));
         }
 
         return stringsToRender;

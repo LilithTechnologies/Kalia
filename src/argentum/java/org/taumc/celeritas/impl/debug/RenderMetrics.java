@@ -7,6 +7,9 @@ import java.util.concurrent.atomic.LongAdder;
 public final class RenderMetrics {
     private static final long SAMPLE_NANOS = 1_000_000_000L;
     private static final long[] frameDraws = new long[Category.values().length];
+
+    private static final long[] frameNanos = new long[Category.values().length];
+    private static long categoryStarted = System.nanoTime();
     private static final LongAdder chunkBuildCount = new LongAdder();
     private static final LongAdder chunkBuildNanos = new LongAdder();
     private static final AtomicLong longestChunkBuild = new AtomicLong();
@@ -22,12 +25,15 @@ public final class RenderMetrics {
     private static long fontBatches;
     private static boolean frameStarted;
     private static List<String> debugStrings = format(new double[Category.values().length],
-            0, 0, 0, 0, 0, 0, 0, 0, 0);
+            new double[Category.values().length], 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     private RenderMetrics() {
     }
 
     public static void beginFrame() {
+        long now = System.nanoTime();
+        frameNanos[category.ordinal()] += now - categoryStarted;
+        categoryStarted = now;
         category = Category.OTHER;
         if (!frameStarted) {
             frameStarted = true;
@@ -35,13 +41,16 @@ public final class RenderMetrics {
         }
 
         sampledFrames++;
-        long now = System.nanoTime();
         if (now - sampleStarted >= SAMPLE_NANOS) {
             publish(now);
         }
     }
 
     public static Category setCategory(Category next) {
+        long now = System.nanoTime();
+        frameNanos[category.ordinal()] += now - categoryStarted;
+        categoryStarted = now;
+
         Category previous = category;
         category = next;
         return previous;
@@ -101,10 +110,16 @@ public final class RenderMetrics {
             frameDraws[i] = 0;
         }
 
+        double[] millisAverages = new double[frameNanos.length];
+        for (int i = 0; i < frameNanos.length; i++) {
+            millisAverages[i] = frameNanos[i] / (frames * 1_000_000.0D);
+            frameNanos[i] = 0;
+        }
+
         long builds = chunkBuildCount.sumThenReset();
         long buildNanos = chunkBuildNanos.sumThenReset();
         long elapsed = now - sampleStarted;
-        debugStrings = format(drawAverages,
+        debugStrings = format(drawAverages, millisAverages,
                 (double)renderedEntities / frames, (double)culledEntities / frames,
                 (double)renderedBlockEntities / frames, (double)renderedParticles / frames,
                 (double)culledParticles / frames, (double)fontBatches / frames,
@@ -122,7 +137,7 @@ public final class RenderMetrics {
         sampleStarted = now;
     }
 
-    private static List<String> format(double[] draws, double renderedEntities, double culledEntities,
+    private static List<String> format(double[] draws, double[] millis, double renderedEntities, double culledEntities,
             double renderedBlockEntities, double renderedParticles, double culledParticles, double fontBatches,
             double chunkBuildsPerSecond, double averageChunkBuildMillis, double longestChunkBuildMillis) {
         return List.of(
@@ -133,6 +148,11 @@ public final class RenderMetrics {
                 "Objects/frame: E %.1f rendered / %.1f culled | BE %.1f | P %.1f / %.1f | Font %.1f batches".formatted(
                         renderedEntities, culledEntities, renderedBlockEntities, renderedParticles, culledParticles,
                         fontBatches),
+                "CPU ms/frame: T %.2f | E %.2f | BE %.2f | P %.2f | Txt %.2f | HUD %.2f | O %.2f".formatted(
+                        millis[Category.TERRAIN.ordinal()], millis[Category.ENTITY.ordinal()],
+                        millis[Category.BLOCK_ENTITY.ordinal()], millis[Category.PARTICLE.ordinal()],
+                        millis[Category.TEXT.ordinal()], millis[Category.HUD.ordinal()],
+                        millis[Category.OTHER.ordinal()]),
                 "Chunk builds: %.1f/s | %.2f ms avg | %.2f ms max".formatted(
                         chunkBuildsPerSecond, averageChunkBuildMillis, longestChunkBuildMillis)
         );

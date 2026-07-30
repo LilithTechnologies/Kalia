@@ -29,6 +29,11 @@ public interface ChunkRenderer {
     void delete();
 
     /**
+     * Advances per-frame uniform storage. Must run before any pass records draws.
+     */
+    void beginFrame();
+
+    /**
      * Get the render pass configuration used by this renderer.
      */
     RenderPassConfiguration<?> getRenderPassConfiguration();

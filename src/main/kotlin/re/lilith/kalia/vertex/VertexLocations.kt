@@ -13,4 +13,6 @@ object VertexLocations {
     const val INSTANCE_TINT: Int = 8
     const val INSTANCE_OVERLAY: Int = 9
     const val INSTANCE_LIGHT: Int = 10
+
+    const val TEXTURE_SLOT: Int = 11
 }

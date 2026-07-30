@@ -5,6 +5,7 @@ import re.lilith.kalia.frame.graph.item.ItemBatcher
 import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher
 import re.lilith.kalia.frame.graph.particle.ParticleBatcher
 import re.lilith.kalia.frame.graph.entity.shadow.ShadowBatcher
+import re.lilith.kalia.frame.graph.ui.GuiBatcher
 
 object EntityBatchers {
     private var entityDepth = 0
@@ -20,6 +21,11 @@ object EntityBatchers {
     }
 
     fun flush() {
+        GuiBatcher.flush()
+        flushEntities()
+    }
+
+    fun flushEntities() {
         CuboidBatcher.flush()
         ShadowBatcher.flush()
         NametagBatcher.flush()

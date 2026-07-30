@@ -109,7 +109,7 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
                 }
 
                 setRegionOffsetUniform(this.uniforms, region, camera);
-                this.uniforms.setSectionAges(timestamp, region.getSectionLoadTimes());
+                this.uniforms.setSectionAges(timestamp, region);
 
                 passContext.bindVertexBuffer(0, resources.getVertexBuffer());
                 passContext.bindIndexBuffer(indexBuffer, IndexFormat.UINT32);

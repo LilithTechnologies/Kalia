@@ -67,6 +67,7 @@ public abstract class RenderSectionManager {
     private final ConcurrentLinkedDeque<Runnable> asyncSubmittedTasks = new ConcurrentLinkedDeque<>();
 
     private final ChunkRenderer chunkRenderer;
+    private final RenderDevice device;
 
     private final int renderDistance;
 
@@ -108,6 +109,7 @@ public abstract class RenderSectionManager {
                                 int renderDistance, RenderDevice device, int minSection, int maxSection,
                                 int requestedThreads, boolean hasShadowPass) {
         this.chunkRenderer = chunkRenderer.apply(device, configuration);
+        this.device = device;
 
         this.renderPassConfiguration = configuration;
 
@@ -357,6 +359,14 @@ public abstract class RenderSectionManager {
         section.delete();
 
         this.markGraphDirty();
+    }
+
+    public void beginFrame() {
+        this.chunkRenderer.beginFrame();
+    }
+
+    public void flushUploads() {
+        this.device.flushUploads();
     }
 
     public void renderLayer(ChunkRenderMatrices matrices, TerrainRenderPass pass, CameraTransform occlusionCamera, CameraTransform camera) {

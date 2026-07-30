@@ -1,0 +1,211 @@
+package re.lilith.kalia.renderer.command.list
+
+import re.lilith.kalia.renderer.resource.GpuBuffer
+import re.lilith.kalia.renderer.resource.GpuPipeline
+import re.lilith.kalia.renderer.resource.GpuResource
+import re.lilith.kalia.renderer.resource.GpuSampler
+import re.lilith.kalia.renderer.resource.GpuTexture
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.IdentityHashMap
+
+object Opcode {
+    const val VIEWPORT = 1
+    const val SCISSOR = 2
+    const val BIND_PIPELINE = 3
+    const val BIND_TEXTURE = 4
+    const val BIND_UNIFORM_BUFFER = 5
+    const val BIND_STORAGE_BUFFER = 6
+    const val PUSH_CONSTANTS = 7
+    const val BIND_VERTEX_BUFFER = 8
+    const val BIND_INDEX_BUFFER = 9
+    const val DRAW = 10
+    const val DRAW_INDEXED = 11
+    const val DRAW_INDEXED_INDIRECT = 12
+    const val MULTI_DRAW_INDEXED = 13
+    const val DEPTH_BIAS = 14
+    const val LINE_WIDTH = 15
+    const val CLEAR_ATTACHMENTS = 16
+    const val RETARGET = 17
+
+    fun name(opcode: Int): String = when (opcode) {
+        VIEWPORT -> "viewport"
+        SCISSOR -> "scissor"
+        BIND_PIPELINE -> "bindPipeline"
+        BIND_TEXTURE -> "bindTexture"
+        BIND_UNIFORM_BUFFER -> "bindUniformBuffer"
+        BIND_STORAGE_BUFFER -> "bindStorageBuffer"
+        PUSH_CONSTANTS -> "pushConstants"
+        BIND_VERTEX_BUFFER -> "bindVertexBuffer"
+        BIND_INDEX_BUFFER -> "bindIndexBuffer"
+        DRAW -> "draw"
+        DRAW_INDEXED -> "drawIndexed"
+        DRAW_INDEXED_INDIRECT -> "drawIndexedIndirect"
+        MULTI_DRAW_INDEXED -> "multiDrawIndexed"
+        DEPTH_BIAS -> "depthBias"
+        LINE_WIDTH -> "lineWidth"
+        CLEAR_ATTACHMENTS -> "clearAttachments"
+        RETARGET -> "retarget"
+        else -> "unknown($opcode)"
+    }
+}
+
+class ResourceTable {
+    private val buffers = ArrayList<GpuBuffer>()
+    private val textures = ArrayList<GpuTexture>()
+    private val samplers = ArrayList<GpuSampler>()
+    private val pipelines = ArrayList<GpuPipeline>()
+
+    private val ids = IdentityHashMap<Any, Int>()
+
+    val bufferCount: Int get() = buffers.size
+    val textureCount: Int get() = textures.size
+    val samplerCount: Int get() = samplers.size
+    val pipelineCount: Int get() = pipelines.size
+
+    fun idOf(buffer: GpuBuffer): Int = intern(buffer, buffers)
+
+    fun idOf(texture: GpuTexture): Int = intern(texture, textures)
+
+    fun idOf(sampler: GpuSampler): Int = intern(sampler, samplers)
+
+    fun idOf(pipeline: GpuPipeline): Int = intern(pipeline, pipelines)
+
+    fun buffer(id: Int): GpuBuffer = buffers[id]
+
+    fun texture(id: Int): GpuTexture = textures[id]
+
+    fun sampler(id: Int): GpuSampler = samplers[id]
+
+    fun pipeline(id: Int): GpuPipeline = pipelines[id]
+
+    private fun <T : Any> intern(resource: T, into: ArrayList<T>): Int {
+        ids[resource]?.let { return it }
+        val id = into.size
+        into += resource
+        ids[resource] = id
+        return id
+    }
+
+    fun manifest(): List<String> = buildList {
+        buffers.forEachIndexed { index, value -> add("buffer[$index] ${describe(value)}") }
+        textures.forEachIndexed { index, value -> add("texture[$index] ${describe(value)}") }
+        samplers.forEachIndexed { index, value -> add("sampler[$index] ${describe(value)}") }
+        pipelines.forEachIndexed { index, value -> add("pipeline[$index] ${describe(value)}") }
+    }
+
+    private fun describe(resource: Any): String =
+        if (resource is GpuResource) resource.label else resource.toString()
+
+    fun clear() {
+        buffers.clear()
+        textures.clear()
+        samplers.clear()
+        pipelines.clear()
+        ids.clear()
+    }
+}
+
+/**
+ * A recorded, API-agnostic command stream
+ */
+class CommandStream {
+    val resources = ResourceTable()
+
+    private var data: ByteBuffer = allocate(INITIAL_BYTES)
+
+    var commandCount: Int = 0
+        private set
+
+    private fun allocate(bytes: Int): ByteBuffer =
+        ByteBuffer.allocate(bytes).order(ByteOrder.LITTLE_ENDIAN)
+
+    private fun reserve(bytes: Int) {
+        if (data.remaining() >= bytes) {
+            return
+        }
+        var capacity = data.capacity()
+        while (capacity - data.position() < bytes) {
+            capacity = capacity shl 1
+        }
+        val grown = allocate(capacity)
+        data.flip()
+        grown.put(data)
+        data = grown
+    }
+
+    fun command(opcode: Int) {
+        reserve(Int.SIZE_BYTES)
+        data.putInt(opcode)
+        commandCount++
+    }
+
+    fun int(value: Int) {
+        reserve(Int.SIZE_BYTES)
+        data.putInt(value)
+    }
+
+    fun long(value: Long) {
+        reserve(Long.SIZE_BYTES)
+        data.putLong(value)
+    }
+
+    fun float(value: Float) {
+        reserve(Float.SIZE_BYTES)
+        data.putFloat(value)
+    }
+
+    fun flag(value: Boolean) = int(if (value) 1 else 0)
+
+    fun blob(source: ByteBuffer) {
+        val length = source.remaining()
+        reserve(Int.SIZE_BYTES + length)
+        data.putInt(length)
+        data.put(source.duplicate())
+    }
+
+    fun reset() {
+        data.clear()
+        commandCount = 0
+        resources.clear()
+    }
+
+    fun encoded(): ByteBuffer {
+        val view = data.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        view.flip()
+        return view.asReadOnlyBuffer().order(ByteOrder.LITTLE_ENDIAN)
+    }
+
+    fun loadEncoded(source: ByteBuffer, commandCount: Int) {
+        val incoming = source.duplicate().order(ByteOrder.LITTLE_ENDIAN)
+        data = allocate(maxOf(incoming.remaining(), INITIAL_BYTES))
+        data.put(incoming)
+        this.commandCount = commandCount
+    }
+
+    fun reader(): Reader = Reader(encoded())
+
+    class Reader(private val data: ByteBuffer) {
+        val hasNext: Boolean get() = data.remaining() >= Int.SIZE_BYTES
+
+        fun int(): Int = data.getInt()
+
+        fun long(): Long = data.getLong()
+
+        fun float(): Float = data.getFloat()
+
+        fun flag(): Boolean = data.getInt() != 0
+
+        fun blob(): ByteBuffer {
+            val length = data.getInt()
+            val slice = data.slice().order(ByteOrder.LITTLE_ENDIAN)
+            slice.limit(length)
+            data.position(data.position() + length)
+            return slice
+        }
+    }
+
+    private companion object {
+        const val INITIAL_BYTES = 64 * 1024
+    }
+}

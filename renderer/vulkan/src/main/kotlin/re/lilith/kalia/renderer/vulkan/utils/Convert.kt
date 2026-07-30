@@ -175,6 +175,7 @@ internal object Convert {
     fun descriptorType(kind: BindingKind): DescriptorType = when (kind) {
         BindingKind.TEXTURE -> DescriptorType.CombinedImageSampler
         BindingKind.UNIFORM_BUFFER -> DescriptorType.UniformBuffer
+        BindingKind.UNIFORM_BUFFER_DYNAMIC -> DescriptorType.UniformBufferDynamic
         BindingKind.STORAGE_BUFFER -> DescriptorType.StorageBuffer
     }
 

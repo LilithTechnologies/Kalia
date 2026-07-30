@@ -1,8 +1,10 @@
 package re.lilith.kalia.renderer.device
 
+import re.lilith.kalia.renderer.command.ComputeEncoder
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.graph.RenderGraph
+import re.lilith.kalia.renderer.pipeline.ComputePipelineDescription
 import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.resource.*
 
@@ -82,6 +84,25 @@ interface RenderDevice : AutoCloseable {
      * @param destinationOffset Byte offset into the destination buffer.
      * @param sizeBytes Number of bytes to copy.
      */
+    /**
+     * Creates a compute pipeline. Only valid when [DeviceCapabilities.supportsCompute] is set.
+     */
+    fun createComputePipeline(description: ComputePipelineDescription): GpuComputePipeline =
+        throw UnsupportedOperationException("This backend does not support compute.")
+
+    /**
+     * Records and submits compute work for this frame.
+     */
+    fun compute(body: (ComputeEncoder) -> Unit) {
+        throw UnsupportedOperationException("This backend does not support compute.")
+    }
+
+    /**
+     * Submits any staged uploads that are still pending, without waiting for them.
+     */
+    fun flushUploads() {
+    }
+
     fun copyBuffer(
         source: GpuBuffer,
         destination: GpuBuffer,

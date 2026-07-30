@@ -6,6 +6,7 @@ import org.lwjgl.vulkan.VK10
 import re.lilith.kalia.renderer.command.MultiDrawList
 import re.lilith.kalia.renderer.command.PassContext
 import re.lilith.kalia.renderer.device.RenderDevice
+import re.lilith.kalia.renderer.device.RenderStats
 import re.lilith.kalia.renderer.format.IndexFormat
 import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.geometry.Extent
@@ -70,6 +71,13 @@ internal class VulkanPassEncoder(
     private var rendering = false
 
     private var boundDescriptorSet: DescriptorSet? = null
+
+    private val bindingProbe = BindingKey()
+
+    private val dynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
+    private val boundDynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
+    private val dynamicOffsetBySlot = IntArray(MAX_BINDINGS)
+    private var dynamicSlotMask = 0
 
     private var indirectScratch: VulkanBuffer? = null
     private var indirectOffset = 0L
@@ -176,6 +184,7 @@ internal class VulkanPassEncoder(
         pipeline = null
         bindingsDirty = true
         boundDescriptorSet = null
+        boundDynamicOffsets.clear()
     }
 
     override fun viewport(viewport: Viewport) {
@@ -212,10 +221,12 @@ internal class VulkanPassEncoder(
         }
         this.pipeline = vulkanPipeline
         recorder.bindGraphicsPipeline(vulkanPipeline.pipeline)
+        RenderStats.recordPipelineBind()
 
         // A new layout invalidates whatever set was bound, even if the contents are the same.
         bindingsDirty = true
         boundDescriptorSet = null
+        boundDynamicOffsets.clear()
     }
 
     override fun bindTexture(binding: Int, texture: GpuTexture, sampler: GpuSampler) {
@@ -273,6 +284,7 @@ internal class VulkanPassEncoder(
 
     override fun draw(vertexCount: Int, instanceCount: Int, firstVertex: Int, firstInstance: Int) {
         flushBindings()
+        RenderStats.recordDraw()
         recorder.draw(vertexCount, instanceCount, firstVertex, firstInstance)
     }
 
@@ -284,7 +296,33 @@ internal class VulkanPassEncoder(
         firstInstance: Int,
     ) {
         flushBindings()
+        RenderStats.recordDraw()
         recorder.drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance)
+    }
+
+    override fun drawIndexedIndirect(buffer: GpuBuffer, offsetBytes: Long, drawCount: Int, strideBytes: Int) {
+        if (drawCount <= 0) {
+            return
+        }
+        flushBindings()
+        val handle = RawHandles.buffer((buffer as VulkanBuffer).buffer)
+
+        if (backend.context.supportsMultiDrawIndirect) {
+            RenderStats.recordDraw()
+            VK10.vkCmdDrawIndexedIndirect(recorder.commandBuffer.handle, handle, offsetBytes, drawCount, strideBytes)
+            return
+        }
+        // Without multiDrawIndirect each record has to be issued on its own
+        for (index in 0 until drawCount) {
+            RenderStats.recordDraw()
+            VK10.vkCmdDrawIndexedIndirect(
+                recorder.commandBuffer.handle,
+                handle,
+                offsetBytes + index.toLong() * strideBytes,
+                1,
+                strideBytes,
+            )
+        }
     }
 
     override fun multiDrawIndexed(draws: MultiDrawList) {
@@ -293,6 +331,7 @@ internal class VulkanPassEncoder(
             return
         }
         flushBindings()
+        RenderStats.recordDraw()
 
         val context = backend.context
         when {
@@ -377,7 +416,8 @@ internal class VulkanPassEncoder(
     }
 
     override fun lineWidth(width: Float) {
-        recorder.setLineWidth(width)
+        // Without wideLines the only legal value is 1.0
+        recorder.setLineWidth(if (backend.context.supportsWideLines) width else 1.0f)
     }
 
     override fun clearAttachments(color: Color?, depth: Float?, area: Rect?) {
@@ -427,25 +467,50 @@ internal class VulkanPassEncoder(
             return
         }
 
-        val key = BindingKey(
-            layout,
-            Array(active.bindings.size * KEY_SLOTS_PER_BINDING) { slot ->
-                val binding = active.bindings[slot / KEY_SLOTS_PER_BINDING]
-                val index = binding.binding
-                when {
-                    binding.kind == BindingKind.TEXTURE ->
-                        if (slot % KEY_SLOTS_PER_BINDING == 0) boundTextures[index] else boundSamplers[index]
+        val bindings = active.bindings
+        bindingProbe.begin(layout, bindings.size)
+        dynamicSlotMask = 0
+        for (index in bindings.indices) {
+            val binding = bindings[index]
+            val slot = binding.binding
+            when (binding.kind) {
+                BindingKind.TEXTURE ->
+                    bindingProbe.put(index, boundTextures[slot], boundSamplers[slot], 0L, 0L)
 
-                    slot % KEY_SLOTS_PER_BINDING == 0 -> boundBuffers[index].buffer
-                    else -> boundBuffers[index].let { it.offset to it.size }
+                // The offset moves to the bind call, so it must not take part in the descriptor identity
+                BindingKind.UNIFORM_BUFFER_DYNAMIC -> {
+                    val bound = boundBuffers[slot]
+                    bindingProbe.put(index, bound.buffer, null, 0L, bound.size)
+                    dynamicOffsetBySlot[slot] = bound.offset.toInt()
+                    dynamicSlotMask = dynamicSlotMask or (1 shl slot)
                 }
-            },
-        )
 
-        val set = frame.descriptorSet(key, layout) { target -> writeDescriptors(active, target) }
-        if (set !== boundDescriptorSet) {
-            recorder.bindDescriptorSets(active.layout, listOf(set))
+                else -> {
+                    val bound = boundBuffers[slot]
+                    bindingProbe.put(index, bound.buffer, null, bound.offset, bound.size)
+                }
+            }
+        }
+        bindingProbe.seal()
+
+        // Vulkan consumes dynamic offsets in ascending binding order, which is not necessarily the
+        // order the program happens to declare them in
+        dynamicOffsets.clear()
+        if (dynamicSlotMask != 0) {
+            for (slot in 0 until MAX_BINDINGS) {
+                if (dynamicSlotMask and (1 shl slot) != 0) {
+                    dynamicOffsets += dynamicOffsetBySlot[slot]
+                }
+            }
+        }
+
+        val set = frame.descriptorSet(bindingProbe, layout) { target -> writeDescriptors(active, target) }
+        if (set !== boundDescriptorSet || dynamicOffsets != boundDynamicOffsets) {
+            recorder.bindDescriptorSets(active.layout, listOf(set), dynamicOffsets = dynamicOffsets)
+            RenderStats.recordDescriptorBind()
             boundDescriptorSet = set
+            boundDynamicOffsets.clear()
+            boundDynamicOffsets.addAll(dynamicOffsets)
         }
         bindingsDirty = false
     }
@@ -473,16 +538,17 @@ internal class VulkanPassEncoder(
                     )
                 }
 
-                BindingKind.UNIFORM_BUFFER, BindingKind.STORAGE_BUFFER -> {
+                BindingKind.UNIFORM_BUFFER, BindingKind.UNIFORM_BUFFER_DYNAMIC, BindingKind.STORAGE_BUFFER -> {
                     val bound = boundBuffers[binding.binding]
                     val buffer = bound.buffer
                         ?: error("Pipeline '${active.label}' expects buffer '${binding.name}' at binding ${binding.binding}.")
+                    val base = if (binding.kind == BindingKind.UNIFORM_BUFFER_DYNAMIC) 0L else bound.offset
                     DescriptorSetWrite.BufferWrite(
                         targetSet = set,
                         binding = binding.binding,
                         descriptorType = Convert.descriptorType(binding.kind),
                         descriptors = listOf(
-                            BufferDescriptorInfo(buffer.buffer, bound.offset, bound.size),
+                            BufferDescriptorInfo(buffer.buffer, base, bound.size),
                         ),
                     )
                 }
@@ -497,15 +563,6 @@ internal class VulkanPassEncoder(
     private fun requirePipeline(): VulkanPipeline =
         pipeline ?: error("No pipeline is bound! Call bindPipeline before recording draws.")
 
-    private class BindingKey(private val layout: Any, private val entries: Array<Any?>) {
-        private val hash = 31 * System.identityHashCode(layout) + entries.contentDeepHashCode()
-
-        override fun hashCode(): Int = hash
-
-        override fun equals(other: Any?): Boolean =
-            other is BindingKey && layout === other.layout && entries.contentDeepEquals(other.entries)
-    }
-
     private class BufferBinding {
         var buffer: VulkanBuffer? = null
         var offset: Long = 0L
@@ -514,8 +571,7 @@ internal class VulkanPassEncoder(
     }
 
     private companion object {
-        const val MAX_BINDINGS = 8
-        const val KEY_SLOTS_PER_BINDING = 2
+        const val MAX_BINDINGS = 16
 
         // VkDrawIndexedIndirectCommand
         const val INDIRECT_STRIDE = 20

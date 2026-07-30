@@ -108,6 +108,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
 
         if (this.renderSectionManager != null) {
             this.renderSectionManager.finishAllGraphUpdates();
+            this.renderSectionManager.beginFrame();
         }
 
         boolean isShadowPass = this.renderSectionManager.isInShadowPass();
@@ -138,6 +139,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
         // We don't need to upload chunks during shadow, they will be uploaded on the next real frame.
         if (!isShadowPass) {
             this.renderSectionManager.uploadChunks();
+            this.renderSectionManager.flushUploads();
         }
 
         if (this.renderSectionManager.needsUpdate() || isShadowPass) {
@@ -146,6 +148,7 @@ public abstract class SimpleWorldRenderer<WORLD, SECTIONMANAGER extends RenderSe
 
         if (updateChunksImmediately) {
             this.renderSectionManager.uploadChunks();
+            this.renderSectionManager.flushUploads();
         }
 
         this.renderSectionManager.tickVisibleRenders();

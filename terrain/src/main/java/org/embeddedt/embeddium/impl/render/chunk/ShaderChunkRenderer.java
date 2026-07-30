@@ -43,6 +43,11 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
     protected final RenderDevice device;
     protected final ChunkShaderUniforms uniforms;
 
+    @Override
+    public void beginFrame() {
+        this.uniforms.beginFrame();
+    }
+
     protected ChunkShaderVariant activeVariant;
 
     public ShaderChunkRenderer(RenderDevice device, RenderPassConfiguration<?> renderPassConfiguration) {
@@ -83,8 +88,8 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
         if (!pass.hasNoLightmap()) {
             bindings.add(new ShaderBinding("u_LightTex", ChunkShaderUniforms.LIGHT_TEXTURE_BINDING, BindingKind.TEXTURE, Set.of(ShaderStage.VERTEX)));
         }
-        bindings.add(new ShaderBinding("ChunkSceneUniforms", ChunkShaderUniforms.SCENE_UNIFORMS_BINDING, BindingKind.UNIFORM_BUFFER, Set.of(ShaderStage.VERTEX, ShaderStage.FRAGMENT)));
-        bindings.add(new ShaderBinding("ChunkRegionAges", ChunkShaderUniforms.REGION_AGES_BINDING, BindingKind.UNIFORM_BUFFER, Set.of(ShaderStage.VERTEX)));
+        bindings.add(new ShaderBinding("ChunkSceneUniforms", ChunkShaderUniforms.SCENE_UNIFORMS_BINDING, BindingKind.UNIFORM_BUFFER_DYNAMIC, Set.of(ShaderStage.VERTEX, ShaderStage.FRAGMENT)));
+        bindings.add(new ShaderBinding("ChunkRegionAges", ChunkShaderUniforms.REGION_AGES_BINDING, BindingKind.UNIFORM_BUFFER_DYNAMIC, Set.of(ShaderStage.VERTEX)));
 
         ShaderProgram program = new ShaderProgram(
                 "sodium:chunk_shader",

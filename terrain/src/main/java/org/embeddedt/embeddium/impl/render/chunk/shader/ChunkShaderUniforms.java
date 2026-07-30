@@ -1,5 +1,7 @@
 package org.embeddedt.embeddium.impl.render.chunk.shader;
 
+import it.unimi.dsi.fastutil.objects.Reference2LongMap;
+import it.unimi.dsi.fastutil.objects.Reference2LongOpenHashMap;
 import org.embeddedt.embeddium.impl.render.chunk.region.RenderRegion;
 import org.joml.Matrix4fc;
 import re.lilith.kalia.renderer.command.PassEncoder;
@@ -29,14 +31,26 @@ public final class ChunkShaderUniforms {
     private final ByteBuffer sceneUniforms = direct(SCENE_UNIFORM_BYTES);
     private final ByteBuffer regionAges = direct(REGION_AGES_BYTES);
 
-    private final GpuBuffer sceneUniformBuffer;
-    private final GpuBuffer regionAgesBuffer;
+    private final UniformRing sceneUniformRing;
+    private final UniformRing regionAgesRing;
+
+    private long sceneUniformOffset;
+    private long regionAgesOffset;
+
+    private static final long NO_SLICE = -1L;
+
+    // Reference keyed, so lookups are identity based and allocation free
+    private final Reference2LongMap<RenderRegion> ageOffsets = new Reference2LongOpenHashMap<>();
 
     public ChunkShaderUniforms(RenderDevice device) {
-        this.sceneUniformBuffer = device.createBuffer(new BufferDescription("chunk-scene-uniforms", SCENE_UNIFORM_BYTES,
-                BufferUsage.STREAM, false, false, true, false, false));
-        this.regionAgesBuffer = device.createBuffer(new BufferDescription("chunk-region-ages", REGION_AGES_BYTES,
-                BufferUsage.STREAM, false, false, true, false, false));
+        this.sceneUniformRing = new UniformRing(device, "chunk-scene-uniforms", SCENE_UNIFORM_BYTES, 8);
+        this.regionAgesRing = new UniformRing(device, "chunk-region-ages", REGION_AGES_BYTES, 256);
+    }
+
+    public void beginFrame() {
+        this.sceneUniformRing.beginFrame();
+        this.regionAgesRing.beginFrame();
+        this.ageOffsets.clear();
     }
 
     private static ByteBuffer direct(int bytes) {
@@ -84,26 +98,36 @@ public final class ChunkShaderUniforms {
         this.pushConstants.putInt(12, shape);
     }
 
-    public void setSectionAges(long timestamp, long[] loadTimes) {
+    public void setSectionAges(long timestamp, RenderRegion region) {
+        long cached = this.ageOffsets.getOrDefault(region, NO_SLICE);
+        if (cached != NO_SLICE) {
+            this.regionAgesOffset = cached;
+            return;
+        }
+
+        long[] loadTimes = region.getSectionLoadTimes();
         for (int i = 0; i < loadTimes.length; i++) {
             float ageMs = Math.min(MAX_CHUNK_AGE_MS, (timestamp - loadTimes[i]) / 1_000_000L);
             this.regionAges.putFloat(i * 4, ageMs);
         }
         this.regionAges.clear();
-        this.regionAgesBuffer.write(this.regionAges);
+        this.regionAgesOffset = this.regionAgesRing.push(this.regionAges);
+        this.ageOffsets.put(region, this.regionAgesOffset);
     }
 
     public void syncSceneUniforms() {
         this.sceneUniforms.clear();
-        this.sceneUniformBuffer.write(this.sceneUniforms);
+        this.sceneUniformOffset = this.sceneUniformRing.push(this.sceneUniforms);
     }
 
     public void bindSceneUniforms(PassEncoder pass) {
-        pass.bindUniformBuffer(SCENE_UNIFORMS_BINDING, this.sceneUniformBuffer, 0L, SCENE_UNIFORM_BYTES);
+        pass.bindUniformBuffer(SCENE_UNIFORMS_BINDING, this.sceneUniformRing.getBuffer(), this.sceneUniformOffset,
+                SCENE_UNIFORM_BYTES);
     }
 
     public void bindRegionAges(PassEncoder pass) {
-        pass.bindUniformBuffer(REGION_AGES_BINDING, this.regionAgesBuffer);
+        pass.bindUniformBuffer(REGION_AGES_BINDING, this.regionAgesRing.getBuffer(), this.regionAgesOffset,
+                REGION_AGES_BYTES);
     }
 
     public void pushToPass(PassEncoder pass) {
@@ -112,7 +136,7 @@ public final class ChunkShaderUniforms {
     }
 
     public void delete() {
-        this.sceneUniformBuffer.close();
-        this.regionAgesBuffer.close();
+        this.sceneUniformRing.close();
+        this.regionAgesRing.close();
     }
 }

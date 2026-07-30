@@ -7,6 +7,7 @@ import re.lilith.kalia.renderer.resource.TextureDescription
 import re.lilith.kalia.renderer.resource.TextureDimension
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.vulkan.api.command.*
+import re.lilith.vulkan.api.debug.DebugNames
 import re.lilith.vulkan.api.memory.*
 import re.lilith.vulkan.api.types.enum.ImageFlag
 import re.lilith.vulkan.api.types.enum.ImageLayout
@@ -69,6 +70,8 @@ internal fun VulkanContext.createTextureResources(description: TextureDescriptio
             ),
         ),
     )
+    DebugNames.set(device, image, description.label)
+    DebugNames.set(device, view, "${description.label}/view")
     return image to view
 }
 
@@ -78,7 +81,7 @@ internal fun VulkanContext.createStagingBuffer(sizeBytes: Long): VkBuffer = allo
         usage = re.lilith.vulkan.api.types.flags.BufferUsage.TransferSource,
     ),
     MemoryUsage.Upload,
-)
+).also { DebugNames.set(device, it, "kalia/staging-page") }
 
 /**
  * Records the copy of one staged mip level into [texture]
@@ -86,6 +89,7 @@ internal fun VulkanContext.createStagingBuffer(sizeBytes: Long): VkBuffer = allo
 internal fun CommandRecorder.recordTextureUpload(
     texture: VulkanTexture,
     staging: VkBuffer,
+    stagingOffset: Long,
     mipLevel: Int,
     levelExtent: Extent,
     sourceLayout: ImageLayout,
@@ -98,6 +102,7 @@ internal fun CommandRecorder.recordTextureUpload(
         destinationLayout = ImageLayout.TransferDestinationOptimal,
         regions = listOf(
             BufferImageCopy(
+                bufferOffset = stagingOffset,
                 imageSubresource = ImageSubresourceLayers(
                     aspectMask = Convert.aspect(texture.format),
                     mipLevel = mipLevel,

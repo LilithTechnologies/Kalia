@@ -18,6 +18,12 @@ dependencies {
 
     compileOnly(libs.lwjgl.shaderc)
     runtimeOnly(libs.lwjgl.shaderc)
+
+    testImplementation(kotlin("test"))
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 kotlin {

@@ -2,10 +2,12 @@ package re.lilith.kalia.frame.draw
 
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
+import re.lilith.kalia.frame.graph.ui.GuiBatcher
 import re.lilith.kalia.gl.*
 import re.lilith.kalia.renderer.format.IndexFormat
 import re.lilith.kalia.renderer.resource.GpuBuffer
 import re.lilith.kalia.renderer.resource.GpuSampler
+import re.lilith.kalia.renderer.resource.SamplerDescription
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.shader.CoreShaders
 import re.lilith.kalia.shader.PipelineCache
@@ -25,6 +27,9 @@ object KaliaDraw {
             return
         }
         if (DisplayLists.capture(source, format, glMode, vertexCount)) {
+            return
+        }
+        if (GuiBatcher.tryRecord(source, format, glMode, vertexCount)) {
             return
         }
         val encoder = GameFrame.current ?: return
@@ -66,6 +71,9 @@ object KaliaDraw {
     ) {
         val encoder = GameFrame.current ?: return
         val resources = FrameResources.of(encoder.device)
+
+        // Anything recorded directly has to land after whatever the batcher is still holding
+        GuiBatcher.flush()
 
         MatrixState.flush()
 
@@ -135,11 +143,30 @@ object KaliaDraw {
             resources.whiteTexture
         }
 
-    internal fun samplerForUnit(unit: Int, resources: FrameResources) =
-        TextureTable.boundTexture(unit)
-            ?.takeIf { TextureUnits.isEnabled(unit) }
-            ?.let { resources.sampler(it.sampler) }
-            ?: resources.defaultSampler
+    private val memoDescriptions = arrayOfNulls<SamplerDescription>(TextureUnits.COUNT)
+    private val memoSamplers = arrayOfNulls<GpuSampler>(TextureUnits.COUNT)
+    private var memoResources: FrameResources? = null
+
+    internal fun samplerForUnit(unit: Int, resources: FrameResources): GpuSampler {
+        val texture = TextureTable.boundTexture(unit)?.takeIf { TextureUnits.isEnabled(unit) }
+            ?: return resources.defaultSampler
+
+        if (memoResources !== resources) {
+            memoDescriptions.fill(null)
+            memoSamplers.fill(null)
+            memoResources = resources
+        }
+
+        val description = texture.sampler
+        val cached = memoSamplers[unit]
+        if (cached != null && memoDescriptions[unit] === description) {
+            return cached
+        }
+        val resolved = resources.sampler(description)
+        memoDescriptions[unit] = description
+        memoSamplers[unit] = resolved
+        return resolved
+    }
 
     private const val LIGHTMAP_UNIT = 1
     private const val VERTICES_PER_QUAD = 4

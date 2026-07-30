@@ -37,7 +37,7 @@ object CuboidShaders {
                 ShaderBinding(
                     name = "KaliaScene",
                     binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-                    kind = BindingKind.UNIFORM_BUFFER,
+                    kind = BindingKind.UNIFORM_BUFFER_DYNAMIC,
                     stages = setOf(ShaderStage.VERTEX, ShaderStage.FRAGMENT),
                 ),
             ),

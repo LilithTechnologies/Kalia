@@ -27,6 +27,12 @@ object TextureArrays {
 
     private class Slot(val pool: Pool, val layer: Int, val key: PoolKey) {
         var uploadedVersion = -1L
+
+        fun matches(source: GlTexture): Boolean =
+            key.width == source.poolWidth &&
+                    key.height == source.poolHeight &&
+                    key.format == source.poolFormat &&
+                    key.sampler == source.pooledSampler
     }
 
     private val pools = Object2ObjectOpenHashMap<PoolKey, MutableList<Pool>>()
@@ -38,18 +44,22 @@ object TextureArrays {
         if (source == null) {
             return null
         }
-        val shadow = source.shadowPixels() ?: return null
+        // Checked without building a view, because the common answer is that nothing needs doing
+        if (!source.hasShadow) {
+            return null
+        }
         if (this.device !== device) {
             reset()
             this.device = device
         }
 
         var slot = slots[source] ?: adopt(source, device) ?: return null
-        if (slot.key != poolKeyOf(source)) {
+        if (!slot.matches(source)) {
             release(source)
             slot = adopt(source, device) ?: return null
         }
         if (slot.uploadedVersion != source.contentVersion) {
+            val shadow = source.shadowPixels() ?: return null
             slot.pool.texture.upload(shadow, 0, slot.layer)
             slot.uploadedVersion = source.contentVersion
         }
@@ -64,7 +74,7 @@ object TextureArrays {
         width = source.poolWidth,
         height = source.poolHeight,
         format = source.poolFormat,
-        sampler = source.sampler.copy(label = "kalia/texture-array"),
+        sampler = source.pooledSampler,
     )
 
     private fun adopt(source: GlTexture, device: RenderDevice): Slot? {
