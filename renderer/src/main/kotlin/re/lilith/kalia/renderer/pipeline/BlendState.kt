@@ -11,8 +11,10 @@ data class BlendState(
     val logicOp: LogicOp? = null,
 ) {
     companion object {
+        @JvmField
         val OPAQUE: BlendState = BlendState()
 
+        @JvmField
         val ALPHA: BlendState = BlendState(
             enabled = true,
             srcColor = BlendFactor.SRC_ALPHA,
@@ -21,6 +23,7 @@ data class BlendState(
             dstAlpha = BlendFactor.ONE_MINUS_SRC_ALPHA,
         )
 
+        @JvmField
         val ADDITIVE: BlendState = BlendState(
             enabled = true,
             srcColor = BlendFactor.SRC_ALPHA,

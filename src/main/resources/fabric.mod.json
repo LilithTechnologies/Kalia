@@ -30,15 +30,15 @@
 
   "mixins": [
     "kalia.mixins.json",
-    "radium.mixins.json"
+    "celeritas.mixins.json"
   ],
   "entrypoints": {
     "preLaunch": [
-      "re.lilith.kalia.KaliaPreLaunch"
+      "re.lilith.kalia.platform.KaliaPreLaunch"
     ],
     "client": [
-      "re.lilith.kalia.KaliaMod",
-      "net.caffeinemc.mods.sodium.fabric.SodiumFabricMod"
+      "re.lilith.kalia.platform.KaliaMod",
+      "org.taumc.celeritas.impl.Celeritas"
     ]
   },
 

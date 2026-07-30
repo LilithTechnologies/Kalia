@@ -185,5 +185,11 @@ internal object GlConvert {
             normalized = false,
             integer = true
         )
+
+        VertexAttributeFormat.USHORT2_FLOAT -> VertexAttribPointer(
+            2, GL11C.GL_UNSIGNED_SHORT,
+            normalized = false,
+            integer = false
+        )
     }
 }

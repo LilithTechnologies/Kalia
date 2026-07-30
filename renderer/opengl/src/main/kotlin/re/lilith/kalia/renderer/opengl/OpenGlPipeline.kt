@@ -72,7 +72,8 @@ internal class OpenGlPipeline(
                             }
                         }
 
-                        BindingKind.UNIFORM_BUFFER -> {
+                        // GL binds a range at bind time regardless, so a dynamic block needs no extra handling here
+                        BindingKind.UNIFORM_BUFFER, BindingKind.UNIFORM_BUFFER_DYNAMIC -> {
                             val index = glGetUniformBlockIndex(program, binding.name)
                             if (index != GL_INVALID_INDEX) {
                                 glUniformBlockBinding(program, index, binding.binding)

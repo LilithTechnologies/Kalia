@@ -1,23 +1,25 @@
 package re.lilith.kalia.mixins.render;
 
 import com.mojang.blaze3d.platform.GlStateManager;
+import it.unimi.dsi.fastutil.floats.FloatArrayList;
 import it.unimi.dsi.fastutil.objects.Object2IntLinkedOpenHashMap;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.render.VertexFormats;
 import net.minecraft.client.texture.TextureManager;
 import net.minecraft.resource.ResourceManager;
 import net.minecraft.util.Identifier;
+import org.joml.Matrix4f;
 import org.lwjgl.system.MemoryUtil;
 import org.spongepowered.asm.mixin.*;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import re.lilith.kalia.draw.KaliaDraw;
-import re.lilith.kalia.draw.TextMeshCache;
-import re.lilith.kalia.gl.GlBridge;
+import re.lilith.kalia.frame.draw.KaliaDraw;
+import re.lilith.kalia.draw.NametagTextRenderer;
+import re.lilith.kalia.frame.draw.TextMeshCache;
+import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher;
 import re.lilith.kalia.gl.MatrixState;
 import re.lilith.kalia.gl.ShaderUniforms;
-import re.lilith.kalia.vertex.TranslatedVertexFormat;
 import re.lilith.kalia.vertex.VertexFormatBridge;
 
 import java.nio.ByteBuffer;
@@ -27,7 +29,7 @@ import java.util.List;
 import java.util.Random;
 
 @Mixin(TextRenderer.class)
-public class MixinTextRenderer {
+public class MixinTextRenderer implements NametagTextRenderer {
     @Shadow
     @Final
     private static Identifier[] PAGES;
@@ -75,7 +77,7 @@ public class MixinTextRenderer {
     public int fontHeight;
 
     @Unique // for fast lookup
-    private static final String sulfide$TABLE =
+    private static final String kalia$TABLE =
             "\u00c0\u00c1\u00c2\u00c8\u00ca\u00cb\u00cd\u00d3\u00d4\u00d5"
                     + "\u00da\u00df\u00e3\u00f5\u011f\u0130\u0131\u0152\u0153\u015e"
                     + "\u015f\u0174\u0175\u017e\u0207"
@@ -99,66 +101,67 @@ public class MixinTextRenderer {
                     + "\u25a0\u0000";
 
     @Unique
-    private static final int[] sulfide$CHAR_INDEX = new int[65536];
+    private static final int[] kalia$CHAR_INDEX = new int[65536];
 
     static {
-        Arrays.fill(sulfide$CHAR_INDEX, -1);
-        for (int i = sulfide$TABLE.length() - 1; i >= 0; i--) {
-            sulfide$CHAR_INDEX[sulfide$TABLE.charAt(i)] = i;
+        Arrays.fill(kalia$CHAR_INDEX, -1);
+        for (int i = kalia$TABLE.length() - 1; i >= 0; i--) {
+            kalia$CHAR_INDEX[kalia$TABLE.charAt(i)] = i;
         }
     }
 
-    // Sized to match TextMeshCache.MAX_ENTRIES so any string with a cached mesh also
-    // keeps a cached width (nametags, chat, scoreboard all measure per frame).
     @Unique
-    private static final int sulfide$WIDTH_CACHE_ENTRIES = 2048;
+    private static final int kalia$WIDTH_CACHE_ENTRIES = 2048;
 
     @Unique
-    private final Object2IntLinkedOpenHashMap<String> sulfide$widthCache =
-            new Object2IntLinkedOpenHashMap<>(sulfide$WIDTH_CACHE_ENTRIES);
+    private final Object2IntLinkedOpenHashMap<String> kalia$widthCache =
+            new Object2IntLinkedOpenHashMap<>(kalia$WIDTH_CACHE_ENTRIES);
 
     @Unique
-    private static final int sulfide$PAGE_NONE = Integer.MIN_VALUE;
+    private static final int kalia$PAGE_NONE = Integer.MIN_VALUE;
 
     @Unique
-    private static final int sulfide$VERTEX_BYTES = 24; // pos 3f + uv 2f + rgba 4ub
-
-    // Bake scratch: glyph vertices are written here first, then each page run is
-    // copied into an exact-size buffer owned by the cache entry.
-    @Unique
-    private static ByteBuffer sulfide$scratch = MemoryUtil.memAlloc(1 << 20);
+    private static final int kalia$VERTEX_BYTES = 24; // pos 3f + uv 2f + rgba 4ub
 
     @Unique
-    private int sulfide$segPage = sulfide$PAGE_NONE;
-    @Unique
-    private int sulfide$segStartByte;
-    @Unique
-    private final List<TextMeshCache.Segment> sulfide$segments = new ArrayList<>();
+    private static ByteBuffer kalia$scratch = MemoryUtil.memAlloc(1 << 20);
 
     @Unique
-    private static final int sulfide$DECO_STRIDE = 8;
+    private int kalia$segPage = kalia$PAGE_NONE;
     @Unique
-    private static final int sulfide$MAX_DECOS = 256;
+    private int kalia$segStartByte;
     @Unique
-    private final float[] sulfide$decoData = new float[sulfide$MAX_DECOS * sulfide$DECO_STRIDE];
+    private final List<TextMeshCache.Segment> kalia$segments = new ArrayList<>();
+
+    @Unique
+    private final FloatArrayList kalia$instanceScratch = new FloatArrayList();
+    @Unique
+    private int kalia$instanceSegStart;
+
+    @Unique
+    private static final int kalia$DECO_STRIDE = 8;
+    @Unique
+    private static final int kalia$MAX_DECOS = 256;
+    @Unique
+    private final float[] kalia$decoData = new float[kalia$MAX_DECOS * kalia$DECO_STRIDE];
 
     @Inject(method = "reload", at = @At("HEAD"))
-    private void sulfide$onReload(ResourceManager mgr, CallbackInfo ci) {
-        sulfide$widthCache.clear();
+    private void kalia$onReload(ResourceManager mgr, CallbackInfo ci) {
+        kalia$widthCache.clear();
         TextMeshCache.clear();
 //        SignTextCache.clear();
     }
 
     @Inject(method = "setUnicode", at = @At("HEAD"))
-    private void sulfide$onSetUnicode(boolean unicode, CallbackInfo ci) {
-        sulfide$widthCache.clear();
+    private void kalia$onSetUnicode(boolean unicode, CallbackInfo ci) {
+        kalia$widthCache.clear();
         TextMeshCache.clear();
 //        SignTextCache.clear();
     }
 
     @Inject(method = "<init>", at = @At("RETURN"))
-    private void sulfide$initWidthCache(CallbackInfo ci) {
-        sulfide$widthCache.defaultReturnValue(Integer.MIN_VALUE);
+    private void kalia$initWidthCache(CallbackInfo ci) {
+        kalia$widthCache.defaultReturnValue(Integer.MIN_VALUE);
     }
 
     /**
@@ -170,7 +173,7 @@ public class MixinTextRenderer {
         if (character == 167) return -1;
         if (character == ' ') return 4;
 
-        int i = sulfide$CHAR_INDEX[character];
+        int i = kalia$CHAR_INDEX[character];
         if (character > 0 && i != -1 && !this.unicode) {
             return this.characterWidths[i];
         }
@@ -195,7 +198,7 @@ public class MixinTextRenderer {
     public int getStringWidth(String text) {
         if (text == null) return 0;
 
-        int cached = sulfide$widthCache.getAndMoveToFirst(text);
+        int cached = kalia$widthCache.getAndMoveToFirst(text);
         if (cached != Integer.MIN_VALUE) return cached;
 
         int width = 0;
@@ -218,17 +221,15 @@ public class MixinTextRenderer {
             if (bl && k > 0) ++width;
         }
 
-        sulfide$widthCache.putAndMoveToFirst(text, width);
-        if (sulfide$widthCache.size() > sulfide$WIDTH_CACHE_ENTRIES) {
-            sulfide$widthCache.removeLastInt();
+        kalia$widthCache.putAndMoveToFirst(text, width);
+        if (kalia$widthCache.size() > kalia$WIDTH_CACHE_ENTRIES) {
+            kalia$widthCache.removeLastInt();
         }
         return width;
     }
 
     /**
-     * @reason Cached-mesh text rendering: each unique string is tessellated once into
-     * per-page vertex buffers (colors and formatting codes baked per vertex) and
-     * replayed with one arena memcpy + one draw per segment on later frames.
+     * @reason Cache text meshes
      * @author Lunasa
      */
     @Overwrite
@@ -237,31 +238,26 @@ public class MixinTextRenderer {
             return;
         }
 
-        // Alpha is decoupled from the baked mesh: vertices bake fully opaque and the
-        // string's alpha is applied through the shader color at draw time. Meshes and
-        // cache entries are therefore shared across alpha variants — nametags draw the
-        // same string at alpha 32 (through-wall pass) and 255 every frame.
-        int opaqueColor = sulfide$packColor(this.red, this.green, this.blue, 1.0F);
+        int opaqueColor = kalia$packColor(this.red, this.green, this.blue, 1.0F);
         int styleBits = (this.bold ? 1 : 0)
                 | (this.italic ? 2 : 0)
                 | (this.underline ? 4 : 0)
                 | (this.strikethrough ? 8 : 0)
                 | (this.obfuscated ? 16 : 0);
-        // Obfuscated (magic) text is re-randomised every frame - never cache it.
-        boolean cacheable = !this.obfuscated && !sulfide$containsObfuscationCode(text);
+        boolean cacheable = !this.obfuscated && !kalia$containsObfuscationCode(text);
 
         TextMeshCache.CachedText cached = null;
         if (cacheable) {
             cached = TextMeshCache.find(text, shadow, opaqueColor, this.unicode, styleBits);
         }
         if (cached == null) {
-            cached = sulfide$bake(text, shadow, opaqueColor);
+            cached = kalia$bake(text, shadow, opaqueColor);
             if (cacheable) {
                 TextMeshCache.put(text, shadow, opaqueColor, this.unicode, styleBits, cached);
             }
         }
 
-        sulfide$drawCached(cached);
+        kalia$drawCached(cached);
         this.x += cached.advance;
 
         if (!cacheable) {
@@ -270,12 +266,7 @@ public class MixinTextRenderer {
     }
 
     @Unique
-    private static String sulfide$guiPipelineKey;
-    @Unique
-    private static String sulfide$worldPipelineKey;
-
-    @Unique
-    private void sulfide$drawCached(TextMeshCache.CachedText cached) {
+    private void kalia$drawCached(TextMeshCache.CachedText cached) {
         TextMeshCache.Segment[] segments = cached.segments;
         if (segments.length == 0) {
             return;
@@ -298,12 +289,10 @@ public class MixinTextRenderer {
             } else if (segment.page == TextMeshCache.PAGE_DEFAULT) {
                 this.textureManager.bindTexture(this.fontTexture);
             } else {
-                this.textureManager.bindTexture(sulfide$getFontPage(segment.page));
+                this.textureManager.bindTexture(kalia$getFontPage(segment.page));
             }
 
             ByteBuffer vertexData = segment.vertexData;
-            vertexData.position(0);
-            vertexData.limit(segment.vertexCount * sulfide$VERTEX_BYTES);
 
             KaliaDraw.INSTANCE.drawTransient(
                     vertexData,
@@ -320,19 +309,103 @@ public class MixinTextRenderer {
         uniforms.setModelOffset(baseX, baseY, baseZ);
     }
 
+    @Override
     @Unique
-    private TextMeshCache.CachedText sulfide$bake(String text, boolean shadow, int baseColor) {
-        // Worst case: every char bold (2 quads) plus decorations.
-        int worstBytes = (text.length() * 8 + sulfide$MAX_DECOS * 4) * sulfide$VERTEX_BYTES;
-        if (sulfide$scratch.capacity() < worstBytes) {
-            sulfide$scratch = MemoryUtil.memRealloc(sulfide$scratch, Integer.highestOneBit(worstBytes) * 2);
+    public void kalia$drawNametag(String text, float x, float y, int argb) {
+        if (text.isEmpty()) {
+            return;
         }
-        ByteBuffer scratch = sulfide$scratch;
+        if ((argb & 0xFF000000) == 0) {
+            argb |= 0xFF000000;
+        }
+
+        float r = (float) (argb >> 16 & 255) / 255.0F;
+        float g = (float) (argb >> 8 & 255) / 255.0F;
+        float b = (float) (argb & 255) / 255.0F;
+        float alpha = (float) (argb >>> 24) / 255.0F;
+        int opaqueColor = kalia$packColor(r, g, b, 1.0F);
+
+        boolean cacheable = !kalia$containsObfuscationCode(text);
+        TextMeshCache.CachedText cached = cacheable
+                ? TextMeshCache.find(text, false, opaqueColor, this.unicode, 0)
+                : null;
+        if (cached == null) {
+            cached = kalia$bake(text, false, opaqueColor);
+            if (cacheable) {
+                TextMeshCache.put(text, false, opaqueColor, this.unicode, 0, cached);
+            }
+        }
+
+        kalia$drawCachedInstanced(cached, x, y, alpha);
+
+        if (!cacheable) {
+            cached.free();
+        }
+    }
+
+    @Unique
+    private void kalia$drawCachedInstanced(TextMeshCache.CachedText cached, float baseX, float baseY, float alpha) {
+        TextMeshCache.Segment[] segments = cached.segments;
+        if (segments.length == 0) {
+            return;
+        }
+
+        MatrixState.INSTANCE.flush();
+        Matrix4f modelView = MatrixState.INSTANCE.modelView();
+        int alphaByte = (int) (255.0F * alpha + 0.5F);
+
+        for (TextMeshCache.Segment segment : segments) {
+            boolean decoration = segment.page == TextMeshCache.PAGE_DECORATION;
+            if (decoration) {
+                GlStateManager.disableTexture();
+            } else if (segment.page == TextMeshCache.PAGE_DEFAULT) {
+                this.textureManager.bindTexture(this.fontTexture);
+            } else {
+                this.textureManager.bindTexture(kalia$getFontPage(segment.page));
+            }
+
+            float[] instances = segment.instanceData;
+            for (int off = 0; off < instances.length; off += 9) {
+                float x0 = instances[off];
+                float y0 = instances[off + 1];
+                float x1 = instances[off + 2];
+                float y1 = instances[off + 3];
+                float u0 = instances[off + 4];
+                float v0 = instances[off + 5];
+                float u1 = instances[off + 6];
+                float v1 = instances[off + 7];
+                int rgba = Float.floatToRawIntBits(instances[off + 8]);
+
+                int glyphRgba = (rgba & ~0xFF) | alphaByte;
+                NametagBatcher.INSTANCE.recordGlyph(
+                        modelView,
+                        baseX + x0, baseY + y0, baseX + x1, baseY + y1,
+                        u0, v0, u1, v1,
+                        glyphRgba
+                );
+            }
+
+            if (decoration) {
+                GlStateManager.enableTexture();
+            }
+        }
+    }
+
+    @Unique
+    private TextMeshCache.CachedText kalia$bake(String text, boolean shadow, int baseColor) {
+        // Worst case: every char bold (2 quads) plus decorations.
+        int worstBytes = (text.length() * 8 + kalia$MAX_DECOS * 4) * kalia$VERTEX_BYTES;
+        if (kalia$scratch.capacity() < worstBytes) {
+            kalia$scratch = MemoryUtil.memRealloc(kalia$scratch, Integer.highestOneBit(worstBytes) * 2);
+        }
+        ByteBuffer scratch = kalia$scratch;
         scratch.clear();
 
-        sulfide$segments.clear();
-        sulfide$segPage = sulfide$PAGE_NONE;
-        sulfide$segStartByte = 0;
+        kalia$segments.clear();
+        kalia$segPage = kalia$PAGE_NONE;
+        kalia$segStartByte = 0;
+        kalia$instanceScratch.clear();
+        kalia$instanceSegStart = 0;
         int decoCount = 0;
 
         float relX = 0.0F;
@@ -342,7 +415,7 @@ public class MixinTextRenderer {
             char c = text.charAt(i);
 
             if (c == 167 && i + 1 < text.length()) {
-                int j = sulfide$formattingIndex(text.charAt(i + 1));
+                int j = kalia$formattingIndex(text.charAt(i + 1));
 
                 if (j < 16) {
                     this.obfuscated = false;
@@ -354,7 +427,7 @@ public class MixinTextRenderer {
                     if (shadow) j += 16;
                     int k = this.colorCodes[j];
                     this.color = k;
-                    rgba = sulfide$packColor(
+                    rgba = kalia$packColor(
                             (float) (k >> 16 & 255) / 255.0F,
                             (float) (k >> 8 & 255) / 255.0F,
                             (float) (k & 255) / 255.0F,
@@ -382,84 +455,85 @@ public class MixinTextRenderer {
                 continue;
             }
 
-            int j = sulfide$CHAR_INDEX[c];
+            int j = kalia$CHAR_INDEX[c];
 
             if (this.obfuscated && j != -1) {
                 int charW = this.getCharWidth(c);
                 char d;
                 do {
-                    d = sulfide$TABLE.charAt(this.random.nextInt(sulfide$TABLE.length()));
+                    d = kalia$TABLE.charAt(this.random.nextInt(kalia$TABLE.length()));
                 } while (charW != this.getCharWidth(d));
                 c = d;
-                j = sulfide$CHAR_INDEX[c];
+                j = kalia$CHAR_INDEX[c];
             }
 
             float f = this.unicode ? 0.5F : 1.0F;
             boolean shifted = (c == 0 || j == -1 || this.unicode) && shadow;
             float shift = shifted ? -f : 0.0F;
 
-            float g = sulfide$bakeGlyph(scratch, c, j, this.italic, relX + shift, shift, rgba);
+            float g = kalia$bakeGlyph(scratch, c, j, this.italic, relX + shift, shift, rgba);
 
             // bold: bake a second copy offset by 1
             if (this.bold) {
-                sulfide$bakeGlyph(scratch, c, j, this.italic, relX + shift + f, shift, rgba);
+                kalia$bakeGlyph(scratch, c, j, this.italic, relX + shift + f, shift, rgba);
                 ++g;
             }
 
-            if (this.strikethrough && decoCount < sulfide$MAX_DECOS) {
-                int di = decoCount++ * sulfide$DECO_STRIDE;
+            if (this.strikethrough && decoCount < kalia$MAX_DECOS) {
+                int di = decoCount++ * kalia$DECO_STRIDE;
                 float yc = (float) (this.fontHeight / 2);
-                sulfide$decoData[di] = relX;
-                sulfide$decoData[di + 1] = yc - 1.0F;
-                sulfide$decoData[di + 2] = relX + g;
-                sulfide$decoData[di + 3] = yc;
-                sulfide$decoData[di + 4] = Float.intBitsToFloat(rgba);
+                kalia$decoData[di] = relX;
+                kalia$decoData[di + 1] = yc - 1.0F;
+                kalia$decoData[di + 2] = relX + g;
+                kalia$decoData[di + 3] = yc;
+                kalia$decoData[di + 4] = Float.intBitsToFloat(rgba);
             }
-            if (this.underline && decoCount < sulfide$MAX_DECOS) {
-                int di = decoCount++ * sulfide$DECO_STRIDE;
+            if (this.underline && decoCount < kalia$MAX_DECOS) {
+                int di = decoCount++ * kalia$DECO_STRIDE;
                 float yb = (float) this.fontHeight;
-                sulfide$decoData[di] = relX - 1.0F;
-                sulfide$decoData[di + 1] = yb - 1.0F;
-                sulfide$decoData[di + 2] = relX + g;
-                sulfide$decoData[di + 3] = yb;
-                sulfide$decoData[di + 4] = Float.intBitsToFloat(rgba);
+                kalia$decoData[di] = relX - 1.0F;
+                kalia$decoData[di + 1] = yb - 1.0F;
+                kalia$decoData[di + 2] = relX + g;
+                kalia$decoData[di + 3] = yb;
+                kalia$decoData[di + 4] = Float.intBitsToFloat(rgba);
             }
 
             relX += (float) ((int) g);
         }
 
-        sulfide$closeSegment(scratch);
+        kalia$closeSegment(scratch);
 
         if (decoCount > 0) {
-            sulfide$segPage = TextMeshCache.PAGE_DECORATION;
-            sulfide$segStartByte = scratch.position();
+            kalia$segPage = TextMeshCache.PAGE_DECORATION;
+            kalia$segStartByte = scratch.position();
             for (int d = 0; d < decoCount; d++) {
-                int di = d * sulfide$DECO_STRIDE;
-                float x1 = sulfide$decoData[di];
-                float y1 = sulfide$decoData[di + 1];
-                float x2 = sulfide$decoData[di + 2];
-                float y2 = sulfide$decoData[di + 3];
-                int decoRgba = Float.floatToRawIntBits(sulfide$decoData[di + 4]);
-                sulfide$vertex(scratch, x1, y2, 0.0F, 0.0F, decoRgba);
-                sulfide$vertex(scratch, x2, y2, 0.0F, 0.0F, decoRgba);
-                sulfide$vertex(scratch, x2, y1, 0.0F, 0.0F, decoRgba);
-                sulfide$vertex(scratch, x1, y1, 0.0F, 0.0F, decoRgba);
+                int di = d * kalia$DECO_STRIDE;
+                float x1 = kalia$decoData[di];
+                float y1 = kalia$decoData[di + 1];
+                float x2 = kalia$decoData[di + 2];
+                float y2 = kalia$decoData[di + 3];
+                int decoRgba = Float.floatToRawIntBits(kalia$decoData[di + 4]);
+                kalia$vertex(scratch, x1, y2, 0.0F, 0.0F, decoRgba);
+                kalia$vertex(scratch, x2, y2, 0.0F, 0.0F, decoRgba);
+                kalia$vertex(scratch, x2, y1, 0.0F, 0.0F, decoRgba);
+                kalia$vertex(scratch, x1, y1, 0.0F, 0.0F, decoRgba);
+                kalia$pushInstance(x1, y2, x2, y1, 0.0F, 0.0F, 0.0F, 0.0F, decoRgba);
             }
-            sulfide$closeSegment(scratch);
+            kalia$closeSegment(scratch);
         }
 
-        TextMeshCache.Segment[] segments = sulfide$segments.toArray(new TextMeshCache.Segment[0]);
-        sulfide$segments.clear();
+        TextMeshCache.Segment[] segments = kalia$segments.toArray(new TextMeshCache.Segment[0]);
+        kalia$segments.clear();
         return new TextMeshCache.CachedText(segments, relX);
     }
 
     @Unique
-    private float sulfide$bakeGlyph(ByteBuffer scratch, char c, int tableIdx, boolean italic,
+    private float kalia$bakeGlyph(ByteBuffer scratch, char c, int tableIdx, boolean italic,
                                     float relX, float shiftY, int rgba) {
         if (c == ' ') return 4.0F;
 
         if (tableIdx != -1 && !this.unicode) {
-            sulfide$ensureSegment(scratch, TextMeshCache.PAGE_DEFAULT);
+            kalia$ensureSegment(scratch, TextMeshCache.PAGE_DEFAULT);
 
             int texU = (tableIdx % 16) * 8;
             int texV = (tableIdx / 16) * 8;
@@ -472,15 +546,16 @@ public class MixinTextRenderer {
             float u1 = ((float) texU + fw - 1.0F) / 128.0F;
             float v1 = ((float) texV + 7.99F) / 128.0F;
 
-            sulfide$vertex(scratch, relX + (float) slant, shiftY, u0, v0, rgba);
-            sulfide$vertex(scratch, relX - (float) slant, shiftY + 7.99F, u0, v1, rgba);
-            sulfide$vertex(scratch, relX + fw - 1.0F - (float) slant, shiftY + 7.99F, u1, v1, rgba);
-            sulfide$vertex(scratch, relX + fw - 1.0F + (float) slant, shiftY, u1, v0, rgba);
+            kalia$vertex(scratch, relX + (float) slant, shiftY, u0, v0, rgba);
+            kalia$vertex(scratch, relX - (float) slant, shiftY + 7.99F, u0, v1, rgba);
+            kalia$vertex(scratch, relX + fw - 1.0F - (float) slant, shiftY + 7.99F, u1, v1, rgba);
+            kalia$vertex(scratch, relX + fw - 1.0F + (float) slant, shiftY, u1, v0, rgba);
+            kalia$pushInstance(relX, shiftY, relX + fw - 1.0F, shiftY + 7.99F, u0, v0, u1, v1, rgba);
 
             return (float) w;
         } else {
             if (this.glyphWidths[c] == 0) return 0.0F;
-            sulfide$ensureSegment(scratch, c / 256);
+            kalia$ensureSegment(scratch, c / 256);
 
             int rawStart = this.glyphWidths[c] >>> 4;
             int rawEnd = this.glyphWidths[c] & 15;
@@ -496,47 +571,70 @@ public class MixinTextRenderer {
             float u1 = (texX + glyphW) / 256.0F;
             float v1 = (texY + 15.98F) / 256.0F;
 
-            sulfide$vertex(scratch, relX + slant, shiftY, u0, v0, rgba);
-            sulfide$vertex(scratch, relX - slant, shiftY + 7.99F, u0, v1, rgba);
-            sulfide$vertex(scratch, relX + glyphW / 2.0F - slant, shiftY + 7.99F, u1, v1, rgba);
-            sulfide$vertex(scratch, relX + glyphW / 2.0F + slant, shiftY, u1, v0, rgba);
+            kalia$vertex(scratch, relX + slant, shiftY, u0, v0, rgba);
+            kalia$vertex(scratch, relX - slant, shiftY + 7.99F, u0, v1, rgba);
+            kalia$vertex(scratch, relX + glyphW / 2.0F - slant, shiftY + 7.99F, u1, v1, rgba);
+            kalia$vertex(scratch, relX + glyphW / 2.0F + slant, shiftY, u1, v0, rgba);
+            kalia$pushInstance(relX, shiftY, relX + glyphW / 2.0F, shiftY + 7.99F, u0, v0, u1, v1, rgba);
 
             return (gEnd - gStart) / 2.0F + 1.0F;
         }
     }
 
     @Unique
-    private void sulfide$ensureSegment(ByteBuffer scratch, int page) {
-        if (sulfide$segPage != page) {
-            sulfide$closeSegment(scratch);
-            sulfide$segPage = page;
-            sulfide$segStartByte = scratch.position();
+    private void kalia$ensureSegment(ByteBuffer scratch, int page) {
+        if (kalia$segPage != page) {
+            kalia$closeSegment(scratch);
+            kalia$segPage = page;
+            kalia$segStartByte = scratch.position();
         }
     }
 
     @Unique
-    private void sulfide$closeSegment(ByteBuffer scratch) {
+    private void kalia$closeSegment(ByteBuffer scratch) {
         int endByte = scratch.position();
-        int length = endByte - sulfide$segStartByte;
-        if (sulfide$segPage != sulfide$PAGE_NONE && length > 0) {
+        int length = endByte - kalia$segStartByte;
+        if (kalia$segPage != kalia$PAGE_NONE && length > 0) {
             ByteBuffer vertexData = TextMeshCache.allocSegmentBuffer(length);
+
             MemoryUtil.memCopy(
-                    MemoryUtil.memAddress0(scratch) + sulfide$segStartByte,
+                    MemoryUtil.memAddress0(scratch) + kalia$segStartByte,
                     MemoryUtil.memAddress0(vertexData),
                     length
             );
-            sulfide$segments.add(new TextMeshCache.Segment(
-                    sulfide$segPage,
-                    vertexData,
-                    length / sulfide$VERTEX_BYTES
+
+            vertexData.position(0);
+            vertexData.limit(length);
+
+            ByteBuffer cachedBuffer = vertexData.asReadOnlyBuffer();
+
+            kalia$segments.add(new TextMeshCache.Segment(
+                    kalia$segPage,
+                    cachedBuffer,
+                    length / kalia$VERTEX_BYTES,
+                    kalia$instanceScratch.subList(kalia$instanceSegStart, kalia$instanceScratch.size()).toFloatArray()
             ));
         }
-        sulfide$segPage = sulfide$PAGE_NONE;
-        sulfide$segStartByte = endByte;
+        kalia$segPage = kalia$PAGE_NONE;
+        kalia$segStartByte = endByte;
+        kalia$instanceSegStart = kalia$instanceScratch.size();
     }
 
     @Unique
-    private static void sulfide$vertex(ByteBuffer buffer, float x, float y, float u, float v, int rgba) {
+    private void kalia$pushInstance(float x0, float y0, float x1, float y1, float u0, float v0, float u1, float v1, int rgba) {
+        kalia$instanceScratch.add(x0);
+        kalia$instanceScratch.add(y0);
+        kalia$instanceScratch.add(x1);
+        kalia$instanceScratch.add(y1);
+        kalia$instanceScratch.add(u0);
+        kalia$instanceScratch.add(v0);
+        kalia$instanceScratch.add(u1);
+        kalia$instanceScratch.add(v1);
+        kalia$instanceScratch.add(Float.intBitsToFloat(rgba));
+    }
+
+    @Unique
+    private static void kalia$vertex(ByteBuffer buffer, float x, float y, float u, float v, int rgba) {
         buffer.putFloat(x);
         buffer.putFloat(y);
         buffer.putFloat(0.0F);
@@ -549,7 +647,7 @@ public class MixinTextRenderer {
     }
 
     @Unique
-    private static int sulfide$packColor(float r, float g, float b, float a) {
+    private static int kalia$packColor(float r, float g, float b, float a) {
         return ((int) (r * 255.0F) & 255) << 24
                 | ((int) (g * 255.0F) & 255) << 16
                 | ((int) (b * 255.0F) & 255) << 8
@@ -557,7 +655,7 @@ public class MixinTextRenderer {
     }
 
     @Unique
-    private static boolean sulfide$containsObfuscationCode(String text) {
+    private static boolean kalia$containsObfuscationCode(String text) {
         int index = text.indexOf(167);
         while (index >= 0 && index + 1 < text.length()) {
             char next = text.charAt(index + 1);
@@ -570,7 +668,7 @@ public class MixinTextRenderer {
     }
 
     @Unique
-    private static Identifier sulfide$getFontPage(int page) {
+    private static Identifier kalia$getFontPage(int page) {
         if (PAGES[page] == null) {
             PAGES[page] = new Identifier(String.format("textures/font/unicode_page_%02x.png", page));
         }
@@ -578,7 +676,7 @@ public class MixinTextRenderer {
     }
 
     @Unique
-    private static int sulfide$formattingIndex(char c) {
+    private static int kalia$formattingIndex(char c) {
         if (c >= '0' && c <= '9') return c - '0';
         if (c >= 'a' && c <= 'f') return c - 'a' + 10;
         if (c >= 'A' && c <= 'F') return c - 'A' + 10;

@@ -62,6 +62,7 @@ internal object Convert {
         VertexAttributeFormat.UINT2 -> Format.R32G32_UInt
         VertexAttributeFormat.UINT8X4 -> Format.R8G8B8A8_UInt
         VertexAttributeFormat.UINT16X2 -> Format.R16G16_UInt
+        VertexAttributeFormat.USHORT2_FLOAT -> Format.R16G16_UInt
     }
 
     fun aspect(format: TextureFormat): ImageAspect = when {
@@ -174,6 +175,7 @@ internal object Convert {
     fun descriptorType(kind: BindingKind): DescriptorType = when (kind) {
         BindingKind.TEXTURE -> DescriptorType.CombinedImageSampler
         BindingKind.UNIFORM_BUFFER -> DescriptorType.UniformBuffer
+        BindingKind.UNIFORM_BUFFER_DYNAMIC -> DescriptorType.UniformBufferDynamic
         BindingKind.STORAGE_BUFFER -> DescriptorType.StorageBuffer
     }
 

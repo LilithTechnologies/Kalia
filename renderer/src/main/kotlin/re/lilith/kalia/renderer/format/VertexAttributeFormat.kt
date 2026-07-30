@@ -36,4 +36,7 @@ enum class VertexAttributeFormat(val componentCount: Int, val byteSize: Int) {
     // Unsigned integer packings used by compact terrain vertex formats
     UINT8X4(4, 4),
     UINT16X2(2, 4),
+
+    // Two unsigned shorts cast (not normalised) to float,
+    USHORT2_FLOAT(2, 4),
 }

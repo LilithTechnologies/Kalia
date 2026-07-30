@@ -1,0 +1,194 @@
+package org.taumc.celeritas.lwjgl.lwjgl3;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.lwjgl.system.MemoryUtil;
+import org.lwjgl.system.Pointer;
+import org.taumc.celeritas.lwjgl.LWJGLService;
+import org.taumc.celeritas.lwjgl.MemoryStack;
+import re.lilith.kalia.renderer.utility.MemoryAccess;
+
+import java.nio.Buffer;
+import java.nio.ByteBuffer;
+
+/**
+ * LWJGL3 implementation of {@link LWJGLService}.
+ */
+public class LWJGL3Service implements LWJGLService {
+    private static final Logger LOGGER = LogManager.getLogger("Celeritas/LWJGL3Service");
+
+    public static LWJGL3Service create() {
+        return new LWJGL3Service();
+    }
+
+    // ===================== CAPABILITIES =====================
+
+    @Override
+    public int getPointerSize() {
+        return Pointer.POINTER_SIZE;
+    }
+
+    // ===================== MEMORY STACK OPERATIONS =====================
+
+    @Override
+    public MemoryStack stackPush() {
+            return new LWJGL3MemoryStack(org.lwjgl.system.MemoryStack.stackPush());
+    }
+
+    // ===================== NATIVE MEMORY OPERATIONS =====================
+
+    @Override
+    public long nmemAlloc(long size) {
+        return MemoryUtil.nmemAlloc(size);
+    }
+
+    @Override
+    public long nmemCalloc(long count, long size) {
+        return MemoryUtil.nmemCalloc(count, size);
+    }
+
+    @Override
+    public long nmemAlignedAlloc(long alignment, long size) {
+        return MemoryUtil.nmemAlignedAlloc(alignment, size);
+    }
+
+    @Override
+    public long nmemRealloc(long ptr, long size) {
+        return MemoryUtil.nmemRealloc(ptr, size);
+    }
+
+    @Override
+    public void nmemFree(long ptr) {
+        MemoryUtil.nmemFree(ptr);
+    }
+
+    @Override
+    public void nmemAlignedFree(long ptr) {
+        MemoryUtil.nmemAlignedFree(ptr);
+    }
+
+    @Override
+    public ByteBuffer memAlloc(int size) {
+        return MemoryUtil.memAlloc(size);
+    }
+
+    @Override
+    public ByteBuffer memCalloc(int size) {
+        return MemoryUtil.memCalloc(size);
+    }
+
+    @Override
+    public ByteBuffer memRealloc(ByteBuffer buffer, int size) {
+        return MemoryUtil.memRealloc(buffer, size);
+    }
+
+    @Override
+    public void memFree(Buffer buffer) {
+        MemoryUtil.memFree(buffer);
+    }
+
+    @Override
+    public ByteBuffer memByteBuffer(long address, int capacity) {
+        return MemoryUtil.memByteBuffer(address, capacity);
+    }
+
+    @Override
+    public long memAddress(Buffer buffer) {
+        return MemoryAccess.addressOf(buffer);
+    }
+
+    @Override
+    public long memAddress(Buffer buffer, int position) {
+        // Generic Buffer doesn't have a positioned memAddress in LWJGL3, compute manually
+        // Get base address and add position offset based on element size
+        long base = MemoryAccess.addressOf(buffer);
+        int elementSize;
+        if (buffer instanceof java.nio.ByteBuffer) {
+            elementSize = 1;
+        } else if (buffer instanceof java.nio.ShortBuffer || buffer instanceof java.nio.CharBuffer) {
+            elementSize = 2;
+        } else if (buffer instanceof java.nio.IntBuffer || buffer instanceof java.nio.FloatBuffer) {
+            elementSize = 4;
+        } else if (buffer instanceof java.nio.LongBuffer || buffer instanceof java.nio.DoubleBuffer) {
+            elementSize = 8;
+        } else {
+            throw new IllegalArgumentException("Unsupported buffer type: " + buffer.getClass());
+        }
+        return base + ((long) position * elementSize);
+    }
+
+    @Override
+    public void memSet(long address, int value, long bytes) {
+        MemoryUtil.memSet(address, value, bytes);
+    }
+
+    @Override
+    public void memCopy(long src, long dst, long bytes) {
+        MemoryAccess.copyMemory(src, dst, bytes);
+    }
+
+    @Override
+    public void memPutByte(long address, byte value) {
+        MemoryAccess.putByte(address, value);
+    }
+
+    @Override
+    public void memPutShort(long address, short value) {
+        MemoryAccess.putShort(address, value);
+    }
+
+    @Override
+    public void memPutInt(long address, int value) {
+        MemoryAccess.putInt(address, value);
+    }
+
+    @Override
+    public void memPutFloat(long address, float value) {
+        MemoryAccess.putFloat(address, value);
+    }
+
+    @Override
+    public void memPutLong(long address, long value) {
+        MemoryAccess.putLong(address, value);
+    }
+
+    @Override
+    public void memPutAddress(long address, long value) {
+        MemoryAccess.putAddress(address, value);
+    }
+
+    @Override
+    public byte memGetByte(long address) {
+        return MemoryAccess.getByte(address);
+    }
+
+    @Override
+    public short memGetShort(long address) {
+        return MemoryAccess.getShort(address);
+    }
+
+    @Override
+    public int memGetInt(long address) {
+        return MemoryAccess.getInt(address);
+    }
+
+    @Override
+    public float memGetFloat(long address) {
+        return MemoryAccess.getFloat(address);
+    }
+
+    @Override
+    public long memGetLong(long address) {
+        return MemoryAccess.getLong(address);
+    }
+
+    @Override
+    public long memGetAddress(long address) {
+        return MemoryAccess.getAddress(address);
+    }
+
+    @Override
+    public ByteBuffer memSlice(ByteBuffer buffer, int offset, int capacity) {
+        return MemoryUtil.memSlice(buffer, offset, capacity);
+    }
+}

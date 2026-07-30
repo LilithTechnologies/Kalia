@@ -1,5 +1,8 @@
 package re.lilith.kalia.renderer.vulkan
 
+import org.lwjgl.system.MemoryStack
+import org.lwjgl.vulkan.VK10
+import org.lwjgl.vulkan.VkMemoryBarrier
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.vulkan.api.command.CommandRecorder
 import re.lilith.vulkan.api.types.enum.ImageLayout
@@ -9,158 +12,229 @@ import java.util.*
 import re.lilith.vulkan.api.memory.Buffer as VkBuffer
 
 /**
- * Collects transfers and replays them into the command buffer that runs ahead of the frame
+ * Collects transfers and replays them into whichever queue can run them.
  */
-internal class VulkanUploadQueue(private val context: VulkanContext) {
-    private val pending = ArrayDeque<PendingUpload>()
+internal class VulkanUploadQueue(private val context: VulkanContext) : AutoCloseable {
+    private val pendingBuffers = ArrayDeque<BufferWork>()
+    private val pendingImages = ArrayDeque<ImageWork>()
+    private val staging = VulkanStagingPool(context)
+    private val hazards = VulkanTransferHazards()
 
-    /**
-     * Claims the sampleable layout for [texture] straight away and reports what it was
-     */
+    private var batchRecorded = false
+
     private fun claimSampleable(texture: VulkanTexture): ImageLayout {
         val previous = texture.layout
         texture.layout = ImageLayout.ShaderReadOnlyOptimal
         return previous
     }
 
-    val hasWork: Boolean get() = pending.isNotEmpty()
+    val hasWork: Boolean get() = hasBufferWork || hasImageWork
+
+    @get:Synchronized
+    val hasBufferWork: Boolean get() = pendingBuffers.isNotEmpty()
+
+    @get:Synchronized
+    val hasImageWork: Boolean get() = pendingImages.isNotEmpty()
 
     @Synchronized
     fun stageBufferWrite(target: VkBuffer, offsetBytes: Long, source: ByteBuffer) {
         val length = source.remaining().toLong()
-        val staging = context.createStagingBuffer(length)
-        staging.mappedByteBuffer(0L, length).put(source.duplicate())
-        pending += PendingUpload.BufferCopyUpload(staging, target, offsetBytes, length)
+        val page = staging.write(source, length)
+        pendingBuffers += BufferWork.StagedWrite(page, staging.reservedOffset, target, offsetBytes, length)
     }
 
     @Synchronized
     fun stageBufferCopy(source: VkBuffer, destination: VkBuffer, readOffset: Long, writeOffset: Long, sizeBytes: Long) {
-        pending += PendingUpload.BufferToBufferCopy(source, destination, readOffset, writeOffset, sizeBytes)
+        pendingBuffers += BufferWork.DeviceCopy(source, destination, readOffset, writeOffset, sizeBytes)
     }
 
     @Synchronized
     fun stageTextureUpload(target: VulkanTexture, mipLevel: Int, levelExtent: Extent, source: ByteBuffer, layer: Int = 0) {
         val length = source.remaining().toLong()
-        val staging = context.createStagingBuffer(length)
-        staging.mappedByteBuffer(0L, length).put(source.duplicate())
-        pending += PendingUpload.TextureUpload(staging, target, mipLevel, levelExtent, claimSampleable(target), layer)
+        val page = staging.write(source, length)
+        pendingImages += ImageWork.Upload(
+            page,
+            staging.reservedOffset,
+            target,
+            mipLevel,
+            levelExtent,
+            claimSampleable(target),
+            layer,
+        )
     }
 
     @Synchronized
     fun stageMipmapGeneration(target: VulkanTexture) {
-        pending += PendingUpload.MipmapGeneration(target, claimSampleable(target))
+        pendingImages += ImageWork.Mipmaps(target, claimSampleable(target))
     }
 
-    /**
-     * Registers a texture that must be sampleable even though nothing has been uploaded to it
-     */
     @Synchronized
     fun stageMakeSampleable(target: VulkanTexture) {
         if (target.layout != ImageLayout.ShaderReadOnlyOptimal) {
-            pending += PendingUpload.LayoutTransition(target, claimSampleable(target))
+            pendingImages += ImageWork.Transition(target, claimSampleable(target))
         }
     }
 
     /**
-     * Records everything queued so far and hands the staging buffers to [retire]
+     * Records every queued buffer copy. Safe to call repeatedly within a frame.
      */
     @Synchronized
-    fun flush(recorder: CommandRecorder, retire: (AutoCloseable) -> Unit) {
-        while (pending.isNotEmpty()) {
-            val upload = pending.poll()
-            if (upload.target?.isClosed == true) {
-                (upload as? PendingUpload.WithStaging)?.staging?.let(retire)
+    fun flushBuffers(recorder: CommandRecorder): Boolean {
+        if (pendingBuffers.isEmpty()) {
+            return false
+        }
+        hazards.clear()
+        if (batchRecorded) {
+            insertTransferBarrier(recorder)
+        }
+
+        while (pendingBuffers.isNotEmpty()) {
+            when (val work = pendingBuffers.poll()) {
+                is BufferWork.StagedWrite -> {
+                    if (hazards.writeConflicts(work.destination, work.offsetBytes, work.sizeBytes)) {
+                        insertTransferBarrier(recorder)
+                    }
+                    recorder.copyBuffer(
+                        source = work.staging,
+                        destination = work.destination,
+                        regions = listOf(BufferCopy(work.stagingOffset, work.offsetBytes, work.sizeBytes)),
+                    )
+                    hazards.recordWrite(work.destination, work.offsetBytes, work.sizeBytes)
+                }
+
+                is BufferWork.DeviceCopy -> {
+                    if (hazards.copyConflicts(work.source, work.destination, work.writeOffset, work.sizeBytes)) {
+                        insertTransferBarrier(recorder)
+                    }
+                    recorder.copyBuffer(
+                        source = work.source,
+                        destination = work.destination,
+                        regions = listOf(BufferCopy(work.readOffset, work.writeOffset, work.sizeBytes)),
+                    )
+                    hazards.recordRead(work.source)
+                    hazards.recordWrite(work.destination, work.writeOffset, work.sizeBytes)
+                }
+            }
+        }
+
+        hazards.clear()
+        batchRecorded = true
+        return true
+    }
+
+    @Synchronized
+    fun flushImages(recorder: CommandRecorder): Boolean {
+        if (pendingImages.isEmpty()) {
+            return false
+        }
+
+        while (pendingImages.isNotEmpty()) {
+            val work = pendingImages.poll()
+            if (work.target.isClosed) {
                 continue
             }
-
-            when (upload) {
-                is PendingUpload.BufferCopyUpload -> {
-                    recorder.copyBuffer(
-                        source = upload.staging,
-                        destination = upload.target2,
-                        regions = listOf(BufferCopy(0L, upload.offsetBytes, upload.sizeBytes)),
-                    )
-                    retire(upload.staging)
-                }
-
-                is PendingUpload.BufferToBufferCopy -> recorder.copyBuffer(
-                    source = upload.source,
-                    destination = upload.destination,
-                    regions = listOf(BufferCopy(upload.readOffset, upload.writeOffset, upload.sizeBytes)),
+            when (work) {
+                is ImageWork.Upload -> recorder.recordTextureUpload(
+                    texture = work.target,
+                    staging = work.staging,
+                    stagingOffset = work.stagingOffset,
+                    mipLevel = work.mipLevel,
+                    levelExtent = work.levelExtent,
+                    sourceLayout = work.sourceLayout,
+                    layer = work.layer,
                 )
 
-                is PendingUpload.TextureUpload -> {
-                    recorder.recordTextureUpload(
-                        texture = requireNotNull(upload.target),
-                        staging = upload.staging,
-                        mipLevel = upload.mipLevel,
-                        levelExtent = upload.levelExtent,
-                        sourceLayout = upload.sourceLayout,
-                        layer = upload.layer,
-                    )
-                    retire(upload.staging)
-                }
+                is ImageWork.Mipmaps -> recorder.recordMipmapGeneration(work.target, work.sourceLayout)
 
-                is PendingUpload.MipmapGeneration ->
-                    recorder.recordMipmapGeneration(requireNotNull(upload.target), upload.sourceLayout)
-
-                is PendingUpload.LayoutTransition -> recorder.recordLayoutTransition(
-                    texture = requireNotNull(upload.target),
-                    from = upload.sourceLayout,
+                is ImageWork.Transition -> recorder.recordLayoutTransition(
+                    texture = work.target,
+                    from = work.sourceLayout,
                     to = ImageLayout.ShaderReadOnlyOptimal,
                 )
             }
         }
+        return true
+    }
+
+    @Synchronized
+    fun endFrame(retire: (AutoCloseable) -> Unit) {
+        batchRecorded = false
+        if (pendingBuffers.isNotEmpty() || pendingImages.isNotEmpty()) {
+            return
+        }
+        retire(staging.endBatch())
     }
 
     @Synchronized
     fun forget(texture: VulkanTexture) {
-        pending.removeAll { it.target === texture }
+        pendingImages.removeAll { it.target === texture }
     }
 
-    private sealed interface PendingUpload {
-        val target: VulkanTexture?
+    override fun close() {
+        pendingBuffers.clear()
+        pendingImages.clear()
+        staging.close()
+    }
 
-        sealed interface WithStaging : PendingUpload {
-            val staging: VkBuffer
+    private fun insertTransferBarrier(recorder: CommandRecorder) {
+        hazards.clear()
+        MemoryStack.stackPush().use { stack ->
+            val barrier = VkMemoryBarrier.calloc(1, stack)
+            barrier[0]
+                .sType(VK10.VK_STRUCTURE_TYPE_MEMORY_BARRIER)
+                .srcAccessMask(VK10.VK_ACCESS_TRANSFER_WRITE_BIT)
+                .dstAccessMask(VK10.VK_ACCESS_TRANSFER_READ_BIT or VK10.VK_ACCESS_TRANSFER_WRITE_BIT)
+            VK10.vkCmdPipelineBarrier(
+                recorder.commandBuffer.handle,
+                VK10.VK_PIPELINE_STAGE_TRANSFER_BIT,
+                VK10.VK_PIPELINE_STAGE_TRANSFER_BIT,
+                0,
+                barrier,
+                null,
+                null,
+            )
         }
+    }
 
-        class BufferToBufferCopy(
+    private sealed interface BufferWork {
+        class DeviceCopy(
             val source: VkBuffer,
             val destination: VkBuffer,
             val readOffset: Long,
             val writeOffset: Long,
             val sizeBytes: Long,
-        ) : PendingUpload {
-            override val target: VulkanTexture? get() = null
-        }
+        ) : BufferWork
 
-        class BufferCopyUpload(
-            override val staging: VkBuffer,
-            val target2: VkBuffer,
+        class StagedWrite(
+            val staging: VkBuffer,
+            val stagingOffset: Long,
+            val destination: VkBuffer,
             val offsetBytes: Long,
             val sizeBytes: Long,
-        ) : WithStaging {
-            override val target: VulkanTexture? get() = null
-        }
+        ) : BufferWork
+    }
 
-        class TextureUpload(
-            override val staging: VkBuffer,
+    private sealed interface ImageWork {
+        val target: VulkanTexture
+
+        class Upload(
+            val staging: VkBuffer,
+            val stagingOffset: Long,
             override val target: VulkanTexture,
             val mipLevel: Int,
             val levelExtent: Extent,
             val sourceLayout: ImageLayout,
             val layer: Int,
-        ) : WithStaging
+        ) : ImageWork
 
-        class MipmapGeneration(
+        class Mipmaps(
             override val target: VulkanTexture,
             val sourceLayout: ImageLayout,
-        ) : PendingUpload
+        ) : ImageWork
 
-        class LayoutTransition(
+        class Transition(
             override val target: VulkanTexture,
             val sourceLayout: ImageLayout,
-        ) : PendingUpload
+        ) : ImageWork
     }
 }

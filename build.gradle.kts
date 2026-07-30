@@ -24,10 +24,8 @@ configurations.configureEach {
 
 sourceSets {
     named("main") {
-        java.srcDir("src/lwjgl3/java")
-        resources.srcDir("src/lwjgl3/resources")
-        java.srcDir("src/sodium/java")
-        resources.srcDir("src/sodium/resources")
+        java.srcDir("src/argentum/java")
+        resources.srcDir("src/argentum/resources")
     }
 }
 
@@ -46,6 +44,7 @@ dependencies {
     implementation(include(project(":renderer"))!!)
     implementation(include(project(":renderer:vulkan"))!!)
     implementation(include(project(":renderer:opengl"))!!)
+    implementation(include(project(":terrain"))!!)
 
     testImplementation(kotlin("test"))
     testImplementation(project(":renderer:headless")) // the headless renderer is not shipped
@@ -111,19 +110,25 @@ loom {
     runConfigs {
         removeIf { it.name == "Minecraft Client" || it.name == "Minecraft Server" }
 
-        create("client-vulkan") {
+        create("ClientVulkan") {
             client()
             configName = "1.8.9 / Vulkan"
             ideConfigGenerated(true)
             runDir("run")
             jvmArguments.add("-Dkalia.backend=vulkan")
+            jvmArguments.add("-Ddevauth.enabled=true")
         }
-        create("client-opengl") {
+        create("ClientOpenGL") {
             client()
             configName = "1.8.9 / OpenGL"
             ideConfigGenerated(true)
             runDir("run")
             jvmArguments.add("-Dkalia.backend=opengl")
         }
+
     }
+}
+
+tasks.runClientRenderDoc {
+    jvmArgs("-Ddevauth.enabled=true")
 }

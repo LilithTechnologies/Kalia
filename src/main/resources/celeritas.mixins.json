@@ -1,0 +1,34 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "org.taumc.celeritas.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "verbose": true,
+  "mixins": [
+    "core.collections.MixinTypeFilterableList",
+    "core.render.MixinBufferBuilder",
+    "core.render.MixinDebugHud",
+    "core.render.MixinCullingCameraView",
+    "core.render.MixinGameRenderer",
+    "core.render.MixinGlStateManager",
+    "core.render.MixinWorldRenderer",
+    "core.access.ChunkAccessor",
+    "core.world.MixinServerChunkProvider",
+    "core.world.MixinWorld",
+    "features.terrain.MixinChunkRenderList",
+    "features.terrain.MixinRenderListManager",
+    "features.terrain.MixinVisibleChunkCollector"
+  ],
+  "client": [
+    "core.access.ClientChunkProviderAccessor",
+    "core.world.MixinClientChunkProvider",
+    "features.options.MixinSettingsScreen",
+    "features.particle.MixinParticleManager",
+    "features.particle.MixinParticle",
+    "features.terrain.MixinBakedQuad",
+    "features.terrain.MixinBiomeColors",
+    "features.texture.MixinSpriteAtlasTexture",
+    "features.texture.MixinStripe",
+    "features.texture.MixinTextureManager"
+  ]
+}

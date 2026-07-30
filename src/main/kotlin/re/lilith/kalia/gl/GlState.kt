@@ -1,9 +1,17 @@
 package re.lilith.kalia.gl
 
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.pipeline.*
 
 object GlState {
+    private val depthStates = Object2ObjectOpenHashMap<DepthState, DepthState>()
+    private val blendStates = Object2ObjectOpenHashMap<BlendState, BlendState>()
+    private val rasterStates = Object2ObjectOpenHashMap<RasterState, RasterState>()
+    private val colorMasks = Object2ObjectOpenHashMap<ColorMask, ColorMask>()
+
+    private fun <T> intern(table: Object2ObjectOpenHashMap<T, T>, value: T): T = table.getOrPut(value) { value }
+
     var depthTest: Boolean = true
         set(value) {
             if (field != value) {
@@ -31,11 +39,11 @@ object GlState {
     var clearDepth: Float = 1f
 
     private var depthDirty = true
-    private var cachedDepth = DepthState.READ_WRITE
+    private var cachedDepth = intern(depthStates, DepthState.READ_WRITE)
 
     fun depthState(): DepthState {
         if (depthDirty) {
-            cachedDepth = DepthState(depthTest, depthWrite, depthFunction)
+            cachedDepth = intern(depthStates, DepthState(depthTest, depthWrite, depthFunction))
             depthDirty = false
         }
         return cachedDepth
@@ -59,7 +67,7 @@ object GlState {
     private var logicOpEnabled: Boolean = false
 
     private var blendDirty = true
-    private var cachedBlend = BlendState.ALPHA
+    private var cachedBlend = intern(blendStates, BlendState.ALPHA)
 
     fun logicOp(op: LogicOp) {
         if (op != logicOpMode) {
@@ -106,15 +114,18 @@ object GlState {
 
     fun blendState(): BlendState {
         if (blendDirty) {
-            cachedBlend = BlendState(
-                enabled = blendEnabled,
-                srcColor = srcColor,
-                dstColor = dstColor,
-                colorOp = blendOp,
-                srcAlpha = srcAlpha,
-                dstAlpha = dstAlpha,
-                alphaOp = blendOp,
-                logicOp = if (logicOpEnabled) logicOpMode else null,
+            cachedBlend = intern(
+                blendStates,
+                BlendState(
+                    enabled = blendEnabled,
+                    srcColor = srcColor,
+                    dstColor = dstColor,
+                    colorOp = blendOp,
+                    srcAlpha = srcAlpha,
+                    dstAlpha = dstAlpha,
+                    alphaOp = blendOp,
+                    logicOp = if (logicOpEnabled) logicOpMode else null,
+                ),
             )
             blendDirty = false
         }
@@ -146,7 +157,7 @@ object GlState {
         }
 
     private var rasterDirty = true
-    private var cachedRaster = RasterState.TWO_SIDED
+    private var cachedRaster = intern(rasterStates, RasterState.TWO_SIDED)
 
     fun rasterState(): RasterState {
         if (rasterDirty) {
@@ -154,25 +165,28 @@ object GlState {
                 PrimitiveTopology.POINTS, PrimitiveTopology.LINES, PrimitiveTopology.LINE_STRIP -> false
                 else -> true
             }
-            cachedRaster = RasterState(
-                topology = topology,
-                cullMode = if (culls) CullMode.BACK else CullMode.NONE,
-                frontFace = FrontFace.COUNTER_CLOCKWISE,
-                polygonMode = polygonMode,
-                depthBiasEnabled = true,
+            cachedRaster = intern(
+                rasterStates,
+                RasterState(
+                    topology = topology,
+                    cullMode = if (culls) CullMode.BACK else CullMode.NONE,
+                    frontFace = FrontFace.COUNTER_CLOCKWISE,
+                    polygonMode = polygonMode,
+                    depthBiasEnabled = true,
+                ),
             )
             rasterDirty = false
         }
         return cachedRaster
     }
 
-    private var cachedColorMask = ColorMask.ALL
+    private var cachedColorMask = intern(colorMasks, ColorMask.ALL)
 
     fun colorMask(red: Boolean, green: Boolean, blue: Boolean, alpha: Boolean) {
         if (cachedColorMask.red != red || cachedColorMask.green != green ||
             cachedColorMask.blue != blue || cachedColorMask.alpha != alpha
         ) {
-            cachedColorMask = ColorMask(red, green, blue, alpha)
+            cachedColorMask = intern(colorMasks, ColorMask(red, green, blue, alpha))
         }
     }
 
@@ -203,8 +217,8 @@ object GlState {
         polygonOffsetEnabled = false
     }
 
-    fun effectiveDepthBias(): Pair<Float, Float> =
-        if (polygonOffsetEnabled) polygonOffsetConstant to polygonOffsetSlope else ZERO_BIAS
+    fun effectiveDepthBiasConstant(): Float = if (polygonOffsetEnabled) polygonOffsetConstant else 0f
+    fun effectiveDepthBiasSlope(): Float = if (polygonOffsetEnabled) polygonOffsetSlope else 0f
 
     var lineWidth: Float = 1f
 
@@ -228,6 +242,4 @@ object GlState {
         clearDepth = 1f
         clearColor = Color.BLACK
     }
-
-    private val ZERO_BIAS = 0f to 0f
 }

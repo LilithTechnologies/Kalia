@@ -14,6 +14,13 @@ value class SampleCount internal constructor(internal val vkValue: Int) {
         val SixtyFour = SampleCount(VulkanConstants.SampleCounts.x64)
     }
 }
+@JvmInline
+value class ImageFlag internal constructor(internal val vkValue: Int) {
+    companion object {
+        val CubeMapCompatible = ImageFlag(VulkanConstants.ImageFlags.cubemapCompatible)
+        val None = ImageFlag(0)
+    }
+}
 
 enum class AttachmentLoadOperation(internal val vkValue: Int) {
     Load(VulkanConstants.AttachmentLoadOps.load),

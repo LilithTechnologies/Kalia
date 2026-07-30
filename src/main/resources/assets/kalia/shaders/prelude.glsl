@@ -1,4 +1,4 @@
-// These are common declarations that the base for everything else (hence the name)
+// These are common declarations that is the base for everything else (hence the name)
 // You can use it with `#include "kalia:prelude.glsl"`
 
 layout(push_constant) uniform KaliaPush {

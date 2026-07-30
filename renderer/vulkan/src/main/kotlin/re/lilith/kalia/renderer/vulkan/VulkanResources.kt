@@ -4,9 +4,12 @@ import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.resource.BufferDescription
 import re.lilith.kalia.renderer.resource.BufferUsage
 import re.lilith.kalia.renderer.resource.TextureDescription
+import re.lilith.kalia.renderer.resource.TextureDimension
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.vulkan.api.command.*
+import re.lilith.vulkan.api.debug.DebugNames
 import re.lilith.vulkan.api.memory.*
+import re.lilith.vulkan.api.types.enum.ImageFlag
 import re.lilith.vulkan.api.types.enum.ImageLayout
 import re.lilith.vulkan.api.types.enum.ImageType
 import re.lilith.vulkan.api.types.enum.ImageViewType
@@ -41,6 +44,7 @@ internal fun VulkanContext.createTextureResources(description: TextureDescriptio
             mipLevels = description.mipLevels,
             arrayLayers = description.layers,
             usage = usage,
+            flags = if (description.dimension == TextureDimension.CUBE) ImageFlag.CubeMapCompatible else ImageFlag.None
         ),
         MemoryUsage.GpuOnly,
     )
@@ -48,7 +52,16 @@ internal fun VulkanContext.createTextureResources(description: TextureDescriptio
     val view = device.createImageView(
         image,
         ImageViewConfig(
-            type = if (description.layers > 1) ImageViewType.TwoDimensionalArray else ImageViewType.TwoDimensional,
+            type = when {
+                description.dimension == TextureDimension.CUBE ->
+                    ImageViewType.Cube
+
+                description.layers > 1 ->
+                    ImageViewType.TwoDimensionalArray
+
+                else ->
+                    ImageViewType.TwoDimensional
+            },
             format = Convert.format(description.format),
             subresourceRange = ImageSubresourceRange(
                 aspectMask = Convert.aspect(description.format),
@@ -57,6 +70,8 @@ internal fun VulkanContext.createTextureResources(description: TextureDescriptio
             ),
         ),
     )
+    DebugNames.set(device, image, description.label)
+    DebugNames.set(device, view, "${description.label}/view")
     return image to view
 }
 
@@ -66,7 +81,7 @@ internal fun VulkanContext.createStagingBuffer(sizeBytes: Long): VkBuffer = allo
         usage = re.lilith.vulkan.api.types.flags.BufferUsage.TransferSource,
     ),
     MemoryUsage.Upload,
-)
+).also { DebugNames.set(device, it, "kalia/staging-page") }
 
 /**
  * Records the copy of one staged mip level into [texture]
@@ -74,6 +89,7 @@ internal fun VulkanContext.createStagingBuffer(sizeBytes: Long): VkBuffer = allo
 internal fun CommandRecorder.recordTextureUpload(
     texture: VulkanTexture,
     staging: VkBuffer,
+    stagingOffset: Long,
     mipLevel: Int,
     levelExtent: Extent,
     sourceLayout: ImageLayout,
@@ -86,6 +102,7 @@ internal fun CommandRecorder.recordTextureUpload(
         destinationLayout = ImageLayout.TransferDestinationOptimal,
         regions = listOf(
             BufferImageCopy(
+                bufferOffset = stagingOffset,
                 imageSubresource = ImageSubresourceLayers(
                     aspectMask = Convert.aspect(texture.format),
                     mipLevel = mipLevel,
@@ -148,7 +165,7 @@ internal fun CommandRecorder.recordMipmapGeneration(texture: VulkanTexture, sour
                     destinationStageMask = PipelineStageMask.Transfer,
                     sourceAccessMask = AccessMask.TransferWrite,
                     destinationAccessMask = AccessMask.TransferRead,
-                    subresourceRange = ImageSubresourceRange(aspect, baseMipLevel = level - 1, levelCount = 1),
+                    subresourceRange = ImageSubresourceRange(aspect, baseMipLevel = level - 1, levelCount = 1, layerCount = texture.layers),
                 ),
             ),
         )
@@ -160,7 +177,7 @@ internal fun CommandRecorder.recordMipmapGeneration(texture: VulkanTexture, sour
             destinationLayout = ImageLayout.TransferDestinationOptimal,
             regions = listOf(
                 ImageBlit(
-                    sourceSubresource = ImageSubresourceLayers(aspect, mipLevel = level - 1),
+                    sourceSubresource = ImageSubresourceLayers(aspect, mipLevel = level - 1, layerCount = texture.layers),
                     sourceOffsets = Offset3D() to Offset3D(source.width, source.height, 1),
                     destinationSubresource = ImageSubresourceLayers(aspect, mipLevel = level),
                     destinationOffsets = Offset3D() to Offset3D(destination.width, destination.height, 1),
@@ -183,6 +200,7 @@ internal fun CommandRecorder.recordMipmapGeneration(texture: VulkanTexture, sour
                     aspect,
                     baseMipLevel = 0,
                     levelCount = (texture.mipLevels - 1).coerceAtLeast(1),
+                    layerCount = texture.layers
                 ),
             ),
             ImageBarrier(
@@ -197,6 +215,7 @@ internal fun CommandRecorder.recordMipmapGeneration(texture: VulkanTexture, sour
                     aspect,
                     baseMipLevel = texture.mipLevels - 1,
                     levelCount = 1,
+                    layerCount = texture.layers
                 ),
             ),
         ),

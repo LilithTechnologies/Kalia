@@ -29,8 +29,13 @@ This is our roadmap for the foreseeable future. It may be altered at any point i
 - [x] Initial Vulkan rendering backend
 - [x] Port Sodium to run on Kalia
 - [x] OpenGL 4.1 rendering backend
-- [x] Instanced entity rendering
+- [x] Instanced world rendering (entities, particles, nametags, etc.)
+- [ ] Rewrite In-Game HUD
 - [ ] Stabilise mod
 - [ ] Split screen renderer to simultaneously test both backends (and it is also just cool)
-- [ ] Reimplementation of OptiFine features
 - [ ] Iris Shaders, on OpenGL _and_ Vulkan, and any future backends
+
+## Credits
+
+Terrain Renderer - I'd like to thank [@rhysdh540](https://github.com/rhysdh540/) for creating [Argentum](https://github.com/rhysdh540/), a performant 1.8.9 implementation of Celeritas. It powers the terrain rendering of Kalia.
+And of course, embeddedt, for creating [Celeritas](https://git.taumc.org/embeddedt/celeritas/).

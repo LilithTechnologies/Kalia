@@ -16,6 +16,11 @@ layout(location = 3) in vec2 inUv1;
 layout(location = 4) in vec4 inNormal;
 #endif
 
+#ifdef TEXTURE_SLOTS
+layout(location = 11) in uint inTexSlot;
+layout(location = 5) flat out uint vTexSlot;
+#endif
+
 layout(location = 0) out vec4 vColor;
 #ifdef TEXGEN
 layout(location = 1) out vec4 vUv0;
@@ -29,6 +34,9 @@ layout(location = 4) out float vViewDistance;
 #include "kalia:prelude.glsl"
 
 void main() {
+#ifdef TEXTURE_SLOTS
+    vTexSlot = inTexSlot;
+#endif
     vec3 position = inPosition + kaliaModelOffset.xyz;
     vec4 eye = kaliaModelView * vec4(position, 1.0);
     vViewDistance = abs(eye.z);

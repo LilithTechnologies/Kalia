@@ -1,5 +1,6 @@
 package re.lilith.vulkan.api.memory
 
+import re.lilith.vulkan.api.internal.vk.VulkanConstants
 import re.lilith.vulkan.api.types.enum.*
 import re.lilith.vulkan.api.types.flags.ImageUsage
 import re.lilith.vulkan.api.types.geometry.Extent3D
@@ -16,4 +17,5 @@ data class ImageConfig(
     val sharingMode: SharingMode = SharingMode.Exclusive,
     val queueFamilyIndices: List<Int> = emptyList(),
     val initialLayout: ImageLayout = ImageLayout.Undefined,
+    val flags: ImageFlag = ImageFlag.None,
 )

@@ -16,6 +16,7 @@ data class TextureDescription(
     val renderTarget: Boolean = false,
     // whether this texture may be the source or destination of a copy or blit
     val transferable: Boolean = true,
+    val dimension: TextureDimension = TextureDimension.D2
 ) {
     init {
         require(mipLevels >= 1) { "Texture '$label' must have at least one mip level." }

@@ -31,9 +31,15 @@ internal class VulkanContext private constructor(
     val allocator: MemoryAllocator,
     val pipelineCache: PipelineCache,
     val depthFormat: Format,
+    val transferQueue: Queue?,
+    val transferFamilyIndex: Int,
+    val transferCommandPool: CommandPool?,
+    val computeQueue: Queue?,
+    val computeFamilyIndex: Int,
+    val computeCommandPool: CommandPool?,
 ) : AutoCloseable {
-    // A VkQueue must be externally synchronised
     private val queueLock = ReentrantLock()
+    private val transferLock = ReentrantLock()
 
     fun <T> withQueueLock(action: () -> T): T {
         queueLock.lock()
@@ -43,6 +49,39 @@ internal class VulkanContext private constructor(
             queueLock.unlock()
         }
     }
+
+    fun <T> withTransferLock(action: () -> T): T {
+        transferLock.lock()
+        return try {
+            action()
+        } finally {
+            transferLock.unlock()
+        }
+    }
+
+    private val computeLock = ReentrantLock()
+
+    fun <T> withComputeLock(action: () -> T): T {
+        computeLock.lock()
+        return try {
+            action()
+        } finally {
+            computeLock.unlock()
+        }
+    }
+
+    /**
+     * True when compute can run on a queue independent of graphics.
+     */
+    val hasAsyncCompute: Boolean get() = computeQueue != null
+
+    val hasDedicatedTransfer: Boolean get() = transferQueue != null
+
+    /**
+     * Families that may touch a device-local buffer.
+     */
+    val bufferQueueFamilies: List<Int> =
+        if (transferQueue != null) listOf(graphicsFamilyIndex, transferFamilyIndex) else emptyList()
 
     val capabilities: DeviceCapabilities = DeviceCapabilities(
         backend = BackendId.Vulkan,
@@ -57,6 +96,8 @@ internal class VulkanContext private constructor(
         supportedDepthFormats = listOfNotNull(Convert.textureFormat(depthFormat)),
         // Overridden by the device, which owns the slot ring
         framesInFlight = 1,
+        dedicatedTransferQueue = transferQueue != null,
+        asyncCompute = computeQueue != null,
         subTexelPrecisionBits = physicalDevice.properties.subTexelPrecisionBits,
     )
 
@@ -83,18 +124,57 @@ internal class VulkanContext private constructor(
     val supportsPushDescriptors: Boolean = PUSH_DESCRIPTOR_EXTENSION_NAME in device.enabledExtensions
     val supportsMultiDraw: Boolean = device.config.features.multiDraw
 
+    val supportsWideLines: Boolean = device.config.features.wideLines
+    val supportsFillModeNonSolid: Boolean = device.config.features.fillModeNonSolid
+    val supportsLogicOp: Boolean = device.config.features.logicOp
+
     val supportsMultiDrawIndirect: Boolean = device.config.features.multiDrawIndirect
 
     val maxMultiDrawCount: Int = physicalDevice.properties.maxMultiDrawCount ?: 1
 
     override fun close() {
         device.waitIdle()
+        transferCommandPool?.close()
+        computeCommandPool?.close()
         device.close()
         surface.close()
         instance.close()
     }
 
     companion object {
+        internal fun findTransferFamily(families: List<QueueFamily>, graphicsFamilyIndex: Int): QueueFamily? {
+            val candidates = families.filter { family ->
+                family.index != graphicsFamilyIndex &&
+                        family.queueCount > 0 &&
+                        QueueCapability.Transfer in family.capabilities &&
+                        QueueCapability.Graphics !in family.capabilities
+            }
+            return candidates.firstOrNull { QueueCapability.Compute !in it.capabilities }
+                ?: candidates.firstOrNull()
+        }
+
+        internal class ComputeSelection(val family: QueueFamily, val queueIndex: Int)
+
+        internal fun findComputeFamily(
+            families: List<QueueFamily>,
+            graphicsFamilyIndex: Int,
+            transferFamilyIndex: Int,
+        ): ComputeSelection? {
+            val candidates = families.filter { family ->
+                family.index != graphicsFamilyIndex &&
+                        family.queueCount > 0 &&
+                        QueueCapability.Compute in family.capabilities &&
+                        QueueCapability.Graphics !in family.capabilities
+            }
+            candidates.firstOrNull { it.index != transferFamilyIndex }?.let {
+                return ComputeSelection(it, 0)
+            }
+            return candidates.firstOrNull { it.queueCount > 1 }?.let { ComputeSelection(it, 1) }
+        }
+
+        val debugNamesRequested: Boolean
+            get() = System.getProperty("kalia.debugNames", "false").toBoolean()
+
         fun isSupported(surface: PlatformSurface): Boolean =
             surface.windowSystem == WindowSystem.SDL &&
                     surface.nativeHandle != 0L &&
@@ -114,6 +194,8 @@ internal class VulkanContext private constructor(
 
                 if (settings.validation) {
                     enableValidation()
+                }
+                if (settings.validation || debugNamesRequested) {
                     enableDebugUtils()
                 }
                 SdlSurface.requiredInstanceExtensions().forEach(::enableExtension)
@@ -148,11 +230,25 @@ internal class VulkanContext private constructor(
 
                 val graphicsFamily = requireNotNull(physicalDevice.findQueueFamily(QueueCapability.Graphics))
                 val presentFamily = requireNotNull(physicalDevice.findPresentQueueFamily(surface))
+                val transferFamily = findTransferFamily(physicalDevice.queueFamilies, graphicsFamily.index)
+                val computeFamily = findComputeFamily(
+                    physicalDevice.queueFamilies,
+                    graphicsFamily.index,
+                    transferFamily?.index ?: -1,
+                )
 
                 val device = physicalDevice.createLogicalDevice {
                     requestQueues(graphicsFamily.index, 1.0f)
                     if (presentFamily.index != graphicsFamily.index) {
                         requestQueues(presentFamily.index, 1.0f)
+                    }
+                    if (transferFamily != null) {
+                        requestQueues(transferFamily.index, 1.0f)
+                    }
+                    if (computeFamily != null && computeFamily.family.index != transferFamily?.index) {
+                        requestQueues(computeFamily.family.index, 1.0f)
+                    } else if (computeFamily != null) {
+                        requestQueues(computeFamily.family.index, 1.0f, 1.0f)
                     }
                     enableExtension(SWAPCHAIN_EXTENSION_NAME)
                     enableExtension(KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)
@@ -188,6 +284,12 @@ internal class VulkanContext private constructor(
                     allocator = device.createMemoryAllocator(),
                     pipelineCache = device.createPipelineCache(VulkanPipelineCacheStore.load()),
                     depthFormat = physicalDevice.findSupportedDepthFormat(),
+                    transferQueue = transferFamily?.let { device.queue(it.index) },
+                    transferFamilyIndex = transferFamily?.index ?: -1,
+                    transferCommandPool = transferFamily?.let { device.createCommandPool(it.index) },
+                    computeQueue = computeFamily?.let { device.queue(it.family.index, it.queueIndex) },
+                    computeFamilyIndex = computeFamily?.family?.index ?: -1,
+                    computeCommandPool = computeFamily?.let { device.createCommandPool(it.family.index) },
                 )
             } catch (failure: Throwable) {
                 surface.close()

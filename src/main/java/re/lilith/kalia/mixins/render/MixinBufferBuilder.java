@@ -11,7 +11,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import re.lilith.kalia.utility.MemoryAccess;
+import re.lilith.kalia.renderer.utility.MemoryAccess;
 import sun.misc.Unsafe;
 
 import java.nio.Buffer;

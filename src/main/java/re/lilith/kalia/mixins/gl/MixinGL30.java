@@ -4,9 +4,9 @@ import org.lwjgl.opengl.GL30;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 
-import re.lilith.kalia.texture.FramebufferTable;
-import re.lilith.kalia.texture.RenderbufferTable;
-import re.lilith.kalia.texture.TextureTable;
+import re.lilith.kalia.gl.tables.FramebufferTable;
+import re.lilith.kalia.gl.tables.RenderbufferTable;
+import re.lilith.kalia.gl.tables.TextureTable;
 
 @Mixin(GL30.class)
 public class MixinGL30 {

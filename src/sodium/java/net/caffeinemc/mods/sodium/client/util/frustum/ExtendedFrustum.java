@@ -1,6 +1,0 @@
-package net.caffeinemc.mods.sodium.client.util.frustum;
-
-public interface ExtendedFrustum {
-    int kalia$intersect(double minX, double minY, double minZ, double maxX, double maxY, double maxZ);
-    float[][] kalia$getPlanes();
-}

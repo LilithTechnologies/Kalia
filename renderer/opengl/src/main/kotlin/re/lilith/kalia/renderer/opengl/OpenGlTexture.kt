@@ -8,12 +8,14 @@ import org.lwjgl.opengl.GL13C.glActiveTexture
 import org.lwjgl.opengl.GL30C.GL_TEXTURE_2D_ARRAY
 import org.lwjgl.opengl.GL30C.glGenerateMipmap
 import org.lwjgl.opengl.GL12C.nglTexImage3D
+import org.lwjgl.opengl.GL13C.GL_TEXTURE_CUBE_MAP
 import org.lwjgl.system.MemoryUtil
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.opengl.utils.GlConvert
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.renderer.resource.TextureDescription
+import re.lilith.kalia.renderer.resource.TextureDimension
 import java.nio.ByteBuffer
 
 internal class OpenGlTexture(
@@ -101,7 +103,11 @@ internal class OpenGlTexture(
 
         fun create(owner: OpenGlRenderDevice, description: TextureDescription): OpenGlTexture {
             val id = glGenTextures()
-            val target = if (description.layers > 1) GL_TEXTURE_2D_ARRAY else GL_TEXTURE_2D
+            val target = when (description.dimension) {
+                TextureDimension.D2 -> GL_TEXTURE_2D
+                TextureDimension.D2_ARRAY -> GL_TEXTURE_2D_ARRAY
+                TextureDimension.CUBE -> GL_TEXTURE_CUBE_MAP
+            }
             bindForEdit(target, id)
             glTexParameteri(target, GL_TEXTURE_MAX_LEVEL, description.mipLevels - 1)
 

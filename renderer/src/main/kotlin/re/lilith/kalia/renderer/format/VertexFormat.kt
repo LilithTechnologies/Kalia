@@ -48,6 +48,7 @@ class VertexFormat private constructor(
             cursor += bytes
         }
 
+        @JvmOverloads
         fun build(stride: Int = cursor): VertexFormat {
             require(attributes.isNotEmpty()) { "A vertex format needs at least one attribute." }
             require(stride >= cursor) { "Stride $stride is smaller than the packed size $cursor." }

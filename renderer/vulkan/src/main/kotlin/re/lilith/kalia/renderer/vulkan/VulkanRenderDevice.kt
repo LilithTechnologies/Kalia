@@ -11,11 +11,16 @@ import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.format.VertexStepMode
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.graph.RenderGraph
+import re.lilith.kalia.renderer.command.ComputeEncoder
+import re.lilith.kalia.renderer.device.RenderStats
+import re.lilith.kalia.renderer.pipeline.ComputePipelineDescription
 import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.resource.*
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.kalia.renderer.vulkan.utils.TransientTexturePool
+import re.lilith.vulkan.api.command.CommandBuffer
 import re.lilith.vulkan.api.core.VulkanResultException
+import re.lilith.vulkan.api.debug.DebugNames
 import re.lilith.vulkan.api.descriptor.DescriptorSetLayoutBinding
 import re.lilith.vulkan.api.descriptor.DescriptorSetLayoutConfig
 import re.lilith.vulkan.api.descriptor.SamplerConfig
@@ -28,6 +33,7 @@ import re.lilith.vulkan.api.presentation.present
 import re.lilith.vulkan.api.resource.VulkanResource
 import re.lilith.vulkan.api.sync.SemaphoreSignal
 import re.lilith.vulkan.api.sync.SemaphoreWait
+import re.lilith.vulkan.api.types.enum.SharingMode
 import re.lilith.vulkan.api.types.flags.PipelineStageMask
 import java.util.concurrent.ConcurrentHashMap
 
@@ -38,6 +44,17 @@ internal class VulkanRenderDevice(
 ) : RenderDevice {
 
     internal val uploads = VulkanUploadQueue(context)
+
+    private val transferTimeline = context.transferQueue?.let { context.device.createTimelineSemaphore(0L) }
+    private var transferValue = 0L
+    private var submittedTransferValue = 0L
+
+    private var insideFrame = false
+
+    private val computeTimeline = context.computeQueue?.let { context.device.createTimelineSemaphore(0L) }
+    private var computeValue = 0L
+    private var submittedComputeValue = 0L
+    private val computePipelines = ConcurrentHashMap<ComputePipelineDescription, VulkanComputePipeline>()
     private val transientTextures = TransientTexturePool(this)
     private val executor = VulkanGraphExecutor(this, transientTextures)
 
@@ -62,7 +79,7 @@ internal class VulkanRenderDevice(
     private var builtForExtent: Extent = platformSurface.framebufferExtent
 
     override val capabilities: DeviceCapabilities =
-        context.capabilities.copy(framesInFlight = FRAMES_IN_FLIGHT)
+        context.capabilities.copy(framesInFlight = FRAMES_IN_FLIGHT, supportsCompute = true)
 
     override val surfaceExtent: Extent get() = swapchain.extent
 
@@ -79,11 +96,106 @@ internal class VulkanRenderDevice(
 
     override fun createBuffer(description: BufferDescription): GpuBuffer {
         val memory = if (description.needsHostMapping) MemoryUsage.Upload else MemoryUsage.GpuOnly
+
+        val families = if (memory == MemoryUsage.GpuOnly) context.bufferQueueFamilies else emptyList()
+
         val buffer = context.allocator.createBuffer(
-            BufferConfig(size = description.sizeBytes, usage = Convert.bufferUsage(description)),
+            BufferConfig(
+                size = description.sizeBytes,
+                usage = Convert.bufferUsage(description),
+                sharingMode = if (families.isEmpty()) SharingMode.Exclusive else SharingMode.Concurrent,
+                queueFamilyIndices = families,
+            ),
             memory,
         )
+        DebugNames.set(context.device, buffer, description.label)
         return VulkanBuffer(this, description.label, description.sizeBytes, description.usage, buffer)
+    }
+
+    override fun flushUploads() {
+        val queue = context.transferQueue ?: return
+        val timeline = transferTimeline ?: return
+        if (!insideFrame || !uploads.hasBufferWork) {
+            return
+        }
+        val frame = frames[frameIndex]
+        val commandBuffer = frame.nextTransferCommandBuffer() ?: return
+
+        val recorder = commandBuffer.begin()
+        val recorded = uploads.flushBuffers(recorder)
+        val finished = recorder.end()
+        if (!recorded) {
+            return
+        }
+
+        transferValue++
+        context.withTransferLock {
+            queue.submit(
+                submissions = listOf(
+                    QueueSubmission(
+                        commandBuffers = listOf(finished),
+                        signalSemaphores = listOf(SemaphoreSignal(timeline, transferValue)),
+                    ),
+                ),
+            )
+        }
+        submittedTransferValue = transferValue
+        re.lilith.kalia.renderer.device.RenderStats.recordTransferSubmit()
+    }
+
+    override fun createComputePipeline(description: ComputePipelineDescription): GpuComputePipeline =
+        computePipelines.computeIfAbsent(description) { VulkanComputePipeline.compile(this, it) }
+
+    /**
+     * Records compute work and submits it so this frame's graphics can consume the results.
+     *
+     * With an independent compute family the work goes there and graphics waits on a timeline value,
+     * which lets it overlap the rest of the frame. Without one, which is the usual MoltenVK case, it is
+     * submitted on the graphics queue ahead of the render submission and ordered by a barrier, so the
+     * behaviour is identical and only the parallelism is lost.
+     */
+    override fun compute(body: (ComputeEncoder) -> Unit) {
+        check(insideFrame) { "compute() may only be called while a frame is recording." }
+        val frame = frames[frameIndex]
+        val commandBuffer = frame.nextComputeCommandBuffer(context.commandPool)
+
+        val recorder = commandBuffer.begin()
+        val encoder = VulkanComputeEncoder(this, recorder, frame)
+        val recorded = try {
+            body(encoder)
+            encoder.finish()
+        } finally {
+            // The buffer has to be ended even if the body threw, or it cannot be reset later
+            recorder.end()
+        }
+        if (!recorded) {
+            return
+        }
+
+        val asyncQueue = context.computeQueue
+        val timeline = computeTimeline
+        if (asyncQueue != null && timeline != null) {
+            computeValue++
+            context.withComputeLock {
+                asyncQueue.submit(
+                    submissions = listOf(
+                        QueueSubmission(
+                            commandBuffers = listOf(commandBuffer),
+                            signalSemaphores = listOf(SemaphoreSignal(timeline, computeValue)),
+                        ),
+                    ),
+                )
+            }
+            submittedComputeValue = computeValue
+        } else {
+            // Same queue as graphics, so submission order plus the encoder's barrier is the dependency
+            context.withQueueLock {
+                context.graphicsQueue.submit(
+                    submissions = listOf(QueueSubmission(commandBuffers = listOf(commandBuffer))),
+                )
+            }
+        }
+        RenderStats.recordComputeDispatch()
     }
 
     override fun copyBuffer(
@@ -210,7 +322,11 @@ internal class VulkanRenderDevice(
                 vertexInput = vertexInputState(description),
                 topology = Convert.topology(description.raster.topology),
                 rasterization = RasterizationState(
-                    polygonMode = Convert.polygonMode(description.raster.polygonMode),
+                    polygonMode = if (context.supportsFillModeNonSolid) {
+                        Convert.polygonMode(description.raster.polygonMode)
+                    } else {
+                        re.lilith.vulkan.api.pipeline.PolygonMode.Fill
+                    },
                     cullMode = Convert.cullMode(description.raster.cullMode),
                     frontFace = Convert.frontFace(description.raster.frontFace),
                     depthBiasEnable = description.raster.depthBiasEnabled,
@@ -221,7 +337,7 @@ internal class VulkanRenderDevice(
                     depthCompareOperation = Convert.compare(description.depth.compare),
                 ).takeIf { description.attachments.depthFormat != null },
                 colorBlend = ColorBlendState(
-                    logicOperationEnable = description.blend.logicOp != null,
+                    logicOperationEnable = description.blend.logicOp != null && context.supportsLogicOp,
                     logicOperation = description.blend.logicOp
                         ?.let(Convert::logicOp)
                         ?: re.lilith.vulkan.api.pipeline.LogicOperation.Copy,
@@ -248,6 +364,7 @@ internal class VulkanRenderDevice(
             ),
         )
 
+        DebugNames.set(context.device, pipeline, program.label)
         return VulkanPipeline(
             owner = this,
             label = program.label,
@@ -309,8 +426,14 @@ internal class VulkanRenderDevice(
         frame.inFlightFence.wait()
         frame.recycle()
         releaseTarget = frame
+        insideFrame = true
+
+        submittedTransferValue = 0L
+        submittedComputeValue = 0L
+        flushUploads()
 
         val acquired = swapchain.acquire(frame.imageAvailable) ?: run {
+            insideFrame = false
             if (!rebuildSwapchain(target)) {
                 pendingResize = target
             }
@@ -331,36 +454,77 @@ internal class VulkanRenderDevice(
         swapchain.recordPresentBlit(recorder, acquired)
         val recorded = recorder.end()
 
-        frame.uploadCommandBuffer.reset()
-        val uploadRecorder = frame.uploadCommandBuffer.begin()
-        uploads.flush(uploadRecorder, frame::retire)
-        val recordedUploads = uploadRecorder.end()
+        flushUploads()
+
+        val ownsBufferWork = !context.hasDedicatedTransfer && uploads.hasBufferWork
+        var recordedUploads: CommandBuffer? = null
+        if (uploads.hasImageWork || ownsBufferWork) {
+            frame.uploadCommandBuffer.reset()
+            val uploadRecorder = frame.uploadCommandBuffer.begin()
+            if (ownsBufferWork) {
+                uploads.flushBuffers(uploadRecorder)
+            }
+            uploads.flushImages(uploadRecorder)
+            recordedUploads = uploadRecorder.end()
+        }
+
+        uploads.endFrame(frame::retire)
 
         frame.inFlightFence.reset()
         val renderFinished = swapchain.renderFinishedSemaphore(acquired.index)
 
+        val waits = buildList {
+            add(
+                SemaphoreWait(
+                    frame.imageAvailable,
+                    PipelineStageMask.ColorAttachmentOutput + PipelineStageMask.Transfer,
+                ),
+            )
+            if (recordedUploads != null) {
+                add(SemaphoreWait(frame.uploadsFinished, PipelineStageMask.VertexInput))
+            }
+            val timeline = transferTimeline
+            if (timeline != null && submittedTransferValue > 0L) {
+                add(
+                    SemaphoreWait(
+                        timeline,
+                        PipelineStageMask.VertexInput + PipelineStageMask.Transfer,
+                        submittedTransferValue,
+                    ),
+                )
+            }
+            val compute = computeTimeline
+            if (compute != null && submittedComputeValue > 0L) {
+                add(
+                    SemaphoreWait(
+                        compute,
+                        PipelineStageMask.DrawIndirect + PipelineStageMask.VertexInput +
+                                PipelineStageMask.VertexShader + PipelineStageMask.FragmentShader,
+                        submittedComputeValue,
+                    ),
+                )
+            }
+        }
+
         context.withQueueLock {
             context.graphicsQueue.submit(
-                submissions = listOf(
-                    QueueSubmission(
-                        commandBuffers = listOf(recordedUploads),
-                        signalSemaphores = listOf(SemaphoreSignal(frame.uploadsFinished)),
-                    ),
-                    QueueSubmission(
-                        commandBuffers = listOf(recorded),
-                        waitSemaphores = listOf(
-                            SemaphoreWait(
-                                semaphore = frame.imageAvailable,
-                                stageMask = PipelineStageMask.ColorAttachmentOutput + PipelineStageMask.Transfer,
+                submissions = buildList {
+                    if (recordedUploads != null) {
+                        add(
+                            QueueSubmission(
+                                commandBuffers = listOf(recordedUploads),
+                                signalSemaphores = listOf(SemaphoreSignal(frame.uploadsFinished)),
                             ),
-                            SemaphoreWait(
-                                semaphore = frame.uploadsFinished,
-                                stageMask = PipelineStageMask.AllCommands,
-                            ),
+                        )
+                    }
+                    add(
+                        QueueSubmission(
+                            commandBuffers = listOf(recorded),
+                            waitSemaphores = waits,
+                            signalSemaphores = listOf(SemaphoreSignal(renderFinished)),
                         ),
-                        signalSemaphores = listOf(SemaphoreSignal(renderFinished)),
-                    ),
-                ),
+                    )
+                },
                 fence = frame.inFlightFence,
             )
         }
@@ -381,6 +545,7 @@ internal class VulkanRenderDevice(
             pendingResize = target
         }
 
+        insideFrame = false
         frameIndex = (frameIndex + 1) % frames.size
         return true
     }
@@ -403,6 +568,7 @@ internal class VulkanRenderDevice(
     }
 
     private fun rebuildSwapchain(extent: Extent): Boolean {
+        insideFrame = false
         val resolved = VulkanSwapchain.presentableExtent(context, extent) ?: return false
 
         context.device.waitIdle()
@@ -432,11 +598,14 @@ internal class VulkanRenderDevice(
         transientTextures.close()
         swapchain.close()
         frames.forEach(VulkanFrameSlot::close)
+        uploads.close()
+        transferTimeline?.close()
+        computeTimeline?.close()
         context.close()
     }
 
     private companion object {
-        const val FRAMES_IN_FLIGHT = 2
+        const val FRAMES_IN_FLIGHT = 3
     }
 }
 
