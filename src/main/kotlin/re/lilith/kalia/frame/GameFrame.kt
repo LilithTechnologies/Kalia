@@ -24,12 +24,21 @@ object GameFrame {
     fun record(context: PassContext, body: () -> Unit) {
         check(encoder == null) { "A Kalia game pass is already recording." }
         encoder = context
+        forgetEncoderState()
         try {
             body()
         } finally {
             EntityBatchers.flush()
             encoder = null
+            forgetEncoderState()
         }
+    }
+
+    private fun forgetEncoderState() {
+        _viewport = null
+        scissor = null
+        colorTarget = null
+        depthTarget = null
     }
 
     private var colorTarget: GpuTexture? = null

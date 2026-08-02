@@ -88,6 +88,8 @@ class PictureInPictureRenderer<T>(
             lastRenders++
         }
 
+        pass.retarget(null)
+        pass.viewport(Viewport.of(pass.extent))
         pass.scissor(null)
         queue.clear()
     }
@@ -97,6 +99,8 @@ class PictureInPictureRenderer<T>(
     }
 
     fun textureFor(key: Any): GpuTexture? = targets[key]?.texture
+
+    fun depthFor(key: Any): GpuTexture? = targets[key]?.depth
 
     fun invalidate(key: Any) {
         targets.remove(key)?.let {

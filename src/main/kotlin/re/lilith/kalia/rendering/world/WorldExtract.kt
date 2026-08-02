@@ -5,6 +5,8 @@ import net.minecraft.client.render.Camera
 import net.minecraft.util.math.MathHelper
 import org.joml.Matrix4f
 import org.joml.Vector3f
+import org.lwjgl.opengl.GL11.GL_GREATER
+import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlEnums.GL_MODELVIEW
 import re.lilith.kalia.gl.GlEnums.GL_PROJECTION
 import re.lilith.kalia.gl.MatrixState
@@ -14,6 +16,8 @@ import re.lilith.kalia.platform.KaliaMod
 import kotlin.math.floor
 
 object WorldExtract {
+    private const val WORLD_ALPHA_CUTOUT = 0.5f
+
     private const val NEAR_PLANE = 0.05
     private const val SKY_FAR_SCALE = 2.0f
     private const val CLOUD_FAR_SCALE = 4.0f
@@ -43,9 +47,12 @@ object WorldExtract {
         state.anaglyphFilter = WorldFrameState.DISABLED_ANAGLYPH
 
         runCatching {
-            renderer.invokeUpdateLightmap(tickDelta)
             renderer.invokeUpdateTargetedEntity(tickDelta)
         }.onFailure { KaliaMod.LOGGER.debug("World state could not be updated this frame.", it) }
+
+        GlBridge.enableDepthTest()
+        GlBridge.enableAlphaTest()
+        GlBridge.alphaFunc(GL_GREATER, WORLD_ALPHA_CUTOUT)
 
         state.cameraX = camera.prevX + (camera.x - camera.prevX) * tickDelta
         state.cameraY = camera.prevY + (camera.y - camera.prevY) * tickDelta

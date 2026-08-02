@@ -134,6 +134,11 @@ class GlTexture(val id: Int) : AutoCloseable {
         contentVersion++
     }
 
+    /**
+     * Allocates backing storage without an upload, for textures that are only ever rendered into
+     */
+    fun ensureAllocated(device: RenderDevice): GpuTexture? = materialize(device)
+
     fun generateMipmaps(device: RenderDevice) {
         materialize(device)?.generateMipmaps()
     }

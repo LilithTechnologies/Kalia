@@ -1,5 +1,6 @@
 package re.lilith.kalia.frame.graph.particle
 
+import re.lilith.kalia.frame.draw.BatchEnvironment
 import re.lilith.kalia.frame.draw.KaliaDraw
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
@@ -48,6 +49,7 @@ object ParticleBatcher {
 
     private val groups = LinkedHashMap<GroupKey, Instances>()
     private val instancePool = ArrayDeque<Instances>()
+    private val environment = BatchEnvironment()
 
     private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
     private var pipelineDevice: RenderDevice? = null
@@ -91,6 +93,7 @@ object ParticleBatcher {
             biasSlope = GlState.effectiveDepthBiasSlope()
             lineWidth = GlState.lineWidth
         }
+        environment.open(resources)
 
         val texture = KaliaDraw.textureForUnit(0, resources)
         val sampler = KaliaDraw.samplerForUnit(0, resources)
@@ -198,7 +201,6 @@ object ParticleBatcher {
             pipelineDevice = device
         }
 
-        resources.sceneUniforms.sync()
         val quadVertices = ParticleMesh.vertices(device)
         val quadIndices = ParticleMesh.indices(device)
 
@@ -209,13 +211,7 @@ object ParticleBatcher {
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
             encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
-            encoder.bindUniformBuffer(
-                binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-                buffer = resources.sceneUniforms.uniformBuffer,
-                offsetBytes = resources.sceneUniforms.offsetBytes,
-                sizeBytes = resources.sceneUniforms.sizeBytes,
-            )
-            encoder.pushConstants(ShaderUniforms.pushConstants())
+            environment.apply(encoder)
 
             val data = instances.finish()
             val slice = resources.vertexArena.append(data, data.remaining())
@@ -234,6 +230,7 @@ object ParticleBatcher {
             }
         }
         groups.clear()
+        environment.close()
         lastKeyDescription = null
         lastKeyTexture = null
         lastKeySampler = null

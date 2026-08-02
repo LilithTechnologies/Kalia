@@ -16,6 +16,7 @@ import re.lilith.kalia.rendering.ui.GuiBlur
 import re.lilith.kalia.rendering.ui.GuiPanorama
 import re.lilith.kalia.rendering.ui.item.GuiItems
 import re.lilith.kalia.rendering.ui.pip.GuiEntityPreview
+import re.lilith.kalia.rendering.world.LightMap
 import re.lilith.kalia.rendering.world.WorldFrame
 import re.lilith.kalia.rendering.world.WorldFrameTimings
 
@@ -33,9 +34,20 @@ object GameFrameGraph {
 
         val world = WorldFrame.isActive
         if (world) {
+            val lightmap = LightMap.texture(device)?.let { import("lightmap", it) }
+
+            if (lightmap != null) {
+                pass("world/lightmap") {
+                    color(lightmap)
+                    draw(LightMap::render)
+                }
+            }
+
             pass("world") {
                 color(scene, clear = clearColor)
                 depth(depth, clear = 1f)
+                // Keeps the lightmap pass alive and transitions it back for sampling
+                lightmap?.let(::reads)
                 draw { WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) { WorldFrame.draw(this) } }
             }
         }
@@ -85,13 +97,13 @@ object GameFrameGraph {
             }
         }
 
-        val previewTexture = GuiEntityPreview.texture
-        val previewHandle = previewTexture?.let { import("gui-entity-preview", it) }
-        if (!GuiEntityPreview.isIdle && atlasHandle != null && atlasDepthHandle != null) {
+        val previewHandle = GuiEntityPreview.texture?.let { import("gui-entity-preview", it) }
+        val previewDepthHandle = GuiEntityPreview.depth?.let { import("gui-entity-preview-depth", it) }
+
+        if (!GuiEntityPreview.isIdle && previewHandle != null && previewDepthHandle != null) {
             pass("gui/entity-preview") {
-                sideEffects()
-                color(atlasHandle, load = LoadOp.LOAD)
-                depth(atlasDepthHandle, load = LoadOp.LOAD)
+                color(previewHandle)
+                depth(previewDepthHandle)
                 draw(GuiEntityPreview::render)
             }
         }

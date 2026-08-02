@@ -21,8 +21,7 @@ object ItemMeshCache {
 
     private val vertexData = Reference2ObjectOpenHashMap<PersistentMesh, ByteBuffer>()
 
-    fun isStackIndependent(model: BakedModel, color: Int, hasStack: Boolean): Boolean =
-        color != -1 || !hasStack || !hasColorableQuads(model)
+    fun isStackIndependent(model: BakedModel, color: Int, hasStack: Boolean) = color != -1 || !hasStack || !hasColorableQuads(model)
 
     private fun hasColorableQuads(model: BakedModel): Boolean = colorable.getOrPut(model) {
         Direction.entries.any { direction -> model.getByDirection(direction).any { it.hasColor() } } ||

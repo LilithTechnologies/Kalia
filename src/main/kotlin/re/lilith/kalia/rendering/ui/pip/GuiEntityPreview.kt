@@ -14,7 +14,6 @@ import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.rendering.ui.UI
 
-// FIXME: This is royally f*cked code. Shit doesn't even work. I'll get to this at some point.
 object GuiEntityPreview {
     var isReplaying = false
         private set
@@ -26,6 +25,8 @@ object GuiEntityPreview {
     val isIdle get() = renderer?.isIdle ?: true
 
     val texture: GpuTexture? get() = renderer?.textureFor(KEY)
+
+    val depth: GpuTexture? get() = renderer?.depthFor(KEY)
 
     fun beginFrame(device: RenderDevice, guiScale: Int) {
         val existing = renderer
@@ -39,7 +40,9 @@ object GuiEntityPreview {
     }
 
     fun capture(x: Int, y: Int, size: Int, mouseX: Float, mouseY: Float, entity: LivingEntity?): Boolean {
-        val renderer = renderer ?: return false
+        val renderer = renderer ?: run {
+            return false
+        }
         if (isReplaying || entity == null || !UI.isRecording) {
             return false
         }
@@ -64,7 +67,8 @@ object GuiEntityPreview {
     }
 
     fun render(pass: PassContext) {
-        renderer?.render(pass)
+        val renderer = renderer ?: return
+        renderer.render(pass)
     }
 
     private fun draw(pass: PassContext, request: Request) {
@@ -89,6 +93,7 @@ object GuiEntityPreview {
                 MatrixState.matrixMode(GL_MODELVIEW)
                 MatrixState.pushMatrix()
                 MatrixState.loadIdentity()
+                MatrixState.translate(0f, 0f, GUI_Z)
                 MatrixState.flush()
 
                 configureDispatcher()
@@ -159,4 +164,5 @@ object GuiEntityPreview {
 
     private const val GUI_NEAR = 1000f
     private const val GUI_FAR = 3000f
+    private const val GUI_Z = -(GUI_NEAR + GUI_FAR) / 2f
 }

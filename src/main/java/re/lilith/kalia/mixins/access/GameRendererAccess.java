@@ -1,6 +1,8 @@
 package re.lilith.kalia.mixins.access;
 
 import net.minecraft.client.render.GameRenderer;
+import net.minecraft.entity.Entity;
+import net.minecraft.entity.LivingEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
@@ -9,6 +11,9 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 public interface GameRendererAccess {
     @Invoker
     float invokeGetFov(float tickDelta, boolean changingFov);
+
+    @Invoker
+    float invokeGetNightVisionStrength(LivingEntity entity, float tickDelta);
 
     @Invoker("setupCamera")
     void invokeSetupCamera(float tickDelta, int anaglyphFilter);
@@ -81,4 +86,14 @@ public interface GameRendererAccess {
 
     @Accessor("lastWindowFocusedTime")
     void setLastWindowFocusedTime(long value);
+
+    @Accessor
+    float getLightmapFlicker();
+
+    @Accessor
+    float getSkyDarkness();
+
+    @Accessor
+    float getLastSkyDarkness();
+
 }

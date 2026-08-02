@@ -2,6 +2,7 @@ package re.lilith.kalia.frame.graph.item
 
 import org.joml.Matrix4f
 import re.lilith.kalia.buffer.PersistentMesh
+import re.lilith.kalia.frame.draw.BatchEnvironment
 import re.lilith.kalia.frame.draw.KaliaDraw
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
@@ -30,14 +31,17 @@ import java.nio.ByteOrder
 import kotlin.collections.iterator
 
 object ItemBatcher {
-    private const val BYTES_PER_INSTANCE = 64
+    private const val BYTES_PER_INSTANCE = 68
 
     val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instRow0", VertexLocations.INSTANCE_ROW0, VertexAttributeFormat.FLOAT4)
         attribute("instRow1", VertexLocations.INSTANCE_ROW1, VertexAttributeFormat.FLOAT4)
         attribute("instRow2", VertexLocations.INSTANCE_ROW2, VertexAttributeFormat.FLOAT4)
+        attribute("instTint", VertexLocations.INSTANCE_TINT, VertexAttributeFormat.UNORM8X4)
         attribute("instLight", VertexLocations.INSTANCE_LIGHT, VertexAttributeFormat.FLOAT4)
     }
+
+    private val environment = BatchEnvironment()
 
     private data class GroupKey(
         val description: GraphicsPipelineDescription,
@@ -82,6 +86,7 @@ object ItemBatcher {
         }
 
         val resources = FrameResources.of(encoder.device)
+        environment.open(resources)
         val texture = KaliaDraw.textureForUnit(0, resources)
         val sampler = KaliaDraw.samplerForUnit(0, resources)
         val lightmap = KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources)
@@ -162,6 +167,12 @@ object ItemBatcher {
         MemoryAccess.putFloat(p, modelView.m22()); p += 4
         MemoryAccess.putFloat(p, modelView.m32()); p += 4
 
+        // The item shader has no shader-colour uniform, so the GL colour rides along per instance
+        MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderRed())); p += 1
+        MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderGreen())); p += 1
+        MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderBlue())); p += 1
+        MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderAlpha())); p += 1
+
         MemoryAccess.putFloat(p, ShaderUniforms.lightmapS()); p += 4
         MemoryAccess.putFloat(p, ShaderUniforms.lightmapT()); p += 4
         var flags = 0
@@ -170,6 +181,8 @@ object ItemBatcher {
         MemoryAccess.putFloat(p, flags.toFloat()); p += 4
         MemoryAccess.putFloat(p, ShaderUniforms.alphaCutout())
     }
+
+    private fun unorm(value: Float): Byte = (value * 255f + 0.5f).toInt().coerceIn(0, 255).toByte()
 
     fun flush() {
         if (groups.isEmpty()) {
@@ -187,8 +200,6 @@ object ItemBatcher {
             pipelineDevice = device
         }
 
-        resources.sceneUniforms.sync()
-
         for ((key, instances) in groups) {
             val vertexBuffer = key.mesh.vertexBuffer ?: continue
             val quadCount = key.mesh.vertexCount / 4
@@ -200,13 +211,7 @@ object ItemBatcher {
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
             encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
-            encoder.bindUniformBuffer(
-                binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-                buffer = resources.sceneUniforms.uniformBuffer,
-                offsetBytes = resources.sceneUniforms.offsetBytes,
-                sizeBytes = resources.sceneUniforms.sizeBytes,
-            )
-            encoder.pushConstants(ShaderUniforms.pushConstants())
+            environment.apply(encoder)
 
             val data = instances.finish()
             val slice = resources.vertexArena.append(data, data.remaining())
@@ -225,6 +230,7 @@ object ItemBatcher {
             }
         }
         groups.clear()
+        environment.close()
         lastKeyDescription = null
         lastKeyMesh = null
         lastKeyTexture = null

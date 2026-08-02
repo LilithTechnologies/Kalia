@@ -6,6 +6,7 @@ import re.lilith.kalia.gl.MatrixState
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.utility.MemoryAccess
 import re.lilith.kalia.rendering.ui.item.GuiBuiltinItems
+import re.lilith.kalia.rendering.ui.pip.GuiEntityPreview
 import re.lilith.kalia.vertex.TranslatedVertexFormat
 import re.lilith.kalia.vertex.VertexLocations
 import java.nio.ByteBuffer
@@ -30,7 +31,10 @@ object GuiTessellatorBridge {
         if (!UI.isRecording) {
             return false
         }
-        if (GuiBuiltinItems.isReplaying) {
+        if (GuiBuiltinItems.isReplaying || GuiEntityPreview.isReplaying) {
+            return false
+        }
+        if (format.hasNormal) {
             return false
         }
         if (glMode != GL_QUADS || vertexCount < VERTICES_PER_QUAD || vertexCount % VERTICES_PER_QUAD != 0) {

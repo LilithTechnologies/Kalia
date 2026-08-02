@@ -110,26 +110,12 @@ kotlin {
 loom {
     accessWidenerPath = file("src/main/resources/kalia.accesswidener")
 
-    runConfigs {
-        removeIf { it.name == "Minecraft Client" || it.name == "Minecraft Server" }
-
-        create("ClientVulkan") {
-            client()
-            configName = "1.8.9 / Vulkan"
-            ideConfigGenerated(true)
-            runDir("run")
-            jvmArguments.add("-Dkalia.backend=vulkan")
-            jvmArguments.add("-Ddevauth.enabled=true")
-            jvmArguments.add("-Dorg.lwjgl.system.memoryBackend=unsafe")
-        }
-        create("ClientOpenGL") {
-            client()
-            configName = "1.8.9 / OpenGL"
-            ideConfigGenerated(true)
-            runDir("run")
-            jvmArguments.add("-Dkalia.backend=opengl")
-            jvmArguments.add("-Dorg.lwjgl.system.memoryBackend=unsafe")
-        }
+    runs.named("client") {
+        ideConfigGenerated(true)
+        runDir("run")
+        jvmArguments.add("-Dkalia.backend=vulkan")
+        jvmArguments.add("-Ddevauth.enabled=true")
+        jvmArguments.add("-Dorg.lwjgl.system.memoryBackend=unsafe")
     }
 }
 

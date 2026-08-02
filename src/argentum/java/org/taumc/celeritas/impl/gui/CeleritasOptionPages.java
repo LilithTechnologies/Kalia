@@ -275,9 +275,6 @@ final class CeleritasOptionPages {
                         "sodium.options.translucent_face_sorting", OptionImpact.VARIES,
                         (config, value) -> config.translucencySorting = value,
                         config -> config.translucencySorting, OptionFlag.REQUIRES_RENDERER_RELOAD))
-                .add(toggle(StandardOptions.Option.USE_FASTER_CLOUDS,
-                        "embeddium.options.use_faster_clouds", OptionImpact.LOW,
-                        (config, value) -> config.fasterClouds = value, config -> config.fasterClouds))
                 .add(toggle("safe_chunk_edges", OptionImpact.LOW,
                         (config, value) -> config.safeChunkEdges = value, config -> config.safeChunkEdges,
                         OptionFlag.REQUIRES_RENDERER_RELOAD))

@@ -6,6 +6,7 @@ layout(location = 4) in vec4 aNormal;
 layout(location = 5) in vec4 instRow0;
 layout(location = 6) in vec4 instRow1;
 layout(location = 7) in vec4 instRow2;
+layout(location = 8) in vec4 instTint;
 layout(location = 10) in vec4 instLight;
 
 layout(location = 0) out vec4 vColor;
@@ -24,7 +25,7 @@ void main() {
     gl_Position = kaliaProjection * vec4(eye, 1.0);
 
     vUv = (kaliaTextureMatrix * vec4(aUv0, 0.0, 1.0)).xy;
-    vColor = aColor;
+    vColor = aColor * instTint;
     vNormal = normalize(vec3(
         dot(instRow0.xyz, aNormal.xyz),
         dot(instRow1.xyz, aNormal.xyz),

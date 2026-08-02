@@ -26,7 +26,9 @@ object KaliaEngine {
     val device: RenderDevice?
         get() = (state as? State.Running)?.device
 
-    var settings: DeviceSettings = DeviceSettings()
+    var settings: DeviceSettings = DeviceSettings(
+        validation = System.getProperty("kalia.validation").toBoolean(),
+    )
         set(value) {
             field = value
             device?.settings = value

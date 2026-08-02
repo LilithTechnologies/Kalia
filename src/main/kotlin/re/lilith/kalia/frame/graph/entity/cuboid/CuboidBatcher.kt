@@ -3,6 +3,7 @@ package re.lilith.kalia.frame.graph.entity.cuboid
 import org.joml.Matrix4f
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
+import re.lilith.kalia.frame.draw.BatchEnvironment
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.gl.ShaderUniforms
@@ -58,6 +59,7 @@ object CuboidBatcher {
 
     private val groups = LinkedHashMap<GroupKey, Instances>()
     private val instancePool = ArrayDeque<Instances>()
+    private val environment = BatchEnvironment()
 
     private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
     private var pipelineDevice: RenderDevice? = null
@@ -136,6 +138,7 @@ object CuboidBatcher {
         }
 
         val resources = FrameResources.of(encoder.device)
+        environment.open(resources)
         val boundTexture = TextureTable.boundTexture(0)
         val boundLightmap = TextureTable.boundTexture(GlBridge.LIGHTMAP_UNIT)
         val pooled = TextureArrays.resolve(boundTexture, encoder.device)
@@ -327,7 +330,6 @@ object CuboidBatcher {
             pipelineDevice = device
         }
 
-        resources.sceneUniforms.sync()
         val cubeVertices = CuboidMesh.vertices(device)
         val cubeIndices = CuboidMesh.indices(device)
 
@@ -338,13 +340,7 @@ object CuboidBatcher {
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
             encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
-            encoder.bindUniformBuffer(
-                binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-                buffer = resources.sceneUniforms.uniformBuffer,
-                offsetBytes = resources.sceneUniforms.offsetBytes,
-                sizeBytes = resources.sceneUniforms.sizeBytes,
-            )
-            encoder.pushConstants(ShaderUniforms.pushConstants())
+            environment.apply(encoder)
 
             val data = instances.finish()
             val slice = resources.vertexArena.append(data, data.remaining())
@@ -363,6 +359,7 @@ object CuboidBatcher {
             }
         }
         groups.clear()
+        environment.close()
         pendingInstances = 0
         activeInstances = null
         memoValid = false

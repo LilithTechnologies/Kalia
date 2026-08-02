@@ -12,6 +12,8 @@ celeritas.options.pages.quality=Quality
 celeritas.options.pages.performance=Performance
 celeritas.options.pages.advanced=Advanced
 
+celeritas.options.value.off=Off
+
 celeritas.options.render_distance.tooltip=The render distance controls how far away terrain will be rendered. Shorter distances mean that less terrain will be rendered improving frame rates.
 celeritas.options.brightness.tooltip=Controls the brightness (gamma) of the game.
 options.chunks=%s Chunks
@@ -64,8 +66,6 @@ celeritas.options.font_batching.name=Font Batching
 celeritas.options.font_batching.tooltip=If enabled text rendering will be batched into fewer draw calls, improving performance when rendering large amounts of text.
 sodium.options.translucent_face_sorting.name=Translucent Face Sorting
 sodium.options.translucent_face_sorting.tooltip=If enabled translucent effects from surfaces such as stained glass and water will be applied correctly.
-embeddium.options.use_faster_clouds.name=Use Faster Clouds
-embeddium.options.use_faster_clouds.tooltip=When enabled, Celeritas replaces vanilla cloud rendering with a less glitchy and potentially faster implementation. Disable this if mods' cloud customizations aren't visible.
 celeritas.options.safe_chunk_edges.name=Safe Chunk Edges
 celeritas.options.safe_chunk_edges.tooltip=If enabled chunks will wait for their neighbors before building edge geometry. This prevents temporary gaps and incorrect lighting at chunk borders, but reduces the effective server view distance by one chunk. Disable this on low-view-distance servers if the lost terrain matters.
 sodium.options.use_compact_vertex_format.name=Use Compact Vertex Format

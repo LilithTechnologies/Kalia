@@ -1,6 +1,7 @@
 package re.lilith.kalia.frame.graph.entity.nametag
 
 import org.joml.Matrix4f
+import re.lilith.kalia.frame.draw.BatchEnvironment
 import re.lilith.kalia.frame.draw.KaliaDraw
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
@@ -48,6 +49,7 @@ object NametagBatcher {
 
     private val groups = LinkedHashMap<GroupKey, Instances>()
     private val instancePool = ArrayDeque<Instances>()
+    private val environment = BatchEnvironment()
 
     private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
     private var pipelineDevice: RenderDevice? = null
@@ -110,7 +112,7 @@ object NametagBatcher {
 
     private fun beginInstance(): FrameResources? {
         val encoder = GameFrame.current ?: return null
-        return FrameResources.of(encoder.device)
+        return FrameResources.of(encoder.device).also(environment::open)
     }
 
     private fun instancesFor(texture: GpuTexture, sampler: GpuSampler): Instances? {
@@ -220,7 +222,6 @@ object NametagBatcher {
             pipelineDevice = device
         }
 
-        resources.sceneUniforms.sync()
         val quadVertices = NametagMesh.vertices(device)
         val quadIndices = NametagMesh.indices(device)
 
@@ -230,13 +231,7 @@ object NametagBatcher {
             GlBridge.applyDepthBias()
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
-            encoder.bindUniformBuffer(
-                binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-                buffer = resources.sceneUniforms.uniformBuffer,
-                offsetBytes = resources.sceneUniforms.offsetBytes,
-                sizeBytes = resources.sceneUniforms.sizeBytes,
-            )
-            encoder.pushConstants(ShaderUniforms.pushConstants())
+            environment.apply(encoder)
 
             val data = instances.finish()
             val slice = resources.vertexArena.append(data, data.remaining())
@@ -255,6 +250,7 @@ object NametagBatcher {
             }
         }
         groups.clear()
+        environment.close()
         lastKeyDescription = null
         lastKeyTexture = null
         lastKeySampler = null
