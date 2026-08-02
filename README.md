@@ -30,9 +30,8 @@ This is our roadmap for the foreseeable future. It may be altered at any point i
 - [x] Port Sodium to run on Kalia
 - [x] OpenGL 4.1 rendering backend
 - [x] Instanced world rendering (entities, particles, nametags, etc.)
-- [ ] Rewrite In-Game HUD
+- [x] Rewrite In-Game HUD
 - [ ] Stabilise mod
-- [ ] Split screen renderer to simultaneously test both backends (and it is also just cool)
 - [ ] Iris Shaders, on OpenGL _and_ Vulkan, and any future backends
 
 ## Credits
