@@ -104,7 +104,7 @@ fun DependencyHandlerScope.lwjglDesktopNativesNoShade(module: String) {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
 }
 
 allprojects {
@@ -119,9 +119,17 @@ loom {
     runs.named("client") {
         ideConfigGenerated(true)
         runDir("run")
+
+        jvmArguments.add("-Xms4G")
+        jvmArguments.add("-Xmx8G")
+
         jvmArguments.add("-Dkalia.backend=vulkan")
         jvmArguments.add("-Ddevauth.enabled=true")
-        jvmArguments.add("-Dorg.lwjgl.system.memoryBackend=unsafe")
+
+        jvmArguments.add("-XX:+UseCompactObjectHeaders")
+        jvmArguments.add("-XX:+UseZGC")
+        jvmArguments.add("-XX:+AlwaysPreTouch")
+        jvmArguments.add("-XX:+DisableExplicitGC")
     }
 }
 

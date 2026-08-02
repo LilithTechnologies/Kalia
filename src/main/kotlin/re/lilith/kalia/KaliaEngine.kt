@@ -1,5 +1,7 @@
 package re.lilith.kalia
 
+import net.minecraft.util.crash.CrashException
+import net.minecraft.util.crash.CrashReport
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrameGraph
 import re.lilith.kalia.gl.GlBridge
@@ -67,22 +69,6 @@ object KaliaEngine {
                     created.capabilities.adapterName,
                     created.capabilities.apiVersion,
                 )
-                KaliaMod.LOGGER.info(
-                    "Uploads run on {}",
-                    if (created.capabilities.dedicatedTransferQueue) {
-                        "a dedicated transfer queue"
-                    } else {
-                        "the graphics queue (no independent transfer family)"
-                    },
-                )
-                KaliaMod.LOGGER.info(
-                    "Compute: {}",
-                    when {
-                        !created.capabilities.supportsCompute -> "unsupported"
-                        created.capabilities.asyncCompute -> "async on an independent queue"
-                        else -> "inline on the graphics queue (no independent compute family)"
-                    },
-                )
                 val reported = surface.framebufferExtent
                 if (reported != created.surfaceExtent) {
                     KaliaMod.LOGGER.warn(
@@ -128,12 +114,14 @@ object KaliaEngine {
         val graph = GameFrameGraph.build(running.device)
         WorldFrameTimings.end(WorldFrameTimings.GRAPH_BUILD)
 
-        return runCatching { running.device.render(graph) }
-            .getOrElse { failure ->
-                KaliaMod.LOGGER.error("A Kalia frame has failed. The engine will be terminating shortly.", failure)
-                shutdown()
-                false
-            }
+        return runCatching {
+            running.device.render(graph)
+        }.getOrElse { failure ->
+            KaliaMod.LOGGER.error("A Kalia frame has failed. The engine will be terminating shortly.", failure)
+            shutdown()
+            val report = CrashReport.create(failure, "A Kalia frame has failed, and the engine was terminated.")
+            throw CrashException(report)
+        }
     }
 
     fun shutdown() {
