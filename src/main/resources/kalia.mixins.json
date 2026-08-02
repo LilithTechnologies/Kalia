@@ -14,8 +14,8 @@
   ],
   "client": [
     "access.BufferBuilderAccess",
-    "access.GameRendererAccess",
     "access.ChatHudAccess",
+    "access.GameRendererAccess",
     "access.ParticleManagerAccess",
     "access.PlayerListHudAccess",
     "access.SpriteAccess",
@@ -50,6 +50,7 @@
     "render.MixinModelBox",
     "render.MixinModelPart",
     "render.MixinParticle",
+    "render.MixinScreen",
     "render.MixinTextRenderer",
     "render.MixinTitleScreen",
     "render.MixinVertexBuffer",

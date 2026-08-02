@@ -9,6 +9,8 @@ import re.lilith.kalia.renderer.Kalia
 import re.lilith.kalia.renderer.device.BackendId
 import re.lilith.kalia.renderer.device.DeviceSettings
 import re.lilith.kalia.renderer.device.RenderDevice
+import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
+import re.lilith.kalia.rendering.ui.GuiBlur
 import re.lilith.kalia.rendering.ui.UI
 import re.lilith.kalia.rendering.ui.item.GuiItems
 import re.lilith.kalia.rendering.ui.pip.GuiEntityPreview

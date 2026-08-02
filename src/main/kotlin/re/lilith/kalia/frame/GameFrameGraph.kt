@@ -11,6 +11,7 @@ import re.lilith.kalia.renderer.graph.TextureHandle
 import re.lilith.kalia.renderer.graph.renderGraph
 import re.lilith.kalia.renderer.post.postChain
 import re.lilith.kalia.rendering.KaliaFrameRenderer
+import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
 import re.lilith.kalia.rendering.ui.GuiBlur
 import re.lilith.kalia.rendering.ui.GuiPanorama
 import re.lilith.kalia.rendering.ui.item.GuiItems
@@ -38,6 +39,35 @@ object GameFrameGraph {
                 draw { WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) { WorldFrame.draw(this) } }
             }
         }
+
+        val worldBlurred =
+            GuiBackgroundBlur.enabled &&
+                    world
+
+        val sceneForUi =
+            if (worldBlurred) {
+                val blurredScene = texture("world-blurred", sceneFormat)
+
+                postChain(scene, blurredScene, name = "world-blur") {
+                    stage("horizontal", GuiBlur.PROGRAM) {
+                        params {
+                            vec2(1f, 0f)
+                            float(GuiBackgroundBlur.radius)
+                        }
+                    }
+
+                    stage("vertical", GuiBlur.PROGRAM) {
+                        params {
+                            vec2(0f, 1f)
+                            float(GuiBackgroundBlur.radius)
+                        }
+                    }
+                }
+
+                blurredScene
+            } else {
+                scene
+            }
 
         val atlasColour = GuiItems.atlasTexture
         val atlasDepth = GuiItems.atlasDepth
@@ -77,10 +107,10 @@ object GameFrameGraph {
 
         pass("ui/before-blur") {
             if (world || panorama) {
-                color(scene, load = LoadOp.LOAD)
+                color(sceneForUi, load = LoadOp.LOAD)
                 depth(depth, load = LoadOp.LOAD)
             } else {
-                color(scene, clear = clearColor)
+                color(sceneForUi, clear = clearColor)
                 depth(depth, clear = 1f)
             }
             atlasHandle?.let(::reads)
@@ -91,7 +121,7 @@ object GameFrameGraph {
         if (GuiBlur.enabled) {
             val blurred = texture("gui-blurred", sceneFormat)
 
-            postChain(scene, blurred, name = "gui-blur") {
+            postChain(sceneForUi, blurred, name = "gui-blur") {
                 stage("horizontal", GuiBlur.PROGRAM) {
                     params {
                         vec2(1f, 0f)
@@ -117,14 +147,14 @@ object GameFrameGraph {
             postChain(blurred, TextureHandle.BACK_BUFFER, name = "present") {}
         } else {
             pass("ui/after-blur") {
-                color(scene, load = LoadOp.LOAD)
+                color(sceneForUi, load = LoadOp.LOAD)
                 depth(depth, load = LoadOp.LOAD)
                 atlasHandle?.let(::reads)
                 previewHandle?.let(::reads)
                 draw { WorldFrameTimings.part(WorldFrameTimings.PART_UI_PASS) { frameRenderer.renderUiAfterBlur(this) } }
             }
 
-            postChain(scene, TextureHandle.BACK_BUFFER, name = "present") {}
+            postChain(sceneForUi, TextureHandle.BACK_BUFFER, name = "present") {}
         }
     }
 }

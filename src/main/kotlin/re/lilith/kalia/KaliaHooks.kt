@@ -2,6 +2,7 @@ package re.lilith.kalia
 
 import re.lilith.kalia.platform.GameInput
 import re.lilith.kalia.rendering.state.FrameState
+import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
 import re.lilith.kalia.rendering.ui.GuiWalk
 import re.lilith.kalia.rendering.world.WorldFrame
 import re.lilith.kalia.rendering.world.WorldFrameTimings
@@ -13,6 +14,7 @@ object KaliaHooks {
         if (!KaliaEngine.beginFrame()) {
             return
         }
+        GuiBackgroundBlur.enabled = false
         WorldFrame.collect(FrameState.tickDelta)
         GuiWalk.collect(FrameState.tickDelta)
         WorldFrameTimings.end(WorldFrameTimings.GUI_WALK)
