@@ -12,6 +12,5 @@ interface BackendId {
     open class Named internal constructor(name: String) : BackendId { override val displayName = name }
 
     object Vulkan : Named("Vulkan")
-    object OpenGL : Named("OpenGL")
     object Headless : Named("Headless")
 }

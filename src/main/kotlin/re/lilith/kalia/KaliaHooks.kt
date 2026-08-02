@@ -18,7 +18,6 @@ object KaliaHooks {
         WorldFrameTimings.end(WorldFrameTimings.GUI_WALK)
         KaliaEngine.renderFrame()
         WorldFrameTimings.end(WorldFrameTimings.DEVICE_RENDER)
-        WorldFrameTimings.report()
     }
 
     @JvmStatic

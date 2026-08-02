@@ -47,7 +47,6 @@ dependencies {
     implementation(include(project(":vulkan-api"))!!)
     implementation(include(project(":renderer"))!!)
     implementation(include(project(":renderer:vulkan"))!!)
-    implementation(include(project(":renderer:opengl"))!!)
     implementation(include(project(":terrain"))!!)
 
     testImplementation(kotlin("test"))
