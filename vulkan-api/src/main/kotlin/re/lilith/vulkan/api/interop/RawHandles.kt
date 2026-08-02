@@ -2,6 +2,7 @@ package re.lilith.vulkan.api.interop
 
 import org.lwjgl.vulkan.*
 import re.lilith.vulkan.api.command.CommandBuffer
+import re.lilith.vulkan.api.descriptor.DescriptorSet
 import re.lilith.vulkan.api.descriptor.Sampler
 import re.lilith.vulkan.api.device.LogicalDevice
 import re.lilith.vulkan.api.device.PhysicalDevice
@@ -10,6 +11,7 @@ import re.lilith.vulkan.api.instance.VulkanInstance
 import re.lilith.vulkan.api.memory.Buffer
 import re.lilith.vulkan.api.memory.Image
 import re.lilith.vulkan.api.memory.ImageView
+import re.lilith.vulkan.api.pipeline.PipelineLayout
 import re.lilith.vulkan.api.presentation.Swapchain
 import re.lilith.vulkan.api.presentation.SwapchainImage
 import re.lilith.vulkan.api.presentation.SwapchainImageView
@@ -55,6 +57,12 @@ object RawHandles {
 
     @JvmStatic
     fun semaphore(semaphore: Semaphore): Long = semaphore.handle
+
+    @JvmStatic
+    fun descriptorSet(set: DescriptorSet): Long = set.handle
+
+    @JvmStatic
+    fun pipelineLayout(layout: PipelineLayout): Long = layout.handle
 
     @JvmStatic
     fun format(format: Format): Int = format.vkValue

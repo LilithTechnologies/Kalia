@@ -38,9 +38,11 @@ object TextureTable {
         if (id == lastId) {
             return lastTexture
         }
-        val texture = textures.getOrPut(id) {
+        var texture = textures.get(id)
+        if (texture == null) {
             nextId = maxOf(nextId, id + 1)
-            GlTexture(id)
+            texture = GlTexture(id)
+            textures.put(id, texture)
         }
         lastId = id
         lastTexture = texture

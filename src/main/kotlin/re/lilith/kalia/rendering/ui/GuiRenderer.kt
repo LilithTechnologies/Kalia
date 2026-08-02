@@ -9,6 +9,7 @@ import re.lilith.kalia.renderer.format.IndexFormat
 import re.lilith.kalia.renderer.resource.BufferDescription
 import re.lilith.kalia.renderer.resource.BufferUsage
 import re.lilith.kalia.renderer.resource.GpuBuffer
+import re.lilith.kalia.renderer.utility.MemoryAccess
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
@@ -109,28 +110,31 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
         buffer.clear()
         val floats = state.floatData
 
+        val base = MemoryAccess.addressOf(buffer)
         for (position in 0 until count) {
             val element = builder.sourceAt(position)
             var cursor = state.offsetOf(element)
+            var target = base + position.toLong() * GuiRenderState.INSTANCE_BYTES
 
             repeat(12) {
-                buffer.putFloat(floats[cursor++])
+                MemoryAccess.putFloat(target, floats[cursor++])
+                target += Float.SIZE_BYTES
             }
-            putTint(buffer, floats[cursor++].toRawBits())
-            putTint(buffer, floats[cursor].toRawBits())
-            buffer.putInt(state.flagsOf(element) or builder.slotAt(position))
+            putTint(target, floats[cursor++].toRawBits())
+            putTint(target + 4, floats[cursor].toRawBits())
+            MemoryAccess.putInt(target + 8, state.flagsOf(element) or builder.slotAt(position))
         }
 
-        buffer.flip()
+        buffer.position(required).flip()
         lastInstances = count
         return FrameResources.of(device).vertexArena.append(buffer, required)
     }
 
-    private fun putTint(buffer: ByteBuffer, argb: Int) {
-        buffer.put((argb ushr 16 and 0xFF).toByte())
-        buffer.put((argb ushr 8 and 0xFF).toByte())
-        buffer.put((argb and 0xFF).toByte())
-        buffer.put((argb ushr 24 and 0xFF).toByte())
+    private fun putTint(address: Long, argb: Int) {
+        MemoryAccess.putByte(address, (argb ushr 16 and 0xFF).toByte())
+        MemoryAccess.putByte(address + 1, (argb ushr 8 and 0xFF).toByte())
+        MemoryAccess.putByte(address + 2, (argb and 0xFF).toByte())
+        MemoryAccess.putByte(address + 3, (argb ushr 24 and 0xFF).toByte())
     }
 
     private fun executePhase(

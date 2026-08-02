@@ -145,17 +145,18 @@ class GlTexture(val id: Int) : AutoCloseable {
 
     fun setParameter(name: Int, value: Int) {
         when (name) {
-            GL_TEXTURE_MIN_FILTER -> minFilter = value
-            GL_TEXTURE_MAG_FILTER -> magFilter = value
-            GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T -> wrap = value
+            GL_TEXTURE_MIN_FILTER -> if (minFilter == value) return else minFilter = value
+            GL_TEXTURE_MAG_FILTER -> if (magFilter == value) return else magFilter = value
+            GL_TEXTURE_WRAP_S, GL_TEXTURE_WRAP_T -> if (wrap == value) return else wrap = value
             GL_TEXTURE_MAX_LEVEL -> {
-                if (value + 1 > requestedMipLevels) {
-                    requestedMipLevels = value + 1
-                    needsAllocation = true
+                if (value + 1 <= requestedMipLevels) {
+                    return
                 }
+                requestedMipLevels = value + 1
+                needsAllocation = true
             }
 
-            GL_TEXTURE_MAX_LOD -> maxLod = value.toFloat()
+            GL_TEXTURE_MAX_LOD -> if (maxLod == value.toFloat()) return else maxLod = value.toFloat()
             else -> return
         }
         rebuildSampler()

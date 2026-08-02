@@ -77,24 +77,34 @@ object ShaderUniforms {
     }
 
     fun setModelView(matrix: Matrix4f) {
-        if (modelView == matrix) return
+        if (sameAs(modelView, matrix)) return
         modelView.set(matrix)
         pushDirty = true
     }
 
     fun setProjection(matrix: Matrix4f) {
-        if (projection == matrix) return
+        if (sameAs(projection, matrix)) return
         projection.set(matrix)
         markSceneDirty()
         markEnvironmentDirty()
     }
 
     fun setTexture(matrix: Matrix4f) {
-        if (textureMatrix == matrix) return
+        if (sameAs(textureMatrix, matrix)) return
         textureMatrix.set(matrix)
         markSceneDirty()
         markEnvironmentDirty()
     }
+
+    private fun sameAs(current: Matrix4f, other: Matrix4f): Boolean =
+        current.m00() == other.m00() && current.m01() == other.m01() &&
+                current.m02() == other.m02() && current.m03() == other.m03() &&
+                current.m10() == other.m10() && current.m11() == other.m11() &&
+                current.m12() == other.m12() && current.m13() == other.m13() &&
+                current.m20() == other.m20() && current.m21() == other.m21() &&
+                current.m22() == other.m22() && current.m23() == other.m23() &&
+                current.m30() == other.m30() && current.m31() == other.m31() &&
+                current.m32() == other.m32() && current.m33() == other.m33()
 
     fun modelViewMatrix(): Matrix4f = modelView
 

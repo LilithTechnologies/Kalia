@@ -57,23 +57,45 @@ internal class VulkanGraphExecutor(
         bound: MutableMap<Int, VulkanTexture>,
         backbufferExtent: Extent,
     ) {
-        val handles = pass.colorAttachments.map { it.target } +
-                listOfNotNull(pass.depthAttachment?.target) +
-                pass.sampledInputs
-
-        for (handle in handles) {
-            if (handle.id in bound) {
-                continue
-            }
-            val declaration = graph.texture(handle)
-            bound[handle.id] = declaration.imported as? VulkanTexture
-                ?: pool.acquire(
-                    name = declaration.name,
-                    extent = resolveExtent(declaration, backbufferExtent),
-                    format = declaration.format,
-                    mipLevels = declaration.mipLevels,
-                )
+        for (attachment in pass.colorAttachments) {
+            bind(graph, attachment.target, bound, backbufferExtent)
         }
+        pass.depthAttachment?.let { bind(graph, it.target, bound, backbufferExtent) }
+        for (handle in pass.sampledInputs) {
+            bind(graph, handle, bound, backbufferExtent)
+        }
+    }
+
+    private fun bind(
+        graph: RenderGraph,
+        handle: TextureHandle,
+        bound: MutableMap<Int, VulkanTexture>,
+        backbufferExtent: Extent,
+    ) {
+        if (handle.id in bound) {
+            return
+        }
+        val declaration = graph.texture(handle)
+        bound[handle.id] = declaration.imported as? VulkanTexture
+            ?: pool.acquire(
+                name = declaration.name,
+                extent = resolveExtent(declaration, backbufferExtent),
+                format = declaration.format,
+                mipLevels = declaration.mipLevels,
+            )
+    }
+
+    private val expiredScratch = ArrayList<Int>()
+
+    private val stableRenderingInfos = HashMap<String, RenderingInfo>()
+
+    private fun stableRendering(passName: String, rebuilt: RenderingInfo): RenderingInfo {
+        val cached = stableRenderingInfos[passName]
+        if (cached == rebuilt) {
+            return cached
+        }
+        stableRenderingInfos[passName] = rebuilt
+        return rebuilt
     }
 
     private fun releaseExpired(
@@ -82,11 +104,13 @@ internal class VulkanGraphExecutor(
         bound: MutableMap<Int, VulkanTexture>,
         passIndex: Int,
     ) {
-        val expired = lifetimes.filterValues { it.last == passIndex }.keys
-        for (id in expired) {
-            if (id == TextureHandle.BACK_BUFFER.id) {
-                continue
+        expiredScratch.clear()
+        for ((id, lifetime) in lifetimes) {
+            if (lifetime.last == passIndex && id != TextureHandle.BACK_BUFFER.id) {
+                expiredScratch += id
             }
+        }
+        for (id in expiredScratch) {
             val texture = bound.remove(id) ?: continue
             if (graph.texture(TextureHandle(id)).imported == null) {
                 pool.release(texture)
@@ -124,7 +148,8 @@ internal class VulkanGraphExecutor(
             recorder.pipelineBarrier(barriers)
         }
 
-        val rendering =
+        val rendering = stableRendering(
+            pass.name,
             RenderingInfo(
                 renderArea = Rect2D(Offset2D(), Extent2D(extent.width, extent.height)),
                 colorAttachments = pass.colorAttachments.mapIndexed { index, attachment ->
@@ -162,7 +187,8 @@ internal class VulkanGraphExecutor(
                         ),
                     )
                 },
-            )
+            ),
+        )
 
         val encoder = VulkanPassEncoder(
             backend = device,

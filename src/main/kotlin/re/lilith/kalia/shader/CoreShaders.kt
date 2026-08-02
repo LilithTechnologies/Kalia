@@ -15,7 +15,15 @@ object CoreShaders {
 
     private val programs = Int2ObjectOpenHashMap<ShaderProgram>()
 
+    private var lastFormat: TranslatedVertexFormat? = null
+    private var lastTexGen = false
+    private var lastProgram: ShaderProgram? = null
+
     fun programFor(format: TranslatedVertexFormat, texGen: Boolean = false): ShaderProgram {
+        val memo = lastProgram
+        if (memo != null && lastFormat === format && lastTexGen == texGen) {
+            return memo
+        }
         val signature = signature(format) or (if (texGen) TEXGEN_BIT else 0)
         return programs.getOrPut(signature) {
             val key = if (texGen) "${format.shaderKey}-texgen" else format.shaderKey
@@ -27,6 +35,10 @@ object CoreShaders {
                 texGen = texGen,
                 signature = signature,
             )
+        }.also {
+            lastFormat = format
+            lastTexGen = texGen
+            lastProgram = it
         }
     }
 

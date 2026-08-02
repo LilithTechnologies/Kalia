@@ -43,8 +43,11 @@ object GlState {
 
     fun depthState(): DepthState {
         if (depthDirty) {
-            cachedDepth = intern(depthStates, DepthState(depthTest, depthWrite, depthFunction))
             depthDirty = false
+            val current = cachedDepth
+            if (current.test != depthTest || current.write != depthWrite || current.compare != depthFunction) {
+                cachedDepth = intern(depthStates, DepthState(depthTest, depthWrite, depthFunction))
+            }
         }
         return cachedDepth
     }
@@ -114,20 +117,29 @@ object GlState {
 
     fun blendState(): BlendState {
         if (blendDirty) {
-            cachedBlend = intern(
-                blendStates,
-                BlendState(
-                    enabled = blendEnabled,
-                    srcColor = srcColor,
-                    dstColor = dstColor,
-                    colorOp = blendOp,
-                    srcAlpha = srcAlpha,
-                    dstAlpha = dstAlpha,
-                    alphaOp = blendOp,
-                    logicOp = if (logicOpEnabled) logicOpMode else null,
-                ),
-            )
             blendDirty = false
+            val effectiveLogicOp = if (logicOpEnabled) logicOpMode else null
+            val current = cachedBlend
+            if (current.enabled != blendEnabled ||
+                current.srcColor != srcColor || current.dstColor != dstColor ||
+                current.srcAlpha != srcAlpha || current.dstAlpha != dstAlpha ||
+                current.colorOp != blendOp || current.alphaOp != blendOp ||
+                current.logicOp != effectiveLogicOp
+            ) {
+                cachedBlend = intern(
+                    blendStates,
+                    BlendState(
+                        enabled = blendEnabled,
+                        srcColor = srcColor,
+                        dstColor = dstColor,
+                        colorOp = blendOp,
+                        srcAlpha = srcAlpha,
+                        dstAlpha = dstAlpha,
+                        alphaOp = blendOp,
+                        logicOp = effectiveLogicOp,
+                    ),
+                )
+            }
         }
         return cachedBlend
     }
@@ -169,21 +181,30 @@ object GlState {
 
     fun rasterState(): RasterState {
         if (rasterDirty) {
+            rasterDirty = false
             val culls = cullEnabled && when (topology) {
                 PrimitiveTopology.POINTS, PrimitiveTopology.LINES, PrimitiveTopology.LINE_STRIP -> false
                 else -> true
             }
-            cachedRaster = intern(
-                rasterStates,
-                RasterState(
-                    topology = topology,
-                    cullMode = if (culls) cullFace else CullMode.NONE,
-                    frontFace = FrontFace.COUNTER_CLOCKWISE,
-                    polygonMode = polygonMode,
-                    depthBiasEnabled = true,
-                ),
-            )
-            rasterDirty = false
+            val effectiveCull = if (culls) cullFace else CullMode.NONE
+            val current = cachedRaster
+            if (current.topology != topology ||
+                current.cullMode != effectiveCull ||
+                current.polygonMode != polygonMode ||
+                current.frontFace != FrontFace.COUNTER_CLOCKWISE ||
+                !current.depthBiasEnabled
+            ) {
+                cachedRaster = intern(
+                    rasterStates,
+                    RasterState(
+                        topology = topology,
+                        cullMode = effectiveCull,
+                        frontFace = FrontFace.COUNTER_CLOCKWISE,
+                        polygonMode = polygonMode,
+                        depthBiasEnabled = true,
+                    ),
+                )
+            }
         }
         return cachedRaster
     }

@@ -76,16 +76,20 @@ internal class VulkanPassEncoder(
 
     private val bindingProbe = BindingKey()
 
-    private val boundSetHolder = ArrayList<DescriptorSet>(1)
+    private val setHandleScratch = backend.descriptorBindScratch
+    private val dynamicOffsetScratch = backend.dynamicOffsetScratch
 
     private val boundVertexBuffers = arrayOfNulls<VulkanBuffer>(MAX_VERTEX_SLOTS)
     private val boundVertexOffsets = LongArray(MAX_VERTEX_SLOTS)
     private var boundIndexBuffer: VulkanBuffer? = null
     private var boundIndexOffset = 0L
     private var boundIndexType: IndexType? = null
+    private var depthBiasConstant = Float.NaN
+    private var depthBiasSlope = Float.NaN
+    private var boundLineWidth = Float.NaN
     private var pushedLayout: Any? = null
     private var pushedBytes = -1
-    private val pushedData = ByteBuffer.allocateDirect(MAX_PUSH_CONSTANT_BYTES).order(ByteOrder.nativeOrder())
+    private val pushedData = backend.pushConstantScratch
     private val dynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
     private val boundDynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
     private val dynamicOffsetBySlot = IntArray(MAX_BINDINGS)
@@ -198,6 +202,9 @@ internal class VulkanPassEncoder(
         boundIndexType = null
         pushedLayout = null
         pushedBytes = -1
+        depthBiasConstant = Float.NaN
+        depthBiasSlope = Float.NaN
+        boundLineWidth = Float.NaN
     }
 
     override fun viewport(viewport: Viewport) {
@@ -472,12 +479,22 @@ internal class VulkanPassEncoder(
     }
 
     override fun depthBias(constant: Float, slope: Float) {
+        if (constant == depthBiasConstant && slope == depthBiasSlope) {
+            return
+        }
+        depthBiasConstant = constant
+        depthBiasSlope = slope
         recorder.setDepthBias(constant, 0f, slope)
     }
 
     override fun lineWidth(width: Float) {
         // Without wideLines the only legal value is 1.0
-        recorder.setLineWidth(if (backend.context.supportsWideLines) width else 1.0f)
+        val resolved = if (backend.context.supportsWideLines) width else 1.0f
+        if (resolved == boundLineWidth) {
+            return
+        }
+        boundLineWidth = resolved
+        recorder.setLineWidth(resolved)
     }
 
     override fun clearAttachments(color: Color?, depth: Float?, area: Rect?) {
@@ -566,9 +583,22 @@ internal class VulkanPassEncoder(
 
         val set = frame.descriptorSet(bindingProbe, layout) { target -> writeDescriptors(active, target) }
         if (set !== boundDescriptorSet || dynamicOffsets != boundDynamicOffsets) {
-            boundSetHolder.clear()
-            boundSetHolder += set
-            recorder.bindDescriptorSets(active.layout, boundSetHolder, dynamicOffsets = dynamicOffsets)
+
+            MemoryAccess.putLong(setHandleScratch, RawHandles.descriptorSet(set))
+            val offsetCount = dynamicOffsets.size
+            for (index in 0 until offsetCount) {
+                MemoryAccess.putInt(dynamicOffsetScratch + index * Int.SIZE_BYTES, dynamicOffsets[index])
+            }
+            VK10.nvkCmdBindDescriptorSets(
+                recorder.commandBuffer.handle,
+                VK10.VK_PIPELINE_BIND_POINT_GRAPHICS,
+                RawHandles.pipelineLayout(active.layout),
+                0,
+                1,
+                setHandleScratch,
+                offsetCount,
+                if (offsetCount == 0) MemoryUtil.NULL else dynamicOffsetScratch,
+            )
             RenderStats.recordDescriptorBind()
             boundDescriptorSet = set
             boundDynamicOffsets.clear()

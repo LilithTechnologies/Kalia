@@ -107,6 +107,12 @@ kotlin {
     jvmToolchain(21)
 }
 
+allprojects {
+    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+        compilerOptions.freeCompilerArgs.addAll("-Xno-param-assertions", "-Xno-call-assertions")
+    }
+}
+
 loom {
     accessWidenerPath = file("src/main/resources/kalia.accesswidener")
 

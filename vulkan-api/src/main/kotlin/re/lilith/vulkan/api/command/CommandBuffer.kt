@@ -6,6 +6,8 @@ import org.lwjgl.vulkan.VkCommandBufferBeginInfo
 import re.lilith.vulkan.api.device.LogicalDevice
 import re.lilith.vulkan.api.internal.vk.checkVulkanResult
 import re.lilith.vulkan.api.qol.pushStack
+import re.lilith.vulkan.api.rendering.NativeRenderingInfo
+import re.lilith.vulkan.api.rendering.RenderingInfo
 import re.lilith.vulkan.api.resource.VulkanResource
 import re.lilith.vulkan.api.types.flags.CommandBufferUsage
 
@@ -20,6 +22,17 @@ class CommandBuffer internal constructor(
 ) : VulkanResource() {
     val device: LogicalDevice
         get() = pool.device
+
+    private val renderingInfos = HashMap<RenderingInfo, NativeRenderingInfo>()
+
+    internal fun nativeRenderingInfo(info: RenderingInfo, useExtension: Boolean): NativeRenderingInfo {
+        renderingInfos[info]?.let { return it }
+        if (renderingInfos.size >= MAX_CACHED_RENDERING_INFOS) {
+            renderingInfos.values.forEach(NativeRenderingInfo::close)
+            renderingInfos.clear()
+        }
+        return NativeRenderingInfo(info, useExtension).also { renderingInfos[info] = it }
+    }
 
     fun begin(usage: CommandBufferUsage = CommandBufferUsage.OneTimeSubmit): CommandRecorder = pushStack { stack ->
         val beginInfo = VkCommandBufferBeginInfo.calloc(stack)
@@ -44,6 +57,12 @@ class CommandBuffer internal constructor(
         checkVulkanResult(VK10.vkEndCommandBuffer(handle), "Ending command buffer recording")
     }
 
-    override fun closeResource() { /* No-op */
+    override fun closeResource() {
+        renderingInfos.values.forEach(NativeRenderingInfo::close)
+        renderingInfos.clear()
+    }
+
+    private companion object {
+        const val MAX_CACHED_RENDERING_INFOS = 64
     }
 }

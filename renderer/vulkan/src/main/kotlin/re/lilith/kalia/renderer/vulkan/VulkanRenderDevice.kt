@@ -2,6 +2,7 @@
 
 package re.lilith.kalia.renderer.vulkan
 
+import org.lwjgl.system.MemoryUtil
 import re.lilith.kalia.renderer.command.MultiDrawLayout
 
 import org.lwjgl.vulkan.KHRSwapchain
@@ -37,6 +38,8 @@ import re.lilith.vulkan.api.sync.SemaphoreSignal
 import re.lilith.vulkan.api.sync.SemaphoreWait
 import re.lilith.vulkan.api.types.enum.SharingMode
 import re.lilith.vulkan.api.types.flags.PipelineStageMask
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
 
 internal class VulkanRenderDevice(
@@ -77,6 +80,15 @@ internal class VulkanRenderDevice(
     private var pendingResize: Extent? = null
 
     private var releaseTarget: VulkanFrameSlot? = null
+
+    private var resourceEpoch = 0
+
+    internal val pushConstantScratch: ByteBuffer = ByteBuffer
+        .allocateDirect(MAX_PUSH_CONSTANT_BYTES)
+        .order(ByteOrder.nativeOrder())
+
+    internal val descriptorBindScratch = MemoryUtil.nmemAllocChecked(Long.SIZE_BYTES.toLong())
+    internal val dynamicOffsetScratch = MemoryUtil.nmemAllocChecked((MAX_DYNAMIC_OFFSETS * Int.SIZE_BYTES).toLong())
 
     private var builtForExtent: Extent = platformSurface.framebufferExtent
 
@@ -145,20 +157,12 @@ internal class VulkanRenderDevice(
             )
         }
         submittedTransferValue = transferValue
-        re.lilith.kalia.renderer.device.RenderStats.recordTransferSubmit()
+        RenderStats.recordTransferSubmit()
     }
 
     override fun createComputePipeline(description: ComputePipelineDescription): GpuComputePipeline =
         computePipelines.computeIfAbsent(description) { VulkanComputePipeline.compile(this, it) }
 
-    /**
-     * Records compute work and submits it so this frame's graphics can consume the results.
-     *
-     * With an independent compute family the work goes there and graphics waits on a timeline value,
-     * which lets it overlap the rest of the frame. Without one, which is the usual MoltenVK case, it is
-     * submitted on the graphics queue ahead of the render submission and ordered by a barrier, so the
-     * behaviour is identical and only the parallelism is lost.
-     */
     override fun compute(body: (ComputeEncoder) -> Unit) {
         check(insideFrame) { "compute() may only be called while a frame is recording." }
         val frame = frames[frameIndex]
@@ -330,7 +334,7 @@ internal class VulkanRenderDevice(
                     polygonMode = if (context.supportsFillModeNonSolid) {
                         Convert.polygonMode(description.raster.polygonMode)
                     } else {
-                        re.lilith.vulkan.api.pipeline.PolygonMode.Fill
+                        PolygonMode.Fill
                     },
                     cullMode = Convert.cullMode(description.raster.cullMode),
                     frontFace = Convert.frontFace(description.raster.frontFace),
@@ -345,7 +349,7 @@ internal class VulkanRenderDevice(
                     logicOperationEnable = description.blend.logicOp != null && context.supportsLogicOp,
                     logicOperation = description.blend.logicOp
                         ?.let(Convert::logicOp)
-                        ?: re.lilith.vulkan.api.pipeline.LogicOperation.Copy,
+                        ?: LogicOperation.Copy,
                     attachments = description.attachments.colorFormats.map {
                         ColorBlendAttachmentState(
                             // the logic op replaces blending entirely when enabled
@@ -429,7 +433,7 @@ internal class VulkanRenderDevice(
 
         val frame = frames[frameIndex]
         frame.inFlightFence.wait()
-        frame.recycle()
+        frame.recycle(resourceEpoch)
         releaseTarget = frame
         insideFrame = true
 
@@ -563,11 +567,8 @@ internal class VulkanRenderDevice(
         context.device.waitIdle()
     }
 
-    internal fun scheduleForeignRelease(release: AutoCloseable) {
-        (releaseTarget ?: frames[frameIndex]).retire(release)
-    }
-
     internal fun scheduleRelease(resource: VulkanResource) {
+        resourceEpoch++
         context.device.unregister(resource)
         (releaseTarget ?: frames[frameIndex]).retire(resource)
     }
@@ -606,11 +607,15 @@ internal class VulkanRenderDevice(
         uploads.close()
         transferTimeline?.close()
         computeTimeline?.close()
+        org.lwjgl.system.MemoryUtil.nmemFree(descriptorBindScratch)
+        org.lwjgl.system.MemoryUtil.nmemFree(dynamicOffsetScratch)
         context.close()
     }
 
     private companion object {
         const val FRAMES_IN_FLIGHT = 3
+        const val MAX_PUSH_CONSTANT_BYTES = 256
+        const val MAX_DYNAMIC_OFFSETS = 16
     }
 }
 

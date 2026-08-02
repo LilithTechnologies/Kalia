@@ -82,11 +82,6 @@ object Glyphs {
     }
 
     private fun layoutFor(font: Font, text: String, baseColor: Int, shadow: Boolean): TextLayout {
-        val obfuscated = containsObfuscation(text)
-        if (obfuscated) {
-            return layout(font, text, baseColor, shadow)
-        }
-
         lookupKey.text = text
         lookupKey.color = baseColor
         lookupKey.shadow = shadow
@@ -95,6 +90,9 @@ object Glyphs {
         cache.getAndMoveToFirst(lookupKey)?.let { return it }
 
         val built = layout(font, text, baseColor, shadow)
+        if (containsObfuscation(text)) {
+            return built
+        }
         cache.putAndMoveToFirst(LayoutKey(text, baseColor, shadow, font.isUnicode), built)
         if (cache.size > MAX_CACHED_LAYOUTS) {
             cache.removeLast()

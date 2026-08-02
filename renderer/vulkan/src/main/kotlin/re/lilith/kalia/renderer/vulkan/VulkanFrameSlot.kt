@@ -26,6 +26,7 @@ internal class VulkanFrameSlot(
     private val retired = mutableListOf<AutoCloseable>()
 
     private val descriptorSets = HashMap<BindingKey, DescriptorSet>()
+    private var descriptorEpoch = -1
 
     var indirectScratch: VulkanBuffer? = null
     var indirectOffset = 0L
@@ -34,10 +35,13 @@ internal class VulkanFrameSlot(
         retired += resource
     }
 
-    fun recycle() {
+    fun recycle(resourceEpoch: Int = descriptorEpoch) {
         indirectOffset = 0L
-        descriptorPool.reset()
-        descriptorSets.clear()
+        if (descriptorEpoch != resourceEpoch || descriptorSets.size > MAX_CACHED_SETS) {
+            descriptorEpoch = resourceEpoch
+            descriptorPool.reset()
+            descriptorSets.clear()
+        }
         retired.forEach { runCatching(it::close) }
         retired.clear()
         nextTransferBuffer = 0
@@ -91,6 +95,8 @@ internal class VulkanFrameSlot(
 
     companion object {
         private const val MAX_SETS_PER_FRAME = 4096
+
+        private const val MAX_CACHED_SETS = MAX_SETS_PER_FRAME / 2
 
         fun create(context: VulkanContext): VulkanFrameSlot = VulkanFrameSlot(
             device = context.device,

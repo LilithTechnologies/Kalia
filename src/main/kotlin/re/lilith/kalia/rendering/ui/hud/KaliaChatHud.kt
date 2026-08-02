@@ -1,6 +1,8 @@
 package re.lilith.kalia.rendering.ui.hud
 
+import it.unimi.dsi.fastutil.objects.Reference2ObjectLinkedOpenHashMap
 import net.minecraft.client.gui.hud.ChatHudLine
+import net.minecraft.text.Text
 import re.lilith.kalia.rendering.ui.GuiLayer
 import re.lilith.kalia.rendering.ui.GuiMaterial
 import re.lilith.kalia.rendering.ui.UI
@@ -63,7 +65,7 @@ object KaliaChatHud {
                     }
                 }
 
-                val text = line.text?.asFormattedString() ?: continue
+                val text = line.text?.let(::formattedOf) ?: continue
                 drawScaled(
                     font = font,
                     text = text,
@@ -85,6 +87,22 @@ object KaliaChatHud {
 
     var lastLinesDrawn = 0
         private set
+
+    private val formatted = Reference2ObjectLinkedOpenHashMap<Text, String>()
+
+    private fun formattedOf(text: Text): String {
+        formatted.getAndMoveToFirst(text)?.let { return it }
+        val built = text.asFormattedString()
+        formatted.putAndMoveToFirst(text, built)
+        if (formatted.size > MAX_CACHED_LINES) {
+            formatted.removeLast()
+        }
+        return built
+    }
+
+    fun invalidate() {
+        formatted.clear()
+    }
 
     private fun drawScaled(font: Font, text: String, x: Float, y: Float, argb: Int, scale: Float) {
         if (scale == 1f) {
@@ -126,4 +144,5 @@ object KaliaChatHud {
     private const val SCROLLBAR_WIDTH = 2f
     private const val MIN_SCROLLBAR = 4f
     private const val SCROLLBAR_COLOUR = 0xCC3F3F3F.toInt()
+    private const val MAX_CACHED_LINES = 256
 }

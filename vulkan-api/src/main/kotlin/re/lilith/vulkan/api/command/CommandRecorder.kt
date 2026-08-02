@@ -3,6 +3,7 @@ package re.lilith.vulkan.api.command
 import org.lwjgl.system.MemoryUtil.memPutLong
 import org.lwjgl.system.MemoryUtil.nmemAlloc
 import org.lwjgl.vulkan.*
+import re.lilith.vulkan.api.core.Version
 import re.lilith.vulkan.api.internal.vk.VulkanConstants
 import re.lilith.vulkan.api.memory.Buffer
 import re.lilith.vulkan.api.qol.pushStack
@@ -20,6 +21,12 @@ private val pOffsets = nmemAlloc(8) // one VkDeviceSize
 class CommandRecorder internal constructor(
     val commandBuffer: CommandBuffer,
 ) {
+    private val useDynamicRenderingExtension: Boolean by lazy(LazyThreadSafetyMode.NONE) {
+        commandBuffer.device.physicalDevice.instance.config.applicationInfo.apiVersion <
+                Version.V1_3 &&
+                KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME in commandBuffer.device.enabledExtensions
+    }
+
     fun setLineWidth(lineWidth: Float) {
         VK10.vkCmdSetLineWidth(commandBuffer.handle, lineWidth)
     }
@@ -87,81 +94,16 @@ class CommandRecorder internal constructor(
     }
 
     fun beginRendering(info: RenderingInfo) = apply {
-        pushStack { stack ->
-            val useDynamicRenderingExtension =
-                commandBuffer.device.physicalDevice.instance.config.applicationInfo.apiVersion < re.lilith.vulkan.api.core.Version.V1_3 &&
-                        KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME in commandBuffer.device.enabledExtensions
-            val colorAttachments = VkRenderingAttachmentInfo.calloc(info.colorAttachments.size, stack)
-            info.colorAttachments.forEachIndexed { index, attachment ->
-                colorAttachments[index]
-                    .populate(attachment)
-                    .sType(
-                        if (useDynamicRenderingExtension) {
-                            KHRDynamicRendering.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR
-                        } else {
-                            VK13.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO
-                        },
-                    )
-            }
 
-            val depthAttachment = info.depthAttachment?.let {
-                VkRenderingAttachmentInfo.calloc(stack)
-                    .populate(it)
-                    .sType(
-                        if (useDynamicRenderingExtension) {
-                            KHRDynamicRendering.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR
-                        } else {
-                            VK13.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO
-                        },
-                    )
-            }
-            val stencilAttachment = info.stencilAttachment?.let {
-                VkRenderingAttachmentInfo.calloc(stack)
-                    .populate(it)
-                    .sType(
-                        if (useDynamicRenderingExtension) {
-                            KHRDynamicRendering.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR
-                        } else {
-                            VK13.VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO
-                        },
-                    )
-            }
-
-            val renderingInfo = VkRenderingInfo.calloc(stack)
-                .sType(
-                    if (useDynamicRenderingExtension) {
-                        KHRDynamicRendering.VK_STRUCTURE_TYPE_RENDERING_INFO_KHR
-                    } else {
-                        VK13.VK_STRUCTURE_TYPE_RENDERING_INFO
-                    },
-                )
-                .renderArea { renderArea ->
-                    renderArea.offset().set(info.renderArea.offset.x, info.renderArea.offset.y)
-                    renderArea.extent().set(info.renderArea.extent.width, info.renderArea.extent.height)
-                }
-                .layerCount(info.layerCount)
-                .viewMask(info.viewMask.bits)
-                .pColorAttachments(colorAttachments)
-
-            if (depthAttachment != null) {
-                renderingInfo.pDepthAttachment(depthAttachment)
-            }
-            if (stencilAttachment != null) {
-                renderingInfo.pStencilAttachment(stencilAttachment)
-            }
-
-            if (useDynamicRenderingExtension) {
-                KHRDynamicRendering.vkCmdBeginRenderingKHR(commandBuffer.handle, renderingInfo)
-            } else {
-                VK13.vkCmdBeginRendering(commandBuffer.handle, renderingInfo)
-            }
+        val native = commandBuffer.nativeRenderingInfo(info, useDynamicRenderingExtension).address
+        if (useDynamicRenderingExtension) {
+            KHRDynamicRendering.nvkCmdBeginRenderingKHR(commandBuffer.handle, native)
+        } else {
+            VK13.nvkCmdBeginRendering(commandBuffer.handle, native)
         }
     }
 
     fun endRendering() = apply {
-        val useDynamicRenderingExtension =
-            commandBuffer.device.physicalDevice.instance.config.applicationInfo.apiVersion < re.lilith.vulkan.api.core.Version.V1_3 &&
-                    KHRDynamicRendering.VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME in commandBuffer.device.enabledExtensions
         if (useDynamicRenderingExtension) {
             KHRDynamicRendering.vkCmdEndRenderingKHR(commandBuffer.handle)
         } else {

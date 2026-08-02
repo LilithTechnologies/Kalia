@@ -13,6 +13,8 @@ import kotlin.math.max
 
 object KaliaScoreboardHud {
     private val rows = ArrayList<ScoreboardPlayerScore>(MAX_ROWS)
+    private val names = ArrayList<String>(MAX_ROWS)
+    private val values = ArrayList<String>(MAX_ROWS)
 
     fun render(
         font: Font,
@@ -41,11 +43,17 @@ object KaliaScoreboardHud {
         }
 
         val title = objective.displayName ?: ""
-        var widest = Glyphs.widthOf(font, title)
+        val titleWidth = Glyphs.widthOf(font, title)
+        var widest = titleWidth
 
+        names.clear()
+        values.clear()
         for (score in rows) {
-            val joined = decorate(scoreboard, score) + ": " + RED + score.score
-            widest = max(widest, Glyphs.widthOf(font, joined))
+            val name = decorate(scoreboard, score)
+            val value = RED + score.score
+            names += name
+            values += value
+            widest = max(widest, Glyphs.widthOf(font, name + ": " + value))
         }
 
         val totalHeight = rows.size * LINE_HEIGHT
@@ -56,11 +64,11 @@ object KaliaScoreboardHud {
         UI.inLayer(GuiLayer.OVERLAY) {
             UI.withMaterial(GuiMaterial.TRANSLUCENT) {
                 var index = 0
-                for (score in rows) {
+                for (row in rows.indices) {
                     index++
 
-                    val name = decorate(scoreboard, score)
-                    val value = RED + score.score
+                    val name = names[row]
+                    val value = values[row]
                     val y = bottom - index * LINE_HEIGHT
 
                     UI.fill(left - 2f, y, right, y + LINE_HEIGHT, ROW_BACKDROP)
@@ -81,7 +89,7 @@ object KaliaScoreboardHud {
                         Glyphs.draw(
                             font = font,
                             text = title,
-                            x = left + widest / 2f - Glyphs.widthOf(font, title) / 2f,
+                            x = left + widest / 2f - titleWidth / 2f,
                             y = y - LINE_HEIGHT,
                             argb = TEXT,
                             shadow = false,
@@ -92,10 +100,19 @@ object KaliaScoreboardHud {
         }
     }
 
+    // Plain try/catch rather than runCatching: same semantics, without allocating two Results per row
     private fun decorate(scoreboard: Scoreboard, score: ScoreboardPlayerScore): String {
         val name = score.playerName ?: return ""
-        val team = runCatching { scoreboard.getPlayerTeam(name) }.getOrNull()
-        return runCatching { Team.decorateName(team, name) }.getOrDefault(name)
+        val team = try {
+            scoreboard.getPlayerTeam(name)
+        } catch (failure: Throwable) {
+            null
+        }
+        return try {
+            Team.decorateName(team, name)
+        } catch (failure: Throwable) {
+            name
+        }
     }
 
     private const val MAX_ROWS = 15

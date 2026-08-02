@@ -140,21 +140,6 @@ object UI {
         return true
     }
 
-    private fun transformedX(x: Float, y: Float): Float {
-        val m = MatrixState.modelView()
-        return m.m00() * x + m.m10() * y + m.m30()
-    }
-
-    private fun transformedY(x: Float, y: Float): Float {
-        val m = MatrixState.modelView()
-        return m.m01() * x + m.m11() * y + m.m31()
-    }
-
-    private fun isAxisAligned(): Boolean {
-        val m = MatrixState.modelView()
-        return m.m01() == 0f && m.m10() == 0f
-    }
-
     private fun submitTransformed(
         textureId: Int,
         x0: Float,
@@ -168,15 +153,19 @@ object UI {
         tintTop: Int,
         tintBottom: Int,
     ) {
-        if (isAxisAligned()) {
+        val m = MatrixState.modelView()
+        val m00 = m.m00(); val m10 = m.m10(); val m30 = m.m30()
+        val m01 = m.m01(); val m11 = m.m11(); val m31 = m.m31()
+
+        if (m01 == 0f && m10 == 0f) {
             state.submitQuad(
                 layer = layer,
                 phase = phase,
                 textureId = textureId,
                 scissorId = scissors.current,
                 material = material,
-                x0 = transformedX(x0, y0), y0 = transformedY(x0, y0),
-                x1 = transformedX(x1, y1), y1 = transformedY(x1, y1),
+                x0 = m00 * x0 + m10 * y0 + m30, y0 = m01 * x0 + m11 * y0 + m31,
+                x1 = m00 * x1 + m10 * y1 + m30, y1 = m01 * x1 + m11 * y1 + m31,
                 u0 = u0, v0 = v0, u1 = u1, v1 = v1,
                 tintTop = tintTop,
                 tintBottom = tintBottom,
@@ -190,10 +179,10 @@ object UI {
             textureId = textureId,
             scissorId = scissors.current,
             material = material,
-            c0x = transformedX(x0, y0), c0y = transformedY(x0, y0),
-            c1x = transformedX(x0, y1), c1y = transformedY(x0, y1),
-            c2x = transformedX(x1, y1), c2y = transformedY(x1, y1),
-            c3x = transformedX(x1, y0), c3y = transformedY(x1, y0),
+            c0x = m00 * x0 + m10 * y0 + m30, c0y = m01 * x0 + m11 * y0 + m31,
+            c1x = m00 * x0 + m10 * y1 + m30, c1y = m01 * x0 + m11 * y1 + m31,
+            c2x = m00 * x1 + m10 * y1 + m30, c2y = m01 * x1 + m11 * y1 + m31,
+            c3x = m00 * x1 + m10 * y0 + m30, c3y = m01 * x1 + m11 * y0 + m31,
             u0 = u0, v0 = v0, u1 = u1, v1 = v1,
             tintTop = tintTop,
             tintBottom = tintBottom,
@@ -210,16 +199,19 @@ object UI {
         u0: Float, v0: Float, u1: Float, v1: Float,
         tint: Int,
     ) {
+        val m = MatrixState.modelView()
+        val m00 = m.m00(); val m10 = m.m10(); val m30 = m.m30()
+        val m01 = m.m01(); val m11 = m.m11(); val m31 = m.m31()
         state.submitCorners(
             layer = layer,
             phase = phase,
             textureId = textureId,
             scissorId = scissors.current,
             material = material,
-            c0x = transformedX(c0x, c0y), c0y = transformedY(c0x, c0y),
-            c1x = transformedX(c1x, c1y), c1y = transformedY(c1x, c1y),
-            c2x = transformedX(c2x, c2y), c2y = transformedY(c2x, c2y),
-            c3x = transformedX(c3x, c3y), c3y = transformedY(c3x, c3y),
+            c0x = m00 * c0x + m10 * c0y + m30, c0y = m01 * c0x + m11 * c0y + m31,
+            c1x = m00 * c1x + m10 * c1y + m30, c1y = m01 * c1x + m11 * c1y + m31,
+            c2x = m00 * c2x + m10 * c2y + m30, c2y = m01 * c2x + m11 * c2y + m31,
+            c3x = m00 * c3x + m10 * c3y + m30, c3y = m01 * c3x + m11 * c3y + m31,
             u0 = u0, v0 = v0, u1 = u1, v1 = v1,
             tintTop = tint,
             tintBottom = tint,

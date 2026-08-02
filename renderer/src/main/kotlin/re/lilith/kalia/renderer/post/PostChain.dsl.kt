@@ -114,12 +114,15 @@ private fun RenderGraphBuilder.addBlitPass(passName: String, input: TextureHandl
  */
 fun PassContext.drawFullscreen() = draw(vertexCount = 3)
 
+private val pushConstantScratch = ByteBuffer.allocateDirect(PostStage.PARAM_FLOATS * 4 + 16).order(ByteOrder.nativeOrder())
+
 private fun PassContext.encodePushConstants(
     params: FloatArray,
     input: GpuTexture,
     output: Extent,
 ): ByteBuffer {
-    val buffer = ByteBuffer.allocateDirect(PostStage.PARAM_FLOATS * 4 + 16).order(ByteOrder.nativeOrder())
+    val buffer = pushConstantScratch
+    buffer.clear()
     params.forEach(buffer::putFloat)
     buffer.putFloat(1f / input.extent.width)
     buffer.putFloat(1f / input.extent.height)

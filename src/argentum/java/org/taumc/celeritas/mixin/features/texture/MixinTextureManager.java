@@ -35,14 +35,33 @@ public abstract class MixinTextureManager {
 
     @Inject(method = "bindTexture", at = @At("HEAD"))
     private void celeritas$captureBoundTexture(Identifier identifier, CallbackInfo ci) {
-        Texture texture = this.textures.get(identifier);
-        if (!(texture instanceof AbstractTexture abstractTexture) || MinecraftClient.getInstance().gameRenderer == null) {
+        var gameRenderer = MinecraftClient.getInstance().gameRenderer;
+        if (gameRenderer == null) {
             return;
         }
 
-        if (BLOCK_ATLAS_PATH.equals(identifier.getPath())) {
+        Identifier lightmap = gameRenderer.lightmapTextureId;
+        boolean isLightmap = identifier == lightmap;
+        boolean isBlockAtlas = false;
+        if (!isLightmap) {
+            String path = identifier.getPath();
+            isBlockAtlas = path.length() == BLOCK_ATLAS_PATH.length() && BLOCK_ATLAS_PATH.equals(path);
+            if (!isBlockAtlas) {
+                isLightmap = lightmap != null
+                        && path.length() == lightmap.getPath().length()
+                        && identifier.equals(lightmap);
+                if (!isLightmap) {
+                    return;
+                }
+            }
+        }
+
+        if (!(this.textures.get(identifier) instanceof AbstractTexture abstractTexture)) {
+            return;
+        }
+        if (isBlockAtlas) {
             GLStateManagerTextureService.blockAtlasGlId = abstractTexture.getGlId();
-        } else if (identifier.equals(MinecraftClient.getInstance().gameRenderer.lightmapTextureId)) {
+        } else {
             GLStateManagerTextureService.lightmapGlId = abstractTexture.getGlId();
         }
     }
