@@ -6,6 +6,7 @@ import org.lwjgl.system.MemoryUtil
 import re.lilith.kalia.renderer.command.MultiDrawLayout
 
 import org.lwjgl.vulkan.KHRSwapchain
+import re.lilith.kalia.renderer.device.CapturedFrame
 import re.lilith.kalia.renderer.device.DeviceCapabilities
 import re.lilith.kalia.renderer.device.DeviceSettings
 import re.lilith.kalia.renderer.device.PlatformSurface
@@ -22,6 +23,8 @@ import re.lilith.kalia.renderer.resource.*
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.kalia.renderer.vulkan.utils.TransientTexturePool
 import re.lilith.vulkan.api.command.CommandBuffer
+import re.lilith.vulkan.api.command.copyImageToBuffer
+import re.lilith.vulkan.api.command.pipelineBarrier
 import re.lilith.vulkan.api.core.VulkanResultException
 import re.lilith.vulkan.api.debug.DebugNames
 import re.lilith.vulkan.api.descriptor.DescriptorSetLayoutBinding
@@ -29,15 +32,23 @@ import re.lilith.vulkan.api.descriptor.DescriptorSetLayoutConfig
 import re.lilith.vulkan.api.descriptor.SamplerConfig
 import re.lilith.vulkan.api.device.QueueSubmission
 import re.lilith.vulkan.api.device.submit
+import re.lilith.vulkan.api.memory.Buffer
 import re.lilith.vulkan.api.memory.BufferConfig
 import re.lilith.vulkan.api.memory.MemoryUsage
 import re.lilith.vulkan.api.pipeline.*
 import re.lilith.vulkan.api.presentation.present
 import re.lilith.vulkan.api.resource.VulkanResource
+import re.lilith.vulkan.api.sync.Fence
 import re.lilith.vulkan.api.sync.SemaphoreSignal
 import re.lilith.vulkan.api.sync.SemaphoreWait
+import re.lilith.vulkan.api.types.enum.ImageLayout
 import re.lilith.vulkan.api.types.enum.SharingMode
+import re.lilith.vulkan.api.types.flags.BufferUsage as VulkanBufferUsage
+import re.lilith.vulkan.api.types.flags.ImageAspect
 import re.lilith.vulkan.api.types.flags.PipelineStageMask
+import re.lilith.vulkan.api.types.geometry.Extent3D
+import re.lilith.vulkan.api.types.transfer.BufferImageCopy
+import re.lilith.vulkan.api.types.transfer.ImageSubresourceLayers
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.ConcurrentHashMap
@@ -80,6 +91,10 @@ internal class VulkanRenderDevice(
     private var pendingResize: Extent? = null
 
     private var releaseTarget: VulkanFrameSlot? = null
+
+    private var captureBuffer: Buffer? = null
+    private var captureCommands: CommandBuffer? = null
+    private var captureFence: Fence? = null
 
     private var resourceEpoch = 0
 
@@ -559,6 +574,61 @@ internal class VulkanRenderDevice(
         return true
     }
 
+    override fun readFrame(): CapturedFrame? {
+        check(!insideFrame) { "readFrame may not be called while a frame is recording." }
+        val backbuffer = swapchain.backbuffer
+        if (backbuffer.layout == ImageLayout.Undefined) {
+            return null
+        }
+
+        val extent = backbuffer.extent
+        val sizeBytes = extent.width.toLong() * extent.height * backbuffer.format.bytesPerPixel
+
+        context.device.waitIdle()
+
+        val staging = captureStaging(sizeBytes)
+        val commandBuffer = captureCommands ?: context.commandPool.allocatePrimary().also { captureCommands = it }
+        val fence = captureFence ?: context.device.createFence().also { captureFence = it }
+
+        commandBuffer.reset()
+        val recorder = commandBuffer.begin()
+        backbuffer.barrierTo(ImageLayout.TransferSourceOptimal)?.let { recorder.pipelineBarrier(listOf(it)) }
+        recorder.copyImageToBuffer(
+            source = backbuffer.image,
+            sourceLayout = ImageLayout.TransferSourceOptimal,
+            destination = staging,
+            regions = listOf(
+                BufferImageCopy(
+                    imageSubresource = ImageSubresourceLayers(ImageAspect.Color),
+                    imageExtent = Extent3D(extent.width, extent.height, 1),
+                ),
+            ),
+        )
+        val recorded = recorder.end()
+
+        fence.reset()
+        context.withQueueLock {
+            context.graphicsQueue.submit(
+                submissions = listOf(QueueSubmission(commandBuffers = listOf(recorded))),
+                fence = fence,
+            )
+        }
+        fence.wait()
+
+        val pixels = ByteBuffer.allocateDirect(sizeBytes.toInt()).order(ByteOrder.nativeOrder())
+        MemoryUtil.memCopy(staging.mappedByteBuffer(0L, sizeBytes), pixels)
+        return CapturedFrame(extent, backbuffer.format, pixels)
+    }
+
+    private fun captureStaging(sizeBytes: Long): Buffer {
+        captureBuffer?.takeIf { it.size >= sizeBytes }?.let { return it }
+        captureBuffer?.let(::scheduleRelease)
+        return context.allocator.createBuffer(
+            BufferConfig(size = sizeBytes, usage = VulkanBufferUsage.TransferDestination),
+            MemoryUsage.HostRandom,
+        ).also { captureBuffer = it }
+    }
+
     override fun resize(extent: Extent) {
         pendingResize = extent
     }
@@ -602,6 +672,8 @@ internal class VulkanRenderDevice(
         context.device.waitIdle()
         VulkanPipelineCacheStore.save(runCatching { context.pipelineCache.data() }.getOrDefault(ByteArray(0)))
         transientTextures.close()
+        captureFence?.close()
+        captureBuffer?.close()
         swapchain.close()
         frames.forEach(VulkanFrameSlot::close)
         uploads.close()

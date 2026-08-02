@@ -6,6 +6,7 @@ import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
 import re.lilith.kalia.rendering.ui.GuiWalk
 import re.lilith.kalia.rendering.world.WorldFrame
 import re.lilith.kalia.rendering.world.WorldFrameTimings
+import re.lilith.kalia.utility.ScreenshotUtility
 
 object KaliaHooks {
     @JvmStatic
@@ -20,6 +21,7 @@ object KaliaHooks {
         WorldFrameTimings.end(WorldFrameTimings.GUI_WALK)
         KaliaEngine.renderFrame()
         WorldFrameTimings.end(WorldFrameTimings.DEVICE_RENDER)
+        ScreenshotUtility.processScreenshots()
     }
 
     @JvmStatic

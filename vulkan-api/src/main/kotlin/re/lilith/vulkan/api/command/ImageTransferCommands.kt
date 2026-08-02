@@ -56,6 +56,46 @@ fun CommandRecorder.copyBufferToImage(
     }
 }
 
+fun CommandRecorder.copyImageToBuffer(
+    source: Image,
+    sourceLayout: ImageLayout,
+    destination: Buffer,
+    regions: List<BufferImageCopy>,
+): CommandRecorder = apply {
+    require(source.device === commandBuffer.device) { "Source image must belong to the same logical device as the command buffer." }
+    require(destination.device === commandBuffer.device) { "Destination buffer must belong to the same logical device as the command buffer." }
+    require(regions.isNotEmpty()) { "At least one buffer-image copy region is required." }
+
+    MemoryStack.stackPush().use { stack ->
+        val copies = VkBufferImageCopy.calloc(regions.size, stack)
+        regions.forEachIndexed { index, region ->
+            copies[index]
+                .bufferOffset(region.bufferOffset)
+                .bufferRowLength(region.bufferRowLength)
+                .bufferImageHeight(region.bufferImageHeight)
+                .imageSubresource { subresource ->
+                    subresource.aspectMask(region.imageSubresource.aspectMask.vkBits)
+                    subresource.mipLevel(region.imageSubresource.mipLevel)
+                    subresource.baseArrayLayer(region.imageSubresource.baseArrayLayer)
+                    subresource.layerCount(region.imageSubresource.layerCount)
+                }
+                .imageOffset { offset ->
+                    offset.set(region.imageOffset.x, region.imageOffset.y, region.imageOffset.z)
+                }
+                .imageExtent { extent ->
+                    extent.set(region.imageExtent.width, region.imageExtent.height, region.imageExtent.depth)
+                }
+        }
+        VK10.vkCmdCopyImageToBuffer(
+            commandBuffer.handle,
+            source.handle,
+            sourceLayout.vkValue,
+            destination.handle,
+            copies,
+        )
+    }
+}
+
 fun CommandRecorder.copyImage(
     source: BarrierImage,
     sourceLayout: ImageLayout,

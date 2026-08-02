@@ -53,6 +53,7 @@
     "render.MixinModelPart",
     "render.MixinParticle",
     "render.MixinScreen",
+    "render.MixinScreenshotUtils",
     "render.MixinTextRenderer",
     "render.MixinTitleScreen",
     "render.MixinVertexBuffer",

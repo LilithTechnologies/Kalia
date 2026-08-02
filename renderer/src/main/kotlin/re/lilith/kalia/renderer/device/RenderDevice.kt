@@ -128,6 +128,14 @@ interface RenderDevice : AutoCloseable {
     fun render(graph: RenderGraph): Boolean
 
     /**
+     * Copies the most recently presented frame back into host memory.
+     *
+     * @return The captured frame, or `null` if nothing has been presented yet or
+     * the backend cannot read back.
+     */
+    fun readFrame(): CapturedFrame? = null
+
+    /**
      * Notifies the device that the presentation surface has changed size.
      *
      * @param extent The new surface dimensions.
