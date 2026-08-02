@@ -15,6 +15,7 @@ import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.buffer.PersistentMesh;
@@ -22,6 +23,10 @@ import re.lilith.kalia.frame.draw.EntityBatchers;
 import re.lilith.kalia.frame.draw.ItemMeshCache;
 import re.lilith.kalia.frame.graph.item.ItemBatcher;
 import re.lilith.kalia.gl.MatrixState;
+import net.minecraft.client.render.block.entity.BlockEntityItemStackRenderHelper;
+import re.lilith.kalia.rendering.ui.item.GuiBuiltinItems;
+import re.lilith.kalia.rendering.ui.item.GuiItemCapture;
+import re.lilith.kalia.rendering.ui.item.GuiItems;
 
 import java.util.List;
 
@@ -38,6 +43,10 @@ public class MixinItemRenderer {
      */
     @Overwrite
     private void renderBakedItemModel(BakedModel model, int color, ItemStack stack) {
+        if (GuiItemCapture.INSTANCE.capture(model, color, stack)) {
+            return;
+        }
+
         if (ItemMeshCache.INSTANCE.isStackIndependent(model, color, stack != null)) {
             PersistentMesh mesh = ItemMeshCache.INSTANCE.getOrBuild(model, color, () -> kalia$buildQuadBuffer(model, color, stack));
             if (mesh != null) {
@@ -71,5 +80,30 @@ public class MixinItemRenderer {
     @Inject(method = "reload", at = @At("HEAD"))
     private void kalia$onReload(ResourceManager resourceManager, CallbackInfo ci) {
         ItemMeshCache.INSTANCE.clear();
+        GuiItems.INSTANCE.invalidate();
+    }
+
+    @Inject(method = "renderGuiItemModel", at = @At("HEAD"))
+    private void kalia$beginGuiItem(ItemStack stack, int x, int y, CallbackInfo ci) {
+        GuiItemCapture.INSTANCE.begin(x, y);
+    }
+
+    @Redirect(
+            method = "renderItem(Lnet/minecraft/item/ItemStack;Lnet/minecraft/client/render/model/BakedModel;)V",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/render/block/entity/BlockEntityItemStackRenderHelper;renderItem(Lnet/minecraft/item/ItemStack;)V"
+            )
+    )
+    private void kalia$captureBuiltin(BlockEntityItemStackRenderHelper helper, ItemStack stack) {
+        if (GuiBuiltinItems.INSTANCE.capture(stack)) {
+            return;
+        }
+        helper.renderItem(stack);
+    }
+
+    @Inject(method = "renderGuiItemModel", at = @At("RETURN"))
+    private void kalia$endGuiItem(ItemStack stack, int x, int y, CallbackInfo ci) {
+        GuiItemCapture.INSTANCE.end();
     }
 }

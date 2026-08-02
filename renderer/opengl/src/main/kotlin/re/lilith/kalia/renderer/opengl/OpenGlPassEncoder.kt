@@ -468,7 +468,7 @@ internal class OpenGlPassEncoder(
         pipeline ?: error("No pipeline is bound! Call bindPipeline before recording draws.")
 
     private companion object {
-        const val MAX_BINDINGS = 8
+        const val MAX_BINDINGS = 12
         const val MAX_VERTEX_SLOTS = 4
     }
 }

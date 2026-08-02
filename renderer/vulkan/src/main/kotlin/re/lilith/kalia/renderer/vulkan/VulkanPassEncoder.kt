@@ -3,6 +3,7 @@ package re.lilith.kalia.renderer.vulkan
 import org.lwjgl.system.MemoryUtil
 import org.lwjgl.vulkan.EXTMultiDraw
 import org.lwjgl.vulkan.VK10
+import re.lilith.kalia.renderer.command.MultiDrawLayout
 import re.lilith.kalia.renderer.command.MultiDrawList
 import re.lilith.kalia.renderer.command.PassContext
 import re.lilith.kalia.renderer.device.RenderDevice
@@ -40,6 +41,7 @@ import re.lilith.vulkan.api.types.geometry.Extent2D
 import re.lilith.vulkan.api.types.geometry.Offset2D
 import re.lilith.vulkan.api.types.geometry.Rect2D
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import re.lilith.vulkan.api.types.geometry.Viewport as VkViewport
 
 internal class VulkanPassEncoder(
@@ -74,13 +76,21 @@ internal class VulkanPassEncoder(
 
     private val bindingProbe = BindingKey()
 
+    private val boundSetHolder = ArrayList<DescriptorSet>(1)
+
+    private val boundVertexBuffers = arrayOfNulls<VulkanBuffer>(MAX_VERTEX_SLOTS)
+    private val boundVertexOffsets = LongArray(MAX_VERTEX_SLOTS)
+    private var boundIndexBuffer: VulkanBuffer? = null
+    private var boundIndexOffset = 0L
+    private var boundIndexType: IndexType? = null
+    private var pushedLayout: Any? = null
+    private var pushedBytes = -1
+    private val pushedData = ByteBuffer.allocateDirect(MAX_PUSH_CONSTANT_BYTES).order(ByteOrder.nativeOrder())
     private val dynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
     private val boundDynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
     private val dynamicOffsetBySlot = IntArray(MAX_BINDINGS)
     private var dynamicSlotMask = 0
 
-    private var indirectScratch: VulkanBuffer? = null
-    private var indirectOffset = 0L
 
     // What is actually attached right now, which [retarget] moves away from the pass defaults
     internal var colorTargets: List<VulkanTexture> = defaultColor
@@ -119,8 +129,6 @@ internal class VulkanPassEncoder(
      */
     fun finish() {
         close()
-        indirectScratch?.close()
-        indirectScratch = null
     }
 
     override fun retarget(color: GpuTexture?, depth: GpuTexture?) {
@@ -185,6 +193,11 @@ internal class VulkanPassEncoder(
         bindingsDirty = true
         boundDescriptorSet = null
         boundDynamicOffsets.clear()
+        boundVertexBuffers.fill(null)
+        boundIndexBuffer = null
+        boundIndexType = null
+        pushedLayout = null
+        pushedBytes = -1
     }
 
     override fun viewport(viewport: Viewport) {
@@ -261,25 +274,67 @@ internal class VulkanPassEncoder(
 
     override fun pushConstants(data: ByteBuffer) {
         val active = requirePipeline()
-        require(data.remaining() <= active.pushConstantBytes) {
-            "Pipeline '${active.label}' declares ${active.pushConstantBytes} push-constant bytes, but ${data.remaining()} were supplied."
+        val size = data.remaining()
+        require(size <= active.pushConstantBytes) {
+            "Pipeline '${active.label}' declares ${active.pushConstantBytes} push-constant bytes, but $size were supplied."
+        }
+        if (size <= pushedData.capacity() && unchangedPushConstants(active.layout, data, size)) {
+            return
         }
         recorder.pushConstants(active.layout, ShaderStageFlags.AllGraphics, 0, data)
+        if (size <= pushedData.capacity()) {
+            pushedData.clear()
+            pushedData.put(data.duplicate())
+            pushedLayout = active.layout
+            pushedBytes = size
+        } else {
+            pushedLayout = null
+            pushedBytes = -1
+        }
+    }
+
+    private fun unchangedPushConstants(layout: Any, data: ByteBuffer, size: Int): Boolean {
+        if (pushedLayout !== layout || pushedBytes != size) {
+            return false
+        }
+        val base = data.position()
+        var offset = 0
+        while (offset + Long.SIZE_BYTES <= size) {
+            if (data.getLong(base + offset) != pushedData.getLong(offset)) return false
+            offset += Long.SIZE_BYTES
+        }
+        while (offset < size) {
+            if (data.get(base + offset) != pushedData.get(offset)) return false
+            offset++
+        }
+        return true
     }
 
     override fun bindVertexBuffer(slot: Int, buffer: GpuBuffer, offsetBytes: Long) {
-        recorder.bindVertexBuffer(slot, (buffer as VulkanBuffer).buffer, offsetBytes)
+        val vulkanBuffer = buffer as VulkanBuffer
+        if (slot < MAX_VERTEX_SLOTS) {
+            if (boundVertexBuffers[slot] === vulkanBuffer && boundVertexOffsets[slot] == offsetBytes) {
+                return
+            }
+            boundVertexBuffers[slot] = vulkanBuffer
+            boundVertexOffsets[slot] = offsetBytes
+        }
+        recorder.bindVertexBuffer(slot, vulkanBuffer.buffer, offsetBytes)
     }
 
     override fun bindIndexBuffer(buffer: GpuBuffer, format: IndexFormat, offsetBytes: Long) {
-        recorder.bindIndexBuffer(
-            buffer = (buffer as VulkanBuffer).buffer,
-            offset = offsetBytes,
-            indexType = when (format) {
-                IndexFormat.UINT16 -> IndexType.UnsignedShort
-                IndexFormat.UINT32 -> IndexType.UnsignedInt
-            },
-        )
+        val vulkanBuffer = buffer as VulkanBuffer
+        val indexType = when (format) {
+            IndexFormat.UINT16 -> IndexType.UnsignedShort
+            IndexFormat.UINT32 -> IndexType.UnsignedInt
+        }
+        if (boundIndexBuffer === vulkanBuffer && boundIndexOffset == offsetBytes && boundIndexType === indexType) {
+            return
+        }
+        boundIndexBuffer = vulkanBuffer
+        boundIndexOffset = offsetBytes
+        boundIndexType = indexType
+        recorder.bindIndexBuffer(buffer = vulkanBuffer.buffer, offset = offsetBytes, indexType = indexType)
     }
 
     override fun draw(vertexCount: Int, instanceCount: Int, firstVertex: Int, firstInstance: Int) {
@@ -335,7 +390,7 @@ internal class VulkanPassEncoder(
 
         val context = backend.context
         when {
-            context.supportsMultiDraw -> {
+            context.supportsMultiDraw && draws.layout == MultiDrawLayout.SEQUENTIAL -> {
                 val base = draws.buffer
                 val maxPerCall = context.maxMultiDrawCount.coerceAtLeast(1)
                 var start = 0
@@ -344,10 +399,10 @@ internal class VulkanPassEncoder(
                     EXTMultiDraw.nvkCmdDrawMultiIndexedEXT(
                         recorder.commandBuffer.handle,
                         count,
-                        base + start.toLong() * MultiDrawList.STRIDE,
+                        base + start.toLong() * draws.stride,
                         1,
                         0,
-                        MultiDrawList.STRIDE,
+                        draws.stride,
                         MemoryUtil.NULL,
                     )
                     start += count
@@ -367,46 +422,51 @@ internal class VulkanPassEncoder(
         val buffer = reserveIndirect(bytes)
 
         val dstBase = MemoryUtil.memAddress(requireNotNull(buffer.mapped()))
-        var dst = dstBase + indirectOffset
+        val dst = dstBase + frame.indirectOffset
 
-        var src = draws.buffer
+        if (draws.layout == MultiDrawLayout.INDIRECT) {
+            MemoryAccess.copyMemory(draws.buffer, dst, bytes)
+        } else {
+            var src = draws.buffer
+            var cursor = dst
 
-        repeat(drawCount) {
-            val firstIndex = MemoryAccess.getInt(src)
-            val indexCount = MemoryAccess.getInt(src + 4)
-            val vertexOffset = MemoryAccess.getInt(src + 8)
+            repeat(drawCount) {
+                val firstIndex = MemoryAccess.getInt(src + draws.layout.firstIndexOffset)
+                val indexCount = MemoryAccess.getInt(src + draws.layout.indexCountOffset)
+                val vertexOffset = MemoryAccess.getInt(src + draws.layout.vertexOffsetOffset)
 
-            MemoryAccess.putInt(dst, indexCount)
-            MemoryAccess.putInt(dst + 4, 1)
-            MemoryAccess.putInt(dst + 8, firstIndex)
-            MemoryAccess.putInt(dst + 12, vertexOffset)
-            MemoryAccess.putInt(dst + 16, 0)
+                MemoryAccess.putInt(cursor, indexCount)
+                MemoryAccess.putInt(cursor + 4, 1)
+                MemoryAccess.putInt(cursor + 8, firstIndex)
+                MemoryAccess.putInt(cursor + 12, vertexOffset)
+                MemoryAccess.putInt(cursor + 16, 0)
 
-            src += MultiDrawList.STRIDE.toLong()
-            dst += INDIRECT_STRIDE.toLong()
+                src += draws.stride.toLong()
+                cursor += INDIRECT_STRIDE.toLong()
+            }
         }
 
         VK10.vkCmdDrawIndexedIndirect(
             recorder.commandBuffer.handle,
             RawHandles.buffer(buffer.buffer),
-            indirectOffset,
+            frame.indirectOffset,
             drawCount,
             INDIRECT_STRIDE,
         )
 
-        indirectOffset += bytes
+        frame.indirectOffset += bytes
     }
 
     private fun reserveIndirect(bytes: Long): VulkanBuffer {
-        var scratch = indirectScratch
-        if (scratch == null || indirectOffset + bytes > scratch.sizeBytes) {
+        var scratch = frame.indirectScratch
+        if (scratch == null || frame.indirectOffset + bytes > scratch.sizeBytes) {
             val capacity = maxOf(bytes, (scratch?.sizeBytes ?: 0L) * 2L, INITIAL_INDIRECT_CAPACITY)
             scratch?.close()
             scratch = backend.createBuffer(
                 BufferDescription("kalia/indirect-scratch", capacity, BufferUsage.STREAM, indirect = true),
             ) as VulkanBuffer
-            indirectScratch = scratch
-            indirectOffset = 0L
+            frame.indirectScratch = scratch
+            frame.indirectOffset = 0L
         }
         return scratch
     }
@@ -506,7 +566,9 @@ internal class VulkanPassEncoder(
 
         val set = frame.descriptorSet(bindingProbe, layout) { target -> writeDescriptors(active, target) }
         if (set !== boundDescriptorSet || dynamicOffsets != boundDynamicOffsets) {
-            recorder.bindDescriptorSets(active.layout, listOf(set), dynamicOffsets = dynamicOffsets)
+            boundSetHolder.clear()
+            boundSetHolder += set
+            recorder.bindDescriptorSets(active.layout, boundSetHolder, dynamicOffsets = dynamicOffsets)
             RenderStats.recordDescriptorBind()
             boundDescriptorSet = set
             boundDynamicOffsets.clear()
@@ -572,6 +634,8 @@ internal class VulkanPassEncoder(
 
     private companion object {
         const val MAX_BINDINGS = 16
+        const val MAX_VERTEX_SLOTS = 8
+        const val MAX_PUSH_CONSTANT_BYTES = 256
 
         // VkDrawIndexedIndirectCommand
         const val INDIRECT_STRIDE = 20

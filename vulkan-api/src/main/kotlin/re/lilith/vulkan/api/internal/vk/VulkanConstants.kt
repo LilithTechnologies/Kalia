@@ -150,6 +150,7 @@ internal object VulkanConstants {
         const val r16g16Sint: Int = VK10.VK_FORMAT_R16G16_SINT
         const val r16g16Uint: Int = VK10.VK_FORMAT_R16G16_UINT
         const val r16g16Unorm: Int = VK10.VK_FORMAT_R16G16_UNORM
+        const val r16g16Uscaled: Int = VK10.VK_FORMAT_R16G16_USCALED
         const val r16g16b16a16Sint: Int = VK10.VK_FORMAT_R16G16B16A16_SINT
         const val r16g16b16a16Sfloat: Int = VK10.VK_FORMAT_R16G16B16A16_SFLOAT
         const val r32Uint: Int = VK10.VK_FORMAT_R32_UINT

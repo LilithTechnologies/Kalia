@@ -8,6 +8,7 @@ import org.embeddedt.embeddium.impl.render.chunk.data.SectionRenderDataStorage;
 import org.embeddedt.embeddium.impl.render.chunk.data.SectionRenderDataUnsafe;
 import org.embeddedt.embeddium.impl.render.chunk.lists.ChunkRenderListIterable;
 import org.embeddedt.embeddium.impl.render.chunk.lists.ChunkRenderList;
+import org.embeddedt.embeddium.impl.render.chunk.multidraw.BatchAssembler;
 import org.embeddedt.embeddium.impl.render.chunk.multidraw.ChunkMultiDrawEmitter;
 import org.embeddedt.embeddium.impl.render.chunk.region.RenderRegion;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
@@ -91,7 +92,8 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
                     continue;
                 }
 
-                fillCommandBuffer(this.emitter, region, storage, renderList, occlusionCamera, renderPass, useBlockFaceCulling && !renderPass.isSorted());
+                BatchAssembler.fillRegion(this.emitter, region, storage, renderList, occlusionCamera, renderPass,
+                        useBlockFaceCulling && !renderPass.isSorted());
 
                 if (this.emitter.isEmpty()) {
                     continue;
@@ -124,120 +126,6 @@ public abstract class DefaultChunkRenderer extends ShaderChunkRenderer {
         }
 
         this.end(renderPass);
-    }
-
-    private static void fillCommandBuffer(ChunkMultiDrawEmitter emitter,
-                                          RenderRegion renderRegion,
-                                          SectionRenderDataStorage renderDataStorage,
-                                          ChunkRenderList renderList,
-                                          CameraTransform camera,
-                                          TerrainRenderPass pass,
-                                          boolean useBlockFaceCulling) {
-        emitter.clear();
-
-        var iterator = renderList.sectionsWithGeometryIterator(pass.isReverseOrder());
-
-        if (iterator == null) {
-            return;
-        }
-
-        int originX = renderRegion.getChunkX();
-        int originY = renderRegion.getChunkY();
-        int originZ = renderRegion.getChunkZ();
-
-        int indexPointerMask = pass.isSorted() ? 0xFFFFFFFF : 0;
-
-        while (iterator.hasNext()) {
-            int sectionIndex = iterator.nextByteAsInt();
-
-            int chunkX = originX + LocalSectionIndex.unpackX(sectionIndex);
-            int chunkY = originY + LocalSectionIndex.unpackY(sectionIndex);
-            int chunkZ = originZ + LocalSectionIndex.unpackZ(sectionIndex);
-
-            var pMeshData = renderDataStorage.getDataPointer(sectionIndex);
-
-            int slices;
-
-            if (useBlockFaceCulling) {
-                slices = getVisibleFaces(camera.intX, camera.intY, camera.intZ, chunkX, chunkY, chunkZ);
-            } else {
-                slices = ModelQuadFacing.ALL;
-            }
-
-            slices &= SectionRenderDataUnsafe.getSliceMask(pMeshData);
-
-            if (slices != 0) {
-                emitter.addDrawCommands(pMeshData, slices, indexPointerMask);
-            }
-        }
-    }
-
-    private static final int MODEL_UNASSIGNED = ModelQuadFacing.UNASSIGNED.ordinal();
-    private static final int MODEL_POS_X      = ModelQuadFacing.POS_X.ordinal();
-    private static final int MODEL_POS_Y      = ModelQuadFacing.POS_Y.ordinal();
-    private static final int MODEL_POS_Z      = ModelQuadFacing.POS_Z.ordinal();
-
-    private static final int MODEL_NEG_X      = ModelQuadFacing.NEG_X.ordinal();
-    private static final int MODEL_NEG_Y      = ModelQuadFacing.NEG_Y.ordinal();
-    private static final int MODEL_NEG_Z      = ModelQuadFacing.NEG_Z.ordinal();
-
-    /**
-     * When true, block face culling checks are inverted to debug if the feature works properly.
-     */
-    private static final boolean DEBUG_BLOCK_FACE_CULLING = false;
-
-    private static int getVisibleFaces(int originX, int originY, int originZ, int chunkX, int chunkY, int chunkZ) {
-        // This is carefully written so that we can keep everything branch-less.
-        //
-        // Normally, this would be a ridiculous way to handle the problem. But the Hotspot VM's
-        // heuristic for generating SETcc/CMOV instructions is broken, and it will always create a
-        // branch even when a trivial ternary is encountered.
-        //
-        // For example, the following will never be transformed into a SETcc:
-        //   (a > b) ? 1 : 0
-        //
-        // So we have to instead rely on sign-bit extension and masking (which generates a ton
-        // of unnecessary instructions) to get this to be branch-less.
-        //
-        // To do this, we can transform the previous expression into the following.
-        //   (b - a) >> 31
-        //
-        // This works because if (a > b) then (b - a) will always create a negative number. We then shift the sign bit
-        // into the least significant bit's position (which also discards any bits following the sign bit) to get the
-        // output we are looking for.
-        //
-        // If you look at the output which LLVM produces for a series of ternaries, you will instantly become distraught,
-        // because it manages to a) correctly evaluate the cost of instructions, and b) go so far
-        // as to actually produce vector code.  (https://godbolt.org/z/GaaEx39T9)
-
-        int boundsMinX = (chunkX << 4), boundsMaxX = boundsMinX + 16;
-        int boundsMinY = (chunkY << 4), boundsMaxY = boundsMinY + 16;
-        int boundsMinZ = (chunkZ << 4), boundsMaxZ = boundsMinZ + 16;
-
-        // the "unassigned" plane is always front-facing, since we can't check it
-        int planes = (1 << MODEL_UNASSIGNED);
-
-        if (DEBUG_BLOCK_FACE_CULLING) {
-            planes |= BitwiseMath.lessThan(originX, (boundsMaxX + 3)) << MODEL_POS_X;
-            planes |= BitwiseMath.lessThan(originY, (boundsMaxY + 3)) << MODEL_POS_Y;
-            planes |= BitwiseMath.lessThan(originZ, (boundsMaxZ + 3)) << MODEL_POS_Z;
-
-            planes |=    BitwiseMath.greaterThan(originX, (boundsMinX - 3)) << MODEL_NEG_X;
-            planes |=    BitwiseMath.greaterThan(originY, (boundsMinY - 3)) << MODEL_NEG_Y;
-            planes |=    BitwiseMath.greaterThan(originZ, (boundsMinZ - 3)) << MODEL_NEG_Z;
-        } else {
-            planes |= BitwiseMath.greaterThan(originX, (boundsMinX - 3)) << MODEL_POS_X;
-            planes |= BitwiseMath.greaterThan(originY, (boundsMinY - 3)) << MODEL_POS_Y;
-            planes |= BitwiseMath.greaterThan(originZ, (boundsMinZ - 3)) << MODEL_POS_Z;
-
-            planes |=    BitwiseMath.lessThan(originX, (boundsMaxX + 3)) << MODEL_NEG_X;
-            planes |=    BitwiseMath.lessThan(originY, (boundsMaxY + 3)) << MODEL_NEG_Y;
-            planes |=    BitwiseMath.lessThan(originZ, (boundsMaxZ + 3)) << MODEL_NEG_Z;
-        }
-
-
-
-        return planes;
     }
 
     private static void setRegionOffsetUniform(org.embeddedt.embeddium.impl.render.chunk.shader.ChunkShaderUniforms uniforms, RenderRegion region, CameraTransform camera) {

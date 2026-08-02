@@ -7,7 +7,6 @@ import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.util.IdentityHashMap
 
 object Opcode {
     const val VIEWPORT = 1
@@ -50,13 +49,73 @@ object Opcode {
     }
 }
 
+private class IdentityIntMap {
+    private var keys = arrayOfNulls<Any>(CAPACITY)
+    private var values = IntArray(CAPACITY)
+    private var size = 0
+
+    fun get(key: Any): Int {
+        var index = slotOf(key)
+        while (true) {
+            val candidate = keys[index] ?: return -1
+            if (candidate === key) return values[index]
+            index = (index + 1) and (keys.size - 1)
+        }
+    }
+
+    fun put(key: Any, value: Int) {
+        if ((size + 1) * 2 > keys.size) {
+            grow()
+        }
+        var index = slotOf(key)
+        while (true) {
+            val candidate = keys[index]
+            if (candidate == null) {
+                keys[index] = key
+                values[index] = value
+                size++
+                return
+            }
+            if (candidate === key) {
+                values[index] = value
+                return
+            }
+            index = (index + 1) and (keys.size - 1)
+        }
+    }
+
+    fun clear() {
+        keys.fill(null)
+        size = 0
+    }
+
+    private fun slotOf(key: Any): Int = (System.identityHashCode(key) * MIX) ushr SHIFT and (keys.size - 1)
+
+    private fun grow() {
+        val oldKeys = keys
+        val oldValues = values
+        keys = arrayOfNulls(oldKeys.size * 2)
+        values = IntArray(oldKeys.size * 2)
+        size = 0
+        for (index in oldKeys.indices) {
+            oldKeys[index]?.let { put(it, oldValues[index]) }
+        }
+    }
+
+    private companion object {
+        const val CAPACITY = 64
+        const val MIX = -1640531527
+        const val SHIFT = 8
+    }
+}
+
 class ResourceTable {
     private val buffers = ArrayList<GpuBuffer>()
     private val textures = ArrayList<GpuTexture>()
     private val samplers = ArrayList<GpuSampler>()
     private val pipelines = ArrayList<GpuPipeline>()
 
-    private val ids = IdentityHashMap<Any, Int>()
+    private val ids = IdentityIntMap()
 
     val bufferCount: Int get() = buffers.size
     val textureCount: Int get() = textures.size
@@ -80,10 +139,13 @@ class ResourceTable {
     fun pipeline(id: Int): GpuPipeline = pipelines[id]
 
     private fun <T : Any> intern(resource: T, into: ArrayList<T>): Int {
-        ids[resource]?.let { return it }
+        val existing = ids.get(resource)
+        if (existing >= 0) {
+            return existing
+        }
         val id = into.size
         into += resource
-        ids[resource] = id
+        ids.put(resource, id)
         return id
     }
 
@@ -98,11 +160,11 @@ class ResourceTable {
         if (resource is GpuResource) resource.label else resource.toString()
 
     fun clear() {
+        ids.clear()
         buffers.clear()
         textures.clear()
         samplers.clear()
         pipelines.clear()
-        ids.clear()
     }
 }
 
@@ -118,7 +180,7 @@ class CommandStream {
         private set
 
     private fun allocate(bytes: Int): ByteBuffer =
-        ByteBuffer.allocate(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        ByteBuffer.allocateDirect(bytes).order(ByteOrder.LITTLE_ENDIAN)
 
     private fun reserve(bytes: Int) {
         if (data.remaining() >= bytes) {

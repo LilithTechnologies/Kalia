@@ -151,7 +151,7 @@ object ShadowBatcher {
         encoder.bindVertexBuffer(0, ShadowMesh.vertices(device))
         encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
         encoder.bindIndexBuffer(ShadowMesh.indices(device), IndexFormat.UINT32)
-        encoder.drawIndexed(indexCount = ShadowMesh.INDEX_COUNT, instanceCount = count)
+        encoder.drawIndexed(ShadowMesh.INDEX_COUNT, count, 0, 0, 0)
 
         instances.clear()
         count = 0

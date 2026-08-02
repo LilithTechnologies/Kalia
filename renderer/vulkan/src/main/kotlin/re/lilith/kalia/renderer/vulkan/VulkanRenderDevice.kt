@@ -2,6 +2,8 @@
 
 package re.lilith.kalia.renderer.vulkan
 
+import re.lilith.kalia.renderer.command.MultiDrawLayout
+
 import org.lwjgl.vulkan.KHRSwapchain
 import re.lilith.kalia.renderer.device.DeviceCapabilities
 import re.lilith.kalia.renderer.device.DeviceSettings
@@ -80,6 +82,9 @@ internal class VulkanRenderDevice(
 
     override val capabilities: DeviceCapabilities =
         context.capabilities.copy(framesInFlight = FRAMES_IN_FLIGHT, supportsCompute = true)
+
+    override val preferredMultiDrawLayout
+        get() = if (context.supportsMultiDraw) MultiDrawLayout.SEQUENTIAL else MultiDrawLayout.INDIRECT
 
     override val surfaceExtent: Extent get() = swapchain.extent
 

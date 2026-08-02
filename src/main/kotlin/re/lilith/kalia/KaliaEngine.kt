@@ -9,6 +9,11 @@ import re.lilith.kalia.renderer.Kalia
 import re.lilith.kalia.renderer.device.BackendId
 import re.lilith.kalia.renderer.device.DeviceSettings
 import re.lilith.kalia.renderer.device.RenderDevice
+import re.lilith.kalia.rendering.ui.UI
+import re.lilith.kalia.rendering.ui.item.GuiItems
+import re.lilith.kalia.rendering.ui.pip.GuiEntityPreview
+import re.lilith.kalia.rendering.world.WorldFrame
+import re.lilith.kalia.rendering.world.WorldFrameTimings
 import re.lilith.kalia.shader.PipelineCache
 
 object KaliaEngine {
@@ -102,14 +107,25 @@ object KaliaEngine {
         else -> null
     }
 
-    fun renderFrame(renderGame: () -> Unit): Boolean {
+    fun beginFrame(): Boolean {
+        if (!ensureStarted()) {
+            return false
+        }
         val running = state as? State.Running ?: return false
 
         FrameResources.of(running.device).beginFrame()
         GlBridge.applyDepthBias()
         GlBridge.clearOverlay()
+        return true
+    }
 
-        return runCatching { running.device.render(GameFrameGraph.build(running.device, renderGame)) }
+    fun renderFrame(): Boolean {
+        val running = state as? State.Running ?: return false
+
+        val graph = GameFrameGraph.build(running.device)
+        WorldFrameTimings.end(WorldFrameTimings.GRAPH_BUILD)
+
+        return runCatching { running.device.render(graph) }
             .getOrElse { failure ->
                 KaliaMod.LOGGER.error("A Kalia frame has failed. The engine will be terminating shortly.", failure)
                 shutdown()
@@ -121,6 +137,10 @@ object KaliaEngine {
         (state as? State.Running)?.let { running ->
             runCatching {
                 running.device.waitIdle()
+                GuiItems.release()
+                GuiEntityPreview.release()
+                UI.release()
+                WorldFrame.release()
                 FrameResources.release()
                 PipelineCache.invalidate()
                 running.device.close()

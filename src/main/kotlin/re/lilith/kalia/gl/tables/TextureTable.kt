@@ -14,6 +14,9 @@ object TextureTable {
     private val textures = Int2ObjectOpenHashMap<GlTexture>()
     private var nextId = 1
 
+    private var lastId = 0
+    private var lastTexture: GlTexture? = null
+
     fun generate(): Int {
         val id = nextId++
         textures[id] = GlTexture(id)
@@ -21,6 +24,10 @@ object TextureTable {
     }
 
     fun delete(id: Int) {
+        if (id == lastId) {
+            lastId = 0
+            lastTexture = null
+        }
         textures.remove(id)?.close()
     }
 
@@ -28,10 +35,16 @@ object TextureTable {
         if (id <= 0) {
             return null
         }
-        return textures.getOrPut(id) {
+        if (id == lastId) {
+            return lastTexture
+        }
+        val texture = textures.getOrPut(id) {
             nextId = maxOf(nextId, id + 1)
             GlTexture(id)
         }
+        lastId = id
+        lastTexture = texture
+        return texture
     }
 
     fun boundTexture(unit: Int): GlTexture? = get(TextureUnits.boundTexture(unit))

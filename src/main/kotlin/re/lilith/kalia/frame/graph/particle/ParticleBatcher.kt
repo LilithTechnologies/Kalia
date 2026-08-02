@@ -127,7 +127,7 @@ object ParticleBatcher {
 
         val cached = lastDescription
         if (cached != null &&
-            lastDescAttachments == attachments &&
+            lastDescAttachments === attachments &&
             lastDescDepth === depth &&
             lastDescBlend === blend &&
             lastDescColorMask === colorMask
@@ -222,7 +222,7 @@ object ParticleBatcher {
             encoder.bindVertexBuffer(0, quadVertices)
             encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
             encoder.bindIndexBuffer(quadIndices, IndexFormat.UINT32)
-            encoder.drawIndexed(indexCount = ParticleMesh.INDEX_COUNT, instanceCount = instances.count)
+            encoder.drawIndexed(ParticleMesh.INDEX_COUNT, instances.count, 0, 0, 0)
         }
         recycle()
     }

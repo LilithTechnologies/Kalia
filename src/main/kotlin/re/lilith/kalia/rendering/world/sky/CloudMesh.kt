@@ -1,8 +1,10 @@
-package re.lilith.kalia.frame.graph.sky
+package re.lilith.kalia.rendering.world.sky
 
 import net.minecraft.client.render.BufferBuilder
 import net.minecraft.client.render.Tessellator
+import net.minecraft.client.render.VertexFormat
 import net.minecraft.client.render.VertexFormats
+import org.lwjgl.opengl.GL11.GL_QUADS
 import re.lilith.kalia.KaliaEngine
 import re.lilith.kalia.buffer.PersistentMesh
 import re.lilith.kalia.renderer.device.RenderDevice
@@ -12,8 +14,6 @@ import re.lilith.kalia.vertex.VertexFormatBridge
  * The fancy & flat cloud layers
  */
 object CloudMesh {
-    const val GL_QUADS = 7
-
     private val FANCY_FORMAT = VertexFormats.POSITION_TEXTURE_COLOR_NORMAL
 
     private const val CELL = 8
@@ -102,7 +102,7 @@ object CloudMesh {
 
     private fun build(
         device: RenderDevice,
-        format: net.minecraft.client.render.VertexFormat,
+        format: VertexFormat,
         emit: (BufferBuilder) -> Unit,
     ): PersistentMesh {
         val builder = Tessellator.getInstance().buffer

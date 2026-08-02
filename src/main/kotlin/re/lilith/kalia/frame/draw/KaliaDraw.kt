@@ -13,6 +13,7 @@ import re.lilith.kalia.shader.CoreShaders
 import re.lilith.kalia.shader.PipelineCache
 import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.gl.tables.TextureTable
+import re.lilith.kalia.rendering.ui.GuiTessellatorBridge
 import re.lilith.kalia.vertex.TranslatedVertexFormat
 import java.nio.ByteBuffer
 
@@ -29,6 +30,9 @@ object KaliaDraw {
         if (DisplayLists.capture(source, format, glMode, vertexCount)) {
             return
         }
+        if (GuiTessellatorBridge.tryCapture(source, format, glMode, vertexCount)) {
+            return
+        }
         if (GuiBatcher.tryRecord(source, format, glMode, vertexCount)) {
             return
         }
@@ -41,6 +45,49 @@ object KaliaDraw {
     }
 
     private class BoundTexture(val texture: GpuTexture, val sampler: GpuSampler)
+
+    fun drawResident(
+        buffer: GpuBuffer,
+        format: TranslatedVertexFormat,
+        glMode: Int,
+        vertexCount: Int,
+        offsetBytes: Long,
+        texture: GpuTexture?,
+        sampler: GpuSampler?,
+    ) {
+        if (vertexCount <= 0) {
+            return
+        }
+        EntityBatchers.flush()
+        record(format, glMode, vertexCount, buffer, offsetBytes, boundTexture(texture, sampler))
+    }
+
+    fun drawStaged(
+        source: ByteBuffer,
+        format: TranslatedVertexFormat,
+        glMode: Int,
+        vertexCount: Int,
+        texture: GpuTexture?,
+        sampler: GpuSampler?,
+    ) {
+        if (vertexCount <= 0) {
+            return
+        }
+        val encoder = GameFrame.current ?: return
+        val resources = FrameResources.of(encoder.device)
+
+        EntityBatchers.flush()
+        val byteCount = vertexCount * format.format.stride
+        val slice = resources.vertexArena.append(source, byteCount)
+        record(format, glMode, vertexCount, slice.buffer, slice.offsetBytes, boundTexture(texture, sampler))
+    }
+
+    private fun boundTexture(texture: GpuTexture?, sampler: GpuSampler?): BoundTexture? {
+        if (texture == null || sampler == null) {
+            return null
+        }
+        return BoundTexture(texture, sampler)
+    }
 
     fun drawResident(
         buffer: GpuBuffer,
@@ -72,7 +119,6 @@ object KaliaDraw {
         val encoder = GameFrame.current ?: return
         val resources = FrameResources.of(encoder.device)
 
-        // Anything recorded directly has to land after whatever the batcher is still holding
         GuiBatcher.flush()
 
         MatrixState.flush()
@@ -121,7 +167,7 @@ object KaliaDraw {
                     return
                 }
                 encoder.bindIndexBuffer(resources.indices.forQuads(quadCount), IndexFormat.UINT32)
-                encoder.drawIndexed(resources.indices.quadIndexCount(quadCount))
+                encoder.drawIndexed(resources.indices.quadIndexCount(quadCount), 1, 0, 0, 0)
             }
 
             GlEnums.IndexPattern.FAN -> {
@@ -129,10 +175,10 @@ object KaliaDraw {
                     return
                 }
                 encoder.bindIndexBuffer(resources.indices.forFan(vertexCount), IndexFormat.UINT32)
-                encoder.drawIndexed(resources.indices.fanIndexCount(vertexCount))
+                encoder.drawIndexed(resources.indices.fanIndexCount(vertexCount), 1, 0, 0, 0)
             }
 
-            GlEnums.IndexPattern.NONE -> encoder.draw(vertexCount)
+            GlEnums.IndexPattern.NONE -> encoder.draw(vertexCount, 1, 0, 0)
         }
     }
 

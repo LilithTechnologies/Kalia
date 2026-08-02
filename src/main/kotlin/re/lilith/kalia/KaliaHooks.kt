@@ -1,14 +1,34 @@
 package re.lilith.kalia
 
+import re.lilith.kalia.platform.GameInput
+import re.lilith.kalia.rendering.state.FrameState
+import re.lilith.kalia.rendering.ui.GuiWalk
+import re.lilith.kalia.rendering.world.WorldFrame
+import re.lilith.kalia.rendering.world.WorldFrameTimings
+
 object KaliaHooks {
     @JvmStatic
-    fun renderFrame(renderGame: Runnable) {
-        if (!KaliaEngine.ensureStarted()) {
-            renderGame.run()
+    fun renderFrame() {
+        GameInput.update(FrameState.tickDelta)
+        if (!KaliaEngine.beginFrame()) {
             return
         }
-        if (!KaliaEngine.renderFrame(renderGame::run)) {
-            renderGame.run()
+        WorldFrame.collect(FrameState.tickDelta)
+        GuiWalk.collect(FrameState.tickDelta)
+        WorldFrameTimings.end(WorldFrameTimings.GUI_WALK)
+        KaliaEngine.renderFrame()
+        WorldFrameTimings.end(WorldFrameTimings.DEVICE_RENDER)
+        WorldFrameTimings.report()
+    }
+
+    @JvmStatic
+    fun setFrameState(
+        tickDelta: Float,
+        limitTime: Long
+    ) {
+        FrameState.let { frameState ->
+            frameState.tickDelta = tickDelta
+            frameState.limitTime = limitTime
         }
     }
 

@@ -30,12 +30,6 @@ public class CeleritasDebugStrings {
         }
 
         stringsToRender.add(Pair.of("", -1));
-        stringsToRender.add(Pair.of("Frame Breakdown", 0xFFFFAA00));
-        for (String line : RenderMetrics.getDebugStrings()) {
-            stringsToRender.add(Pair.of(line, -1));
-        }
-
-        stringsToRender.add(Pair.of("", -1));
         stringsToRender.add(Pair.of("Kalia Backend", 0xFF55FFFF));
         for (String line : RenderStats.INSTANCE.summary()) {
             stringsToRender.add(Pair.of(line, -1));

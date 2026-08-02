@@ -4,13 +4,14 @@ layout(location = 1) in vec2 aUV;
 layout(location = 2) in vec4 instRow0;
 layout(location = 3) in vec4 instRow1;
 layout(location = 4) in vec4 instRow2;
-layout(location = 5) in vec4 instTint;
-layout(location = 6) in vec4 instOverlay;
-layout(location = 7) in vec4 instLight;
-layout(location = 8) in vec4 instBoxA;
-layout(location = 9) in vec4 instBoxB;
-layout(location = 10) in float instScale;
-layout(location = 11) in vec3 instCenter;
+layout(location = 5) in vec3 instCenter;
+layout(location = 6) in float instScale;
+layout(location = 7) in vec4 instTint;
+layout(location = 8) in vec4 instOverlay;
+layout(location = 9) in vec2 instLightUv;
+layout(location = 10) in ivec4 instBoxA;
+layout(location = 11) in ivec4 instBoxB;
+layout(location = 12) in float instInflate;
 
 layout(location = 0) out vec4 vColor;
 layout(location = 1) out vec2 vUv0;
@@ -51,12 +52,12 @@ void faceRect(int faceIndex, float i, float j, float k, float l, float m, float 
 }
 
 void main() {
-    float sizeX = instBoxA.z;
-    float sizeY = instBoxA.w;
-    float sizeZ = instBoxB.x;
-    float textureWidth = instBoxB.y;
-    float textureHeight = instBoxB.z;
-    float inflate = instBoxB.w;
+    float sizeX = float(instBoxA.z);
+    float sizeY = float(instBoxA.w);
+    float sizeZ = float(instBoxB.x);
+    float textureWidth = float(instBoxB.z);
+    float textureHeight = float(instBoxB.w);
+    float inflate = instInflate;
 
     vec3 fullSize = (vec3(sizeX, sizeY, sizeZ) + vec3(inflate) * 2.0) * instScale;
     vec3 localPosition = instCenter + aPosition * fullSize;
@@ -69,7 +70,7 @@ void main() {
     int faceIndex = gl_VertexIndex / 4;
     vec2 rectMin, rectMax;
     faceRect(
-        faceIndex, instBoxA.x, instBoxA.y, sizeX, sizeY, sizeZ,
+        faceIndex, float(instBoxA.x), float(instBoxA.y), sizeX, sizeY, sizeZ,
         textureWidth, textureHeight, rectMin, rectMax
     );
     vUv0 = mix(rectMin, rectMax, aUV);
@@ -82,11 +83,11 @@ void main() {
 
     vColor = instTint;
     vOverlay = instOverlay;
-    int packed = int(instLight.z + 0.5);
+    int packed = instBoxB.y;
     vMisc = vec4(
         (packed & 1) != 0 ? 1.0 : 0.0,
         (packed & 2) != 0 ? 1.0 : 0.0,
-        instLight.w,
+        0.0,
         float(packed >> 2));
-    vLightUv = instLight.xy;
+    vLightUv = instLightUv;
 }

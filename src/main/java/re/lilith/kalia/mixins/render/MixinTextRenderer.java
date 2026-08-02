@@ -244,23 +244,24 @@ public class MixinTextRenderer implements NametagTextRenderer {
                 | (this.underline ? 4 : 0)
                 | (this.strikethrough ? 8 : 0)
                 | (this.obfuscated ? 16 : 0);
-        boolean cacheable = !this.obfuscated && !kalia$containsObfuscationCode(text);
-
-        TextMeshCache.CachedText cached = null;
-        if (cacheable) {
-            cached = TextMeshCache.find(text, shadow, opaqueColor, this.unicode, styleBits);
-        }
+        TextMeshCache.CachedText cached = this.obfuscated
+                ? null
+                : TextMeshCache.find(text, shadow, opaqueColor, this.unicode, styleBits);
+        boolean owned = false;
         if (cached == null) {
+            boolean cacheable = !this.obfuscated && !kalia$containsObfuscationCode(text);
             cached = kalia$bake(text, shadow, opaqueColor);
             if (cacheable) {
                 TextMeshCache.put(text, shadow, opaqueColor, this.unicode, styleBits, cached);
+            } else {
+                owned = true;
             }
         }
 
         kalia$drawCached(cached);
         this.x += cached.advance;
 
-        if (!cacheable) {
+        if (owned) {
             cached.free();
         }
     }
@@ -325,20 +326,21 @@ public class MixinTextRenderer implements NametagTextRenderer {
         float alpha = (float) (argb >>> 24) / 255.0F;
         int opaqueColor = kalia$packColor(r, g, b, 1.0F);
 
-        boolean cacheable = !kalia$containsObfuscationCode(text);
-        TextMeshCache.CachedText cached = cacheable
-                ? TextMeshCache.find(text, false, opaqueColor, this.unicode, 0)
-                : null;
+        TextMeshCache.CachedText cached = TextMeshCache.find(text, false, opaqueColor, this.unicode, 0);
+        boolean owned = false;
         if (cached == null) {
+            boolean cacheable = !kalia$containsObfuscationCode(text);
             cached = kalia$bake(text, false, opaqueColor);
             if (cacheable) {
                 TextMeshCache.put(text, false, opaqueColor, this.unicode, 0, cached);
+            } else {
+                owned = true;
             }
         }
 
         kalia$drawCachedInstanced(cached, x, y, alpha);
 
-        if (!cacheable) {
+        if (owned) {
             cached.free();
         }
     }
@@ -363,6 +365,8 @@ public class MixinTextRenderer implements NametagTextRenderer {
             } else {
                 this.textureManager.bindTexture(kalia$getFontPage(segment.page));
             }
+
+            NametagBatcher.INSTANCE.beginSegment();
 
             float[] instances = segment.instanceData;
             for (int off = 0; off < instances.length; off += 9) {

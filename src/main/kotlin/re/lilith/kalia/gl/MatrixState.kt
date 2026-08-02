@@ -15,17 +15,32 @@ object MatrixState {
     private val pool = ArrayDeque<Matrix4f>()
 
     private var mode = GlEnums.GL_MODELVIEW
-    private var dirty = true
+    private var dirtyModelView = true
+    private var dirtyProjection = true
+    private var dirtyTexture = true
 
     var activeTextureUnit: Int = 0
+        set(value) {
+            if (field != value) {
+                field = value
+                if (mode == GlEnums.GL_TEXTURE) {
+                    cached = null
+                }
+            }
+        }
+
+    private var cached: Matrix4f? = null
 
     fun matrixMode(glMode: Int) {
-        mode = glMode
+        if (mode != glMode) {
+            mode = glMode
+            cached = null
+        }
     }
 
     fun matrixMode(): Int = mode
 
-    fun current(): Matrix4f = stackFor(mode).last()
+    fun current(): Matrix4f = cached ?: stackFor(mode).last().also { cached = it }
 
     fun modelView(): Matrix4f = modelViewStack.last()
 
@@ -34,51 +49,77 @@ object MatrixState {
     fun texture(): Matrix4f = textureStack(activeTextureUnit).last()
 
     fun pushMatrix() {
+        cached = null
         val stack = stackFor(mode)
         stack.addLast(borrow(stack.last()))
-        dirty = true
+        markDirty()
     }
 
     fun popMatrix() {
+        cached = null
         val stack = stackFor(mode)
         if (stack.size > 1) {
             release(stack.removeLast())
         }
-        dirty = true
+        markDirty()
     }
 
     fun pushTextureMatrix() {
+        cached = null
         val stack = textureStack(activeTextureUnit)
         stack.addLast(borrow(stack.last()))
-        dirty = true
+        markTextureDirty()
     }
 
     fun popTextureMatrix() {
+        cached = null
         val stack = textureStack(activeTextureUnit)
         if (stack.size > 1) {
             release(stack.removeLast())
         }
-        dirty = true
+        markTextureDirty()
     }
 
     fun loadIdentity() {
         current().identity()
-        dirty = true
+        markDirty()
     }
 
     fun translate(x: Float, y: Float, z: Float) {
         current().translate(x, y, z)
-        dirty = true
+        markDirty()
     }
 
     fun rotate(degrees: Float, x: Float, y: Float, z: Float) {
-        current().rotate(Math.toRadians(degrees.toDouble()).toFloat(), x, y, z)
-        dirty = true
+        val radians = Math.toRadians(degrees.toDouble()).toFloat()
+        val matrix = current()
+        if (y == 0f && z == 0f) {
+            when (x) {
+                1f -> matrix.rotateX(radians)
+                -1f -> matrix.rotateX(-radians)
+                else -> matrix.rotate(radians, x, y, z)
+            }
+        } else if (x == 0f && z == 0f) {
+            when (y) {
+                1f -> matrix.rotateY(radians)
+                -1f -> matrix.rotateY(-radians)
+                else -> matrix.rotate(radians, x, y, z)
+            }
+        } else if (x == 0f && y == 0f) {
+            when (z) {
+                1f -> matrix.rotateZ(radians)
+                -1f -> matrix.rotateZ(-radians)
+                else -> matrix.rotate(radians, x, y, z)
+            }
+        } else {
+            matrix.rotate(radians, x, y, z)
+        }
+        markDirty()
     }
 
     fun scale(x: Float, y: Float, z: Float) {
         current().scale(x, y, z)
-        dirty = true
+        markDirty()
     }
 
     fun ortho(left: Double, right: Double, bottom: Double, top: Double, near: Double, far: Double) {
@@ -88,7 +129,7 @@ object MatrixState {
             near.toFloat(), far.toFloat(),
             true,
         )
-        dirty = true
+        markDirty()
     }
 
     fun perspective(fovYDegrees: Double, aspect: Double, near: Double, far: Double) {
@@ -99,17 +140,17 @@ object MatrixState {
             far.toFloat(),
             true,
         )
-        dirty = true
+        markDirty()
     }
 
     fun multiply(matrix: FloatBuffer) {
         current().mul(scratch.set(matrix))
-        dirty = true
+        markDirty()
     }
 
     fun multiply(matrix: Matrix4f) {
         current().mul(matrix)
-        dirty = true
+        markDirty()
     }
 
     fun write(glMatrixName: Int, out: FloatBuffer) {
@@ -121,16 +162,36 @@ object MatrixState {
     }
 
     fun flush() {
-        if (!dirty) {
-            return
+        if (dirtyModelView) {
+            dirtyModelView = false
+            ShaderUniforms.setModelView(modelView())
         }
-        dirty = false
-        ShaderUniforms.setModelView(modelView())
-        ShaderUniforms.setProjection(projection())
-        ShaderUniforms.setTexture(textureStack(0).last())
+        if (dirtyProjection) {
+            dirtyProjection = false
+            ShaderUniforms.setProjection(projection())
+        }
+        if (dirtyTexture) {
+            dirtyTexture = false
+            ShaderUniforms.setTexture(textureStack(0).last())
+        }
+    }
+
+    private fun markDirty() {
+        when (mode) {
+            GlEnums.GL_PROJECTION -> dirtyProjection = true
+            GlEnums.GL_TEXTURE -> markTextureDirty()
+            else -> dirtyModelView = true
+        }
+    }
+
+    private fun markTextureDirty() {
+        if (activeTextureUnit == 0) {
+            dirtyTexture = true
+        }
     }
 
     fun reset() {
+        cached = null
         while (modelViewStack.size > 1) release(modelViewStack.removeLast())
         while (projectionStack.size > 1) release(projectionStack.removeLast())
         textureStacks.values.forEach { stack ->
@@ -140,7 +201,9 @@ object MatrixState {
         modelViewStack.last().identity()
         projectionStack.last().identity()
         mode = GlEnums.GL_MODELVIEW
-        dirty = true
+        dirtyModelView = true
+        dirtyProjection = true
+        dirtyTexture = true
     }
 
     private fun stackFor(glMode: Int) = when (glMode) {

@@ -230,6 +230,12 @@ object GuiBatcher {
         return slotCount++
     }
 
+    fun discard() {
+        vertexCount = 0
+        absorbedDraws = 0
+        slotCount = 0
+    }
+
     fun flush() {
         if (vertexCount == 0) {
             return
@@ -313,9 +319,9 @@ object GuiBatcher {
         if (keyIndexed) {
             val quadCount = pending / VERTICES_PER_QUAD
             encoder.bindIndexBuffer(resources.indices.forQuads(quadCount), IndexFormat.UINT32)
-            encoder.drawIndexed(resources.indices.quadIndexCount(quadCount))
+            encoder.drawIndexed(resources.indices.quadIndexCount(quadCount), 1, 0, 0, 0)
         } else {
-            encoder.draw(pending)
+            encoder.draw(pending, 1, 0, 0)
         }
     }
 

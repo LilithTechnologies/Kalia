@@ -24,6 +24,7 @@ import re.lilith.kalia.renderer.shader.ShaderProgram
 import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.gl.emulation.GlTexture
 import re.lilith.kalia.gl.emulation.TextureArrays
+import re.lilith.kalia.gl.TextureUnits
 import re.lilith.kalia.gl.tables.TextureTable
 import re.lilith.kalia.renderer.utility.MemoryAccess
 import java.nio.ByteBuffer
@@ -31,19 +32,20 @@ import java.nio.ByteOrder
 import kotlin.collections.iterator
 
 object CuboidBatcher {
-    private const val BYTES_PER_INSTANCE = 120
+    private const val BYTES_PER_INSTANCE = 100
 
     val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instRow0", 2, VertexAttributeFormat.FLOAT4)
         attribute("instRow1", 3, VertexAttributeFormat.FLOAT4)
         attribute("instRow2", 4, VertexAttributeFormat.FLOAT4)
-        attribute("instTint", 5, VertexAttributeFormat.UNORM8X4)
-        attribute("instOverlay", 6, VertexAttributeFormat.UNORM8X4)
-        attribute("instLight", 7, VertexAttributeFormat.FLOAT4)
-        attribute("instBoxA", 8, VertexAttributeFormat.FLOAT4)
-        attribute("instBoxB", 9, VertexAttributeFormat.FLOAT4)
-        attribute("instScale", 10, VertexAttributeFormat.FLOAT)
-        attribute("instCenter", 11, VertexAttributeFormat.FLOAT3)
+        attribute("instCenter", 5, VertexAttributeFormat.FLOAT3)
+        attribute("instScale", 6, VertexAttributeFormat.FLOAT)
+        attribute("instTint", 7, VertexAttributeFormat.UNORM8X4)
+        attribute("instOverlay", 8, VertexAttributeFormat.UNORM8X4)
+        attribute("instLightUv", 9, VertexAttributeFormat.FLOAT2)
+        attribute("instBoxA", 10, VertexAttributeFormat.SHORT4)
+        attribute("instBoxB", 11, VertexAttributeFormat.SHORT4)
+        attribute("instInflate", 12, VertexAttributeFormat.FLOAT)
     }
 
     private data class GroupKey(
@@ -86,6 +88,15 @@ object CuboidBatcher {
     private var activeInstances: Instances? = null
     private var activeLayer: Int = 0
 
+    private var memoValid = false
+    private var memoTexId = 0
+    private var memoLightmapId = 0
+    private var memoRaster: RasterState? = null
+    private var memoDepth: DepthState? = null
+    private var memoBlend: BlendState? = null
+    private var memoColorMask: ColorMask? = null
+    private var memoAttachments: AttachmentLayout? = null
+
     fun beginPart() {
         val encoder = GameFrame.current
         if (encoder == null) {
@@ -102,6 +113,26 @@ object CuboidBatcher {
             biasConstant = GlState.effectiveDepthBiasConstant()
             biasSlope = GlState.effectiveDepthBiasSlope()
             lineWidth = GlState.lineWidth
+        }
+
+        val texId = TextureUnits.boundTexture(0)
+        val lightmapId = TextureUnits.boundTexture(GlBridge.LIGHTMAP_UNIT)
+        val raster = GlState.rasterState()
+        val depthState = GlState.depthState()
+        val blend = GlState.blendState()
+        val mask = GlState.colorMask()
+        val attachments = encoder.attachments
+
+        if (memoValid &&
+            texId == memoTexId &&
+            lightmapId == memoLightmapId &&
+            raster === memoRaster &&
+            depthState === memoDepth &&
+            blend === memoBlend &&
+            mask === memoColorMask &&
+            attachments === memoAttachments
+        ) {
+            return
         }
 
         val resources = FrameResources.of(encoder.device)
@@ -145,6 +176,15 @@ object CuboidBatcher {
 
         activeInstances = instances
         activeLayer = pooled?.layer ?: 0
+
+        memoTexId = texId
+        memoLightmapId = lightmapId
+        memoRaster = raster
+        memoDepth = depthState
+        memoBlend = blend
+        memoColorMask = mask
+        memoAttachments = attachments
+        memoValid = true
     }
 
     fun recordBox(
@@ -177,7 +217,7 @@ object CuboidBatcher {
         val cached = lastDescription
         if (cached != null &&
             lastDescProgram === program &&
-            lastDescAttachments == attachments &&
+            lastDescAttachments === attachments &&
             lastDescRaster === raster &&
             lastDescDepth === depth &&
             lastDescBlend === blend &&
@@ -236,6 +276,11 @@ object CuboidBatcher {
         MemoryAccess.putFloat(p, modelView.m22()); p += 4
         MemoryAccess.putFloat(p, modelView.m32()); p += 4
 
+        MemoryAccess.putFloat(p, centerX); p += 4
+        MemoryAccess.putFloat(p, centerY); p += 4
+        MemoryAccess.putFloat(p, centerZ); p += 4
+        MemoryAccess.putFloat(p, scale); p += 4
+
         MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderRed())); p += 1
         MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderGreen())); p += 1
         MemoryAccess.putByte(p, unorm(ShaderUniforms.shaderBlue())); p += 1
@@ -247,25 +292,21 @@ object CuboidBatcher {
 
         MemoryAccess.putFloat(p, ShaderUniforms.lightmapS()); p += 4
         MemoryAccess.putFloat(p, ShaderUniforms.lightmapT()); p += 4
+
+        MemoryAccess.putShort(p, texU.toShort()); p += 2
+        MemoryAccess.putShort(p, texV.toShort()); p += 2
+        MemoryAccess.putShort(p, sizeX.toShort()); p += 2
+        MemoryAccess.putShort(p, sizeY.toShort()); p += 2
+
         var flags = 0
         if (ShaderUniforms.isLightmapEnabled()) flags = flags or 1
         if (ShaderUniforms.isLightingEnabled()) flags = flags or 2
-        MemoryAccess.putFloat(p, (layer * 4 + flags).toFloat()); p += 4
-        MemoryAccess.putFloat(p, ShaderUniforms.alphaCutout()); p += 4
+        MemoryAccess.putShort(p, sizeZ.toShort()); p += 2
+        MemoryAccess.putShort(p, (layer * 4 + flags).toShort()); p += 2
+        MemoryAccess.putShort(p, textureWidth.toInt().toShort()); p += 2
+        MemoryAccess.putShort(p, textureHeight.toInt().toShort()); p += 2
 
-        MemoryAccess.putFloat(p, texU.toFloat()); p += 4
-        MemoryAccess.putFloat(p, texV.toFloat()); p += 4
-        MemoryAccess.putFloat(p, sizeX.toFloat()); p += 4
-        MemoryAccess.putFloat(p, sizeY.toFloat()); p += 4
-        MemoryAccess.putFloat(p, sizeZ.toFloat()); p += 4
-        MemoryAccess.putFloat(p, textureWidth); p += 4
-        MemoryAccess.putFloat(p, textureHeight); p += 4
-        MemoryAccess.putFloat(p, inflate); p += 4
-        MemoryAccess.putFloat(p, scale); p += 4
-
-        MemoryAccess.putFloat(p, centerX); p += 4
-        MemoryAccess.putFloat(p, centerY); p += 4
-        MemoryAccess.putFloat(p, centerZ)
+        MemoryAccess.putFloat(p, inflate)
     }
 
     private fun unorm(value: Float): Byte = (value * 255f + 0.5f).toInt().coerceIn(0, 255).toByte()
@@ -310,7 +351,7 @@ object CuboidBatcher {
             encoder.bindVertexBuffer(0, cubeVertices)
             encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
             encoder.bindIndexBuffer(cubeIndices, IndexFormat.UINT32)
-            encoder.drawIndexed(indexCount = CuboidMesh.INDEX_COUNT, instanceCount = instances.count)
+            encoder.drawIndexed(CuboidMesh.INDEX_COUNT, instances.count, 0, 0, 0)
         }
         recycle()
     }
@@ -324,6 +365,7 @@ object CuboidBatcher {
         groups.clear()
         pendingInstances = 0
         activeInstances = null
+        memoValid = false
 
         lastKeyDescription = null
         lastKeyTexture = null

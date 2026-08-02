@@ -11,6 +11,8 @@ import re.lilith.kalia.KaliaEngine
 import re.lilith.kalia.frame.draw.EntityBatchers
 import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.renderer.geometry.Color
+import re.lilith.kalia.renderer.pipeline.CullMode
+import re.lilith.kalia.rendering.ui.UI
 import java.nio.FloatBuffer
 
 object GlBridge {
@@ -104,6 +106,14 @@ object GlBridge {
     }
 
     @JvmStatic
+    fun cullFace(face: Int) {
+        GlState.cullFace = when (face) {
+            GL_FRONT -> CullMode.FRONT
+            else -> CullMode.BACK
+        }
+    }
+
+    @JvmStatic
     fun colorMask(red: Boolean, green: Boolean, blue: Boolean, alpha: Boolean) {
         GlState.colorMask(red, green, blue, alpha)
     }
@@ -150,11 +160,17 @@ object GlBridge {
 
     @JvmStatic
     fun scissor(x: Int, y: Int, width: Int, height: Int) {
+        if (UI.setRawScissor(x, y, width, height)) {
+            return
+        }
         GameFrame.setScissor(x, y, width, height)
     }
 
     @JvmStatic
     fun disableScissor() {
+        if (UI.clearRawScissor()) {
+            return
+        }
         GameFrame.resetScissor()
     }
 
@@ -392,7 +408,7 @@ object GlBridge {
             GL_POLYGON_OFFSET_FILL, GL_POLYGON_OFFSET_LINE ->
                 if (enabled) enablePolygonOffset() else disablePolygonOffset()
 
-            GL_SCISSOR_TEST -> if (!enabled) GameFrame.resetScissor()
+            GL_SCISSOR_TEST -> if (!enabled) disableScissor()
         }
     }
 

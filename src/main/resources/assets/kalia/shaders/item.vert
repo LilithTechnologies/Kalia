@@ -23,7 +23,7 @@ void main() {
     vViewDistance = abs(eye.z);
     gl_Position = kaliaProjection * vec4(eye, 1.0);
 
-    vUv = aUv0;
+    vUv = (kaliaTextureMatrix * vec4(aUv0, 0.0, 1.0)).xy;
     vColor = aColor;
     vNormal = normalize(vec3(
         dot(instRow0.xyz, aNormal.xyz),

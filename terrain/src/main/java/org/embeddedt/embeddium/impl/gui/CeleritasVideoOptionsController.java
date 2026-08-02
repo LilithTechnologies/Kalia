@@ -166,9 +166,9 @@ public class CeleritasVideoOptionsController implements Renderable {
         return BasicFrame.createBuilder()
                 .setDimension(parentBasicFrameDim)
                 .shouldRenderOutline(false)
-                .addChild(_ -> this.createTabFrame(tabFrameDim))
-                .addChild(_ -> this.undoButton)
-                .addChild(_ -> this.applyButton)
-                .addChild(_ -> this.closeButton);
+                .addChild(dim -> this.createTabFrame(tabFrameDim))
+                .addChild(dim -> this.undoButton)
+                .addChild(dim -> this.applyButton)
+                .addChild(dim -> this.closeButton);
     }
 }

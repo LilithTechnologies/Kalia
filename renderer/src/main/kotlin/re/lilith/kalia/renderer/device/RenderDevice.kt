@@ -1,5 +1,7 @@
 package re.lilith.kalia.renderer.device
 
+import re.lilith.kalia.renderer.command.MultiDrawLayout
+
 import re.lilith.kalia.renderer.command.ComputeEncoder
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.geometry.Extent
@@ -22,6 +24,11 @@ interface RenderDevice : AutoCloseable {
      * Capabilities and implementation limits reported by the backend.
      */
     val capabilities: DeviceCapabilities
+
+    /**
+     * The [MultiDrawLayout] this backend consumes without repacking.
+     */
+    val preferredMultiDrawLayout get() = MultiDrawLayout.SEQUENTIAL
 
     /**
      * Current dimensions of the presentation surface in pixels.

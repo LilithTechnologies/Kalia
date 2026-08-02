@@ -5,8 +5,8 @@ import net.minecraft.util.Identifier
 import org.lwjgl.opengl.GL11
 import re.lilith.kalia.KaliaEngine
 import re.lilith.kalia.frame.FrameResources
-import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.frame.GameFrameGraph
+import re.lilith.kalia.renderer.command.PassContext
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.gl.MatrixState
@@ -85,9 +85,7 @@ class CubeMap(
         sampler = device.createSampler(SamplerDescription.LINEAR_CLAMP)
     }
 
-    fun render(rotationX: Float, rotationY: Float) {
-        val encoder = GameFrame.current ?: throw Exception("Kalia isn't initialized yet")
-
+    fun render(encoder: PassContext, rotationX: Float, rotationY: Float) {
         val nativeTexture =
             TextureTable.get(MinecraftClient.getInstance().textureManager.getTexture(texture).glId)?.texture
                 ?: throw Exception("Texture '$texture' does not exist")

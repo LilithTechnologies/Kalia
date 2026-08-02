@@ -1,28 +1,33 @@
 package org.embeddedt.embeddium.impl.render.chunk.multidraw;
 
 import org.embeddedt.embeddium.impl.model.quad.properties.ModelQuadFacing;
-import org.embeddedt.embeddium.impl.render.chunk.data.SectionRenderDataUnsafe;
 import org.embeddedt.embeddium.impl.render.chunk.region.RenderRegion;
 import re.lilith.kalia.renderer.command.MultiDrawList;
+import re.lilith.kalia.renderer.device.RenderDevice;
+import re.lilith.kalia.sodium.KaliaAccess;
 import re.lilith.kalia.renderer.command.PassEncoder;
 
 public final class ChunkMultiDrawEmitter {
     public static final int MAX_COMMAND_COUNT = (ModelQuadFacing.COUNT * RenderRegion.REGION_SIZE) + 1;
 
-    private final MultiDrawList list = new MultiDrawList(MAX_COMMAND_COUNT);
+    private final MultiDrawList list;
 
-    public void addDrawCommands(long pMeshData, int facingMask, int indexPointerMask) {
-        for (int facing = 0; facing < ModelQuadFacing.COUNT; facing++) {
-            if (((facingMask >> facing) & 1) != 0) {
-                int indexOffset = SectionRenderDataUnsafe.getIndexOffset(pMeshData, facing) & indexPointerMask;
+    public ChunkMultiDrawEmitter() {
+        // Built in whichever record form the backend consumes natively, so the draw path never repacks.
+        this(KaliaAccess.INSTANCE.device());
+    }
 
-                this.list.addDraw(
-                        SectionRenderDataUnsafe.getElementCount(pMeshData, facing),
-                        indexOffset / 4,
-                        SectionRenderDataUnsafe.getVertexOffset(pMeshData, facing)
-                );
-            }
-        }
+    public ChunkMultiDrawEmitter(RenderDevice device) {
+        this.list = new MultiDrawList(MAX_COMMAND_COUNT, device.getPreferredMultiDrawLayout());
+    }
+
+    /**
+     * Appends one command. Empty commands are discarded, so assembly loops can write unconditionally.
+     *
+     * @param firstIndex offset into the index buffer, in elements
+     */
+    public void addDraw(int elementCount, int firstIndex, int vertexOffset) {
+        this.list.addDraw(elementCount, firstIndex, vertexOffset);
     }
 
     public void executeBatch(PassEncoder pass) {
@@ -34,7 +39,7 @@ public final class ChunkMultiDrawEmitter {
     }
 
     public int getIndexBufferSize() {
-        return this.list.maxIndexCount();
+        return this.list.getMaxIndexCount();
     }
 
     public void clear() {

@@ -3,6 +3,9 @@ package re.lilith.kalia.renderer.post
 import re.lilith.kalia.renderer.shader.*
 
 object PostEffects {
+    // TODO: load from disk
+
+    //language=glsl
     const val PUSH_CONSTANT_BLOCK: String = """
 layout(push_constant) uniform KaliaPost {
     vec4 kaliaParams[6];
@@ -11,6 +14,7 @@ layout(push_constant) uniform KaliaPost {
 };
 """
 
+    //language=glsl
     const val FULLSCREEN_VERTEX: String = """
 #version 450
 layout(location = 0) out vec2 uv;
@@ -39,8 +43,9 @@ void main() {
         pushConstantBytes = PostStage.PARAM_FLOATS * 4 + 16,
     )
 
-    val blit: ShaderProgram = program(
+    val blit = program(
         label = "kalia/blit",
+        //language=glsl
         fragment = """
 #version 450
 layout(binding = 0) uniform sampler2D kaliaInput;

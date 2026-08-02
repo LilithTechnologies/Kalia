@@ -156,6 +156,14 @@ object GlState {
             }
         }
 
+    var cullFace: CullMode = CullMode.BACK
+        set(value) {
+            if (field != value) {
+                field = value
+                rasterDirty = true
+            }
+        }
+
     private var rasterDirty = true
     private var cachedRaster = intern(rasterStates, RasterState.TWO_SIDED)
 
@@ -169,7 +177,7 @@ object GlState {
                 rasterStates,
                 RasterState(
                     topology = topology,
-                    cullMode = if (culls) CullMode.BACK else CullMode.NONE,
+                    cullMode = if (culls) cullFace else CullMode.NONE,
                     frontFace = FrontFace.COUNTER_CLOCKWISE,
                     polygonMode = polygonMode,
                     depthBiasEnabled = true,

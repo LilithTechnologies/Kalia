@@ -70,9 +70,17 @@ object ItemBatcher {
     private var lastKeyLightmapSampler: GpuSampler? = null
     private var lastInstances: Instances? = null
 
+    private var environmentVersion = 0L
+
     fun record(mesh: PersistentMesh, modelView: Matrix4f) {
         val format = mesh.format ?: return
         val encoder = GameFrame.current ?: return
+
+        if (ShaderUniforms.environmentVersion != environmentVersion) {
+            flush()
+            environmentVersion = ShaderUniforms.environmentVersion
+        }
+
         val resources = FrameResources.of(encoder.device)
         val texture = KaliaDraw.textureForUnit(0, resources)
         val sampler = KaliaDraw.samplerForUnit(0, resources)
@@ -110,7 +118,7 @@ object ItemBatcher {
 
         val cached = lastDescription
         if (cached != null &&
-            lastDescAttachments == attachments &&
+            lastDescAttachments === attachments &&
             lastDescVertexFormat === vertexFormat &&
             lastDescRaster === raster &&
             lastDescDepth === depth &&
@@ -205,7 +213,7 @@ object ItemBatcher {
             encoder.bindVertexBuffer(0, vertexBuffer)
             encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
             encoder.bindIndexBuffer(resources.indices.forQuads(quadCount), IndexFormat.UINT32)
-            encoder.drawIndexed(indexCount = resources.indices.quadIndexCount(quadCount), instanceCount = instances.count)
+            encoder.drawIndexed(resources.indices.quadIndexCount(quadCount), instances.count, 0, 0, 0)
         }
         recycle()
     }

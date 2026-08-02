@@ -25,9 +25,6 @@ object GameFrame {
         check(encoder == null) { "A Kalia game pass is already recording." }
         encoder = context
         try {
-            colorTarget?.let { context.retarget(it, depthTarget) }
-            _viewport?.let(context::viewport)
-            context.scissor(scissor)
             body()
         } finally {
             EntityBatchers.flush()

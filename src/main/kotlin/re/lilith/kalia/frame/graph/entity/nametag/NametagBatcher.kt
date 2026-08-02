@@ -68,6 +68,7 @@ object NametagBatcher {
     private var lastKeyTexture: GpuTexture? = null
     private var lastKeySampler: GpuSampler? = null
     private var lastInstances: Instances? = null
+    private var activeInstances: Instances? = null
 
     fun beginLabel() {
         if (GameFrame.current == null) return
@@ -84,16 +85,27 @@ object NametagBatcher {
         }
     }
 
+    fun beginSegment() {
+        val resources = beginInstance() ?: run {
+            activeInstances = null
+            return
+        }
+        activeInstances = instancesFor(
+            KaliaDraw.textureForUnit(0, resources),
+            KaliaDraw.samplerForUnit(0, resources),
+        )
+    }
+
     fun recordGlyph(modelView: Matrix4f, x0: Float, y0: Float, x1: Float, y1: Float, u0: Float, v0: Float, u1: Float, v1: Float, rgba: Int) {
-        val resources = beginInstance() ?: return
-        val texture = KaliaDraw.textureForUnit(0, resources)
-        val sampler = KaliaDraw.samplerForUnit(0, resources)
-        record(texture, sampler, modelView, x0, y0, x1, y1, u0, v0, u1, v1, rgba)
+        val instances = activeInstances ?: return
+        writeInstance(instances.reserve(), modelView, x0, y0, x1, y1, u0, v0, u1, v1, rgba)
     }
 
     fun recordBackground(modelView: Matrix4f, x0: Float, y0: Float, x1: Float, y1: Float, rgba: Int) {
         val resources = beginInstance() ?: return
-        record(resources.whiteTexture, resources.defaultSampler, modelView, x0, y0, x1, y1, 0f, 0f, 1f, 1f, rgba)
+        val instances = instancesFor(resources.whiteTexture, resources.defaultSampler) ?: return
+        writeInstance(instances.reserve(), modelView, x0, y0, x1, y1, 0f, 0f, 1f, 1f, rgba)
+        activeInstances = null
     }
 
     private fun beginInstance(): FrameResources? {
@@ -101,30 +113,21 @@ object NametagBatcher {
         return FrameResources.of(encoder.device)
     }
 
-    private fun record(
-        texture: GpuTexture,
-        sampler: GpuSampler,
-        modelView: Matrix4f,
-        x0: Float, y0: Float, x1: Float, y1: Float,
-        u0: Float, v0: Float, u1: Float, v1: Float,
-        rgba: Int,
-    ) {
-        val encoder = GameFrame.current ?: return
+    private fun instancesFor(texture: GpuTexture, sampler: GpuSampler): Instances? {
+        val encoder = GameFrame.current ?: return null
         val description = descriptionFor(encoder.attachments)
 
-        val instances: Instances
         val cached = lastInstances
         if (cached != null && lastKeyDescription === description && lastKeyTexture === texture && lastKeySampler === sampler) {
-            instances = cached
-        } else {
-            val key = GroupKey(description, texture, sampler)
-            instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: Instances() }
-            lastKeyDescription = description
-            lastKeyTexture = texture
-            lastKeySampler = sampler
-            lastInstances = instances
+            return cached
         }
-        writeInstance(instances.reserve(), modelView, x0, y0, x1, y1, u0, v0, u1, v1, rgba)
+        val key = GroupKey(description, texture, sampler)
+        val instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: Instances() }
+        lastKeyDescription = description
+        lastKeyTexture = texture
+        lastKeySampler = sampler
+        lastInstances = instances
+        return instances
     }
 
     private fun descriptionFor(attachments: AttachmentLayout): GraphicsPipelineDescription {
@@ -135,7 +138,7 @@ object NametagBatcher {
 
         val cached = lastDescription
         if (cached != null &&
-            lastDescAttachments == attachments &&
+            lastDescAttachments === attachments &&
             lastDescRaster === raster &&
             lastDescDepth === depth &&
             lastDescBlend === blend &&
@@ -240,7 +243,7 @@ object NametagBatcher {
             encoder.bindVertexBuffer(0, quadVertices)
             encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
             encoder.bindIndexBuffer(quadIndices, IndexFormat.UINT32)
-            encoder.drawIndexed(indexCount = NametagMesh.INDEX_COUNT, instanceCount = instances.count)
+            encoder.drawIndexed(NametagMesh.INDEX_COUNT, instances.count, 0, 0, 0)
         }
         recycle()
     }
@@ -256,6 +259,7 @@ object NametagBatcher {
         lastKeyTexture = null
         lastKeySampler = null
         lastInstances = null
+        activeInstances = null
     }
 
     private class Instances {

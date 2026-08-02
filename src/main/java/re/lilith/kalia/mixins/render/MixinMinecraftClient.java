@@ -33,7 +33,7 @@ public abstract class MixinMinecraftClient {
         callback.cancel();
         kalia$insideLoadingScreen = true;
         try {
-            KaliaHooks.renderFrame(() -> loadLogo(textureManager));
+            // TODO: Loading screen
         } finally {
             kalia$insideLoadingScreen = false;
         }
@@ -44,7 +44,10 @@ public abstract class MixinMinecraftClient {
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/GameRenderer;render(FJ)V")
     )
     private void kalia$renderFrame(GameRenderer renderer, float tickDelta, long limitTime) {
-        KaliaHooks.renderFrame(() -> renderer.render(tickDelta, limitTime));
+        KaliaHooks.setFrameState(
+                tickDelta, limitTime
+        );
+        KaliaHooks.renderFrame();
     }
 
     @Inject(method = "stop", at = @At("HEAD"))

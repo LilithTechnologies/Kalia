@@ -14,6 +14,7 @@ enum class Format(internal val vkValue: Int) {
     R16G16_SInt(VulkanConstants.Formats.r16g16Sint),
     R16G16_UInt(VulkanConstants.Formats.r16g16Uint),
     R16G16_UNorm(VulkanConstants.Formats.r16g16Unorm),
+    R16G16_UScaled(VulkanConstants.Formats.r16g16Uscaled),
     R16G16B16A16_SInt(VulkanConstants.Formats.r16g16b16a16Sint),
     R16G16B16A16_SFloat(VulkanConstants.Formats.r16g16b16a16Sfloat),
     R32_UInt(VulkanConstants.Formats.r32Uint),

@@ -29,7 +29,7 @@ void main() {
     if (vMisc.x > 0.5) {
         color.rgb *= texture(kaliaLightmapTexture, vLightUv).rgb;
     }
-    if (color.a <= vMisc.z) {
+    if (color.a <= KALIA_ALPHA_CUTOUT) {
         discard;
     }
     color.rgb = kaliaApplyFog(color.rgb, vViewDistance);

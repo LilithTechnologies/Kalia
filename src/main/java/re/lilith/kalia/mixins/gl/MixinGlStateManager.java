@@ -134,6 +134,7 @@ public class MixinGlStateManager {
      */
     @Overwrite
     public static void cullFace(int face) {
+        GlBridge.cullFace(face);
     }
 
     /**

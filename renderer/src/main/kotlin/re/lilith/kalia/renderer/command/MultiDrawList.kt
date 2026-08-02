@@ -2,8 +2,6 @@ package re.lilith.kalia.renderer.command
 
 import org.lwjgl.system.MemoryUtil
 import re.lilith.kalia.renderer.utility.MemoryAccess
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * A fixed-capacity list of indexed draws submitted together through [PassEncoder.multiDrawIndexed]
@@ -11,45 +9,62 @@ import java.nio.ByteOrder
  * @author Lunasa
  * @since 1.0.0
  */
-class MultiDrawList(val capacity: Int) {
-    val buffer = MemoryUtil.nmemAlloc((capacity * STRIDE).toLong())
+class MultiDrawList(val capacity: Int, val layout: MultiDrawLayout = MultiDrawLayout.SEQUENTIAL) {
+    val stride: Int get() = layout.stride
+
+    val buffer = MemoryUtil.nmemAlloc(capacity.toLong() * layout.stride)
 
     var size: Int = 0
         private set
 
+    var maxIndexCount: Int = 0
+        private set
+
     val isEmpty: Boolean get() = size <= 0
+
+    val sizeBytes: Long get() = size.toLong() * layout.stride
+
+    init {
+        if (layout == MultiDrawLayout.INDIRECT) {
+            for (draw in 0 until capacity) {
+                val base = buffer + (draw.toLong() * layout.stride)
+                MemoryAccess.putInt(base + INSTANCE_COUNT_OFFSET, 1)
+                MemoryAccess.putInt(base + FIRST_INSTANCE_OFFSET, 0)
+            }
+        }
+    }
 
     fun clear() {
         size = 0
+        maxIndexCount = 0
     }
 
     fun addDraw(indexCount: Int, firstIndex: Int, vertexOffset: Int) {
-        check(size < capacity) { "MultiDrawList capacity ($capacity) exceeded." }
-        val base = buffer + (size * STRIDE)
-        MemoryAccess.putInt(base, firstIndex)
-        MemoryAccess.putInt(base + 4, indexCount)
-        MemoryAccess.putInt(base + 8, vertexOffset)
-        size++
-    }
-
-    fun firstIndex(draw: Int): Int = MemoryAccess.getInt(buffer + (draw * STRIDE))
-
-    fun indexCount(draw: Int): Int = MemoryAccess.getInt(buffer + (draw * STRIDE + 4))
-
-    fun vertexOffset(draw: Int): Int = MemoryAccess.getInt(buffer + (draw * STRIDE + 8))
-
-    fun maxIndexCount(): Int {
-        var largest = 0
-        for (draw in 0 until size) {
-            val count = indexCount(draw)
-            if (count > largest) {
-                largest = count
-            }
+        if (indexCount <= 0) {
+            return
         }
-        return largest
+        check(size < capacity) { "MultiDrawList capacity ($capacity) exceeded." }
+        val base = buffer + (size.toLong() * layout.stride)
+        MemoryAccess.putInt(base + layout.firstIndexOffset, firstIndex)
+        MemoryAccess.putInt(base + layout.indexCountOffset, indexCount)
+        MemoryAccess.putInt(base + layout.vertexOffsetOffset, vertexOffset)
+        size++
+        if (indexCount > maxIndexCount) {
+            maxIndexCount = indexCount
+        }
     }
 
-    companion object {
-        const val STRIDE = 12
+    fun firstIndex(draw: Int): Int =
+        MemoryAccess.getInt(buffer + (draw.toLong() * layout.stride) + layout.firstIndexOffset)
+
+    fun indexCount(draw: Int): Int =
+        MemoryAccess.getInt(buffer + (draw.toLong() * layout.stride) + layout.indexCountOffset)
+
+    fun vertexOffset(draw: Int): Int =
+        MemoryAccess.getInt(buffer + (draw.toLong() * layout.stride) + layout.vertexOffsetOffset)
+
+    private companion object {
+        const val INSTANCE_COUNT_OFFSET = 4
+        const val FIRST_INSTANCE_OFFSET = 16
     }
 }

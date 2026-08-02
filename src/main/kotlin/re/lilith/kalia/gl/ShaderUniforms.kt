@@ -150,6 +150,7 @@ object ShaderUniforms {
         if (alphaCutout == value) return
         alphaCutout = value
         pushDirty = true
+        markEnvironmentDirty()
     }
 
     fun alphaCutout(): Float = alphaCutout
@@ -208,6 +209,18 @@ object ShaderUniforms {
     fun fogGreen(): Float = fogGreenInternal
 
     fun fogBlue(): Float = fogBlueInternal
+
+    fun lightDirection0X(): Float = light0X
+
+    fun lightDirection0Y(): Float = light0Y
+
+    fun lightDirection0Z(): Float = light0Z
+
+    fun lightDirection1X(): Float = light1X
+
+    fun lightDirection1Y(): Float = light1Y
+
+    fun lightDirection1Z(): Float = light1Z
 
     fun setLightDirections(
         firstX: Float, firstY: Float, firstZ: Float,

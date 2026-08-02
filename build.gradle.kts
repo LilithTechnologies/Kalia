@@ -13,9 +13,13 @@ ploceus {
 
 repositories {
     maven(url = "https://maven.legacyfabric.net/") { name = "Legacy Fabric" }
-    maven(url = "https://maven.axolotlclient.com/snapshots") { name = "Axolotl Client" }
+    maven(url = "https://maven.axolotlclient.com/releases") { name = "Axolotl Client" }
     maven(url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1") { name = "DevAuth" }
     mavenCentral()
+    exclusiveContent {
+        forRepository { mavenCentral() }
+        filter { includeGroup("org.lwjgl") }
+    }
 }
 
 configurations.configureEach {
@@ -101,7 +105,7 @@ fun DependencyHandlerScope.lwjglDesktopNativesNoShade(module: String) {
 }
 
 kotlin {
-    jvmToolchain(25)
+    jvmToolchain(21)
 }
 
 loom {
@@ -117,6 +121,7 @@ loom {
             runDir("run")
             jvmArguments.add("-Dkalia.backend=vulkan")
             jvmArguments.add("-Ddevauth.enabled=true")
+            jvmArguments.add("-Dorg.lwjgl.system.memoryBackend=unsafe")
         }
         create("ClientOpenGL") {
             client()
@@ -124,8 +129,8 @@ loom {
             ideConfigGenerated(true)
             runDir("run")
             jvmArguments.add("-Dkalia.backend=opengl")
+            jvmArguments.add("-Dorg.lwjgl.system.memoryBackend=unsafe")
         }
-
     }
 }
 

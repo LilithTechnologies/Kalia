@@ -12,7 +12,16 @@ object TextureArrays {
     const val MAX_SIZE = 256
     private const val LAYERS = 64
 
-    class Binding(val texture: GpuTexture, val sampler: SamplerDescription, val layer: Int)
+    class Binding {
+        lateinit var texture: GpuTexture
+            internal set
+        lateinit var sampler: SamplerDescription
+            internal set
+        var layer: Int = 0
+            internal set
+    }
+
+    private val binding = Binding()
 
     private data class PoolKey(
         val width: Int,
@@ -63,7 +72,10 @@ object TextureArrays {
             slot.pool.texture.upload(shadow, 0, slot.layer)
             slot.uploadedVersion = source.contentVersion
         }
-        return Binding(slot.pool.texture, slot.pool.sampler, slot.layer)
+        binding.texture = slot.pool.texture
+        binding.sampler = slot.pool.sampler
+        binding.layer = slot.layer
+        return binding
     }
 
     fun release(source: GlTexture) {

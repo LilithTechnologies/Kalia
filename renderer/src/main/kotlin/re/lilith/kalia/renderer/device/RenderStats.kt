@@ -88,7 +88,7 @@ object RenderStats {
     }
 
     fun summary(): List<String> = listOf(
-        "Draws: $draws (batched $batchedDraws into $batches)",
+        "Draws: $draws",
         "Pipeline binds: $pipelineBinds, descriptor binds: $descriptorBinds",
         "Descriptor sets allocated: $descriptorAllocations",
         "Uploads: ${uploadBytes / 1024L} KiB in $transferSubmits submit(s)",

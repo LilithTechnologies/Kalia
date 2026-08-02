@@ -27,11 +27,15 @@ internal class VulkanFrameSlot(
 
     private val descriptorSets = HashMap<BindingKey, DescriptorSet>()
 
+    var indirectScratch: VulkanBuffer? = null
+    var indirectOffset = 0L
+
     fun retire(resource: AutoCloseable) {
         retired += resource
     }
 
     fun recycle() {
+        indirectOffset = 0L
         descriptorPool.reset()
         descriptorSets.clear()
         retired.forEach { runCatching(it::close) }

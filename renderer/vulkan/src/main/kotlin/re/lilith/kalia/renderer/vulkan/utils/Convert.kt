@@ -62,7 +62,7 @@ internal object Convert {
         VertexAttributeFormat.UINT2 -> Format.R32G32_UInt
         VertexAttributeFormat.UINT8X4 -> Format.R8G8B8A8_UInt
         VertexAttributeFormat.UINT16X2 -> Format.R16G16_UInt
-        VertexAttributeFormat.USHORT2_FLOAT -> Format.R16G16_UInt
+        VertexAttributeFormat.USHORT2_FLOAT -> Format.R16G16_UScaled
     }
 
     fun aspect(format: TextureFormat): ImageAspect = when {
