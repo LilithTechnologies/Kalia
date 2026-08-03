@@ -18,6 +18,9 @@ jobs:
         with:
           cache-read-only: true
 
+      - name: Setup permissions
+        run: chmod +x ./gradlew
+
       - name: Execute Gradle build
         run: ./gradlew build
 
