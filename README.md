@@ -1,10 +1,12 @@
+![Wordmark.png](.github/assets/Wordmark.png)
+
 # Kalia
 
-A cross-backend rendering engine implementation for Minecraft, allowing you to use Vulkan and OpenGL (Core Profile) on 1.8.9.
+An abstracted rendering engine implementation for Minecraft, allowing you to use Vulkan on 1.8.9.
 
 
 ## Minimum Graphical Requirements
-Vulkan 1.2 / OpenGL 4.1 supported graphics card, should be anything in the last ten years. Vulkan additionally requires dynamic rendering & push descriptors. If multi draw is supported, it is utilised.
+Vulkan 1.2 supported graphics card, should be anything in the last ten years. Vulkan requires dynamic rendering. If multi draw is supported, it is utilised. Otherwise, indirect rendering is used.
 
 ## Architecture
 
