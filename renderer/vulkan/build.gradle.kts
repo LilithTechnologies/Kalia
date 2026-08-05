@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.kotlin)
 }
 
-group = rootProject.property("project.group") as String
+group = "${rootProject.property("project.group") as String}.renderer"
 version = rootProject.property("project.version") as String
 
 repositories.mavenCentral()

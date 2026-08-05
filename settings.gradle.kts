@@ -13,7 +13,7 @@ include(":vulkan-api")
 include(":renderer")
 include(":renderer:vulkan")
 
-rootProject.name = "Kalia"
+rootProject.name = "kalia"
 
 include("renderer:headless")
 include("terrain")

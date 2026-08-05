@@ -133,6 +133,50 @@ loom {
     }
 }
 
+allprojects {
+    apply(plugin = "maven-publish")
+    apply(plugin = "java")
+
+    fun setting(property: String, environment: String): String? =
+        (providers.gradleProperty(property).orNull ?: providers.environmentVariable(environment).orNull)
+            ?.takeIf { it.isNotBlank() }
+
+    val cloverUsername = setting("cloverUsername", "CLOVER_MAVEN_USERNAME")
+    val cloverPassword = setting("cloverPassword", "CLOVER_MAVEN_PASSWORD")
+    val cloverUrl = setting("cloverUrl", "CLOVER_MAVEN_URL")
+
+    extensions.configure<PublishingExtension> {
+        publications {
+            create<MavenPublication>("maven") {
+                from(components["java"])
+
+                pom {
+                    url = "https://maven.cloverclient.com"
+                }
+            }
+        }
+
+        repositories {
+            maven {
+                name = "Clover"
+
+                url = uri(
+                    cloverUrl ?: if (version.toString().endsWith("SNAPSHOT")) {
+                        "https://maven.cloverclient.com/snapshots"
+                    } else {
+                        "https://maven.cloverclient.com/releases"
+                    },
+                )
+
+                credentials {
+                    username = cloverUsername
+                    password = cloverPassword
+                }
+            }
+        }
+    }
+}
+
 tasks.runClientRenderDoc {
     jvmArgs("-Ddevauth.enabled=true")
 }
