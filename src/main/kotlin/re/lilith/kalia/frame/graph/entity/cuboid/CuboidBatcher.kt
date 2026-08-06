@@ -6,6 +6,7 @@ import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.frame.draw.BatchEnvironment
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlState
+import re.lilith.kalia.gl.MatrixState
 import re.lilith.kalia.gl.ShaderUniforms
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.IndexFormat
@@ -17,6 +18,7 @@ import re.lilith.kalia.renderer.pipeline.BlendState
 import re.lilith.kalia.renderer.pipeline.ColorMask
 import re.lilith.kalia.renderer.pipeline.DepthState
 import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
+import re.lilith.kalia.renderer.pipeline.PrimitiveTopology
 import re.lilith.kalia.renderer.pipeline.RasterState
 import re.lilith.kalia.renderer.resource.GpuPipeline
 import re.lilith.kalia.renderer.resource.GpuSampler
@@ -105,6 +107,8 @@ object CuboidBatcher {
             activeInstances = null
             return
         }
+        MatrixState.flush()
+        GlState.topology = PrimitiveTopology.TRIANGLES
         if (ShaderUniforms.environmentVersion != environmentVersion ||
             GlState.lineWidth != lineWidth ||
             GlState.effectiveDepthBiasConstant() != biasConstant ||
