@@ -17,7 +17,7 @@ import re.lilith.vulkan.api.types.geometry.Extent3D
 
 class PhysicalDevice internal constructor(
     internal val instance: VulkanInstance,
-    internal val handle: VkPhysicalDevice,
+    val handle: VkPhysicalDevice,
     val properties: PhysicalDevicePropertiesView,
     val features: DeviceFeatureSet,
     val memoryProperties: MemoryProperties,

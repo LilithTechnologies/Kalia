@@ -5,7 +5,7 @@ import re.lilith.vulkan.api.device.LogicalDevice
 
 class SwapchainImage internal constructor(
     internal val device: LogicalDevice,
-    internal val handle: Long,
+    val handle: Long,
     val index: Int,
     val view: SwapchainImageView,
 ) : BarrierImage

@@ -38,8 +38,9 @@ object WorldExtract {
         state.reset()
 
         val client = MinecraftClient.getInstance() ?: return false
-        client.world ?: return false
-        val camera = client.cameraEntity ?: return false
+        // Nothing on screen means nothing to reproject against next frame
+        client.world ?: return false.also { WorldCameraHistory.reset() }
+        val camera = client.cameraEntity ?: return false.also { WorldCameraHistory.reset() }
         val renderer = client.gameRenderer as? GameRendererAccess ?: return false
 
         state.active = true
@@ -92,6 +93,7 @@ object WorldExtract {
 
         MatrixState.matrixMode(GL_MODELVIEW)
 
+        WorldCameraHistory.update(state)
         extractFrustum(state)
     }
 

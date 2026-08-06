@@ -13,7 +13,7 @@ import re.lilith.vulkan.api.types.geometry.Extent2D
 class Swapchain internal constructor(
     internal val device: LogicalDevice,
     internal val surface: Surface,
-    internal val handle: Long,
+    val handle: Long,
     val format: SurfaceFormat,
     val extent: Extent2D,
     val images: List<SwapchainImage>,

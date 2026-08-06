@@ -37,22 +37,22 @@ dependencies {
     minecraft(libs.minecraft)
     mappings(variantOf(libs.legacy.yarn) { classifier("v2") })
 
-    modImplementation(libs.legacy.lwjgl3)
+    modApi(libs.legacy.lwjgl3)
     modImplementation(libs.fabric.loader)
     modImplementation(libs.devauth.fabric)
     modImplementation(libs.fabric.language.kotlin)
 
     ploceus.dependOsl("0.17.0")
 
-    implementation(include(project(":vulkan-api"))!!)
-    implementation(include(project(":renderer"))!!)
-    implementation(include(project(":renderer:vulkan"))!!)
+    api(include(project(":vulkan-api"))!!)
+    api(include(project(":renderer"))!!)
+    api(include(project(":renderer:vulkan"))!!)
     implementation(include(project(":terrain"))!!)
 
     testImplementation(kotlin("test"))
     testImplementation(project(":renderer:headless")) // the headless renderer is not shipped
 
-    bundled(libs.joml)
+    bundledApi(libs.joml)
     bundled(libs.lwjgl.asProvider())
     bundled(libs.lwjgl.vulkan)
     bundled(libs.lwjgl.vma)
@@ -74,6 +74,11 @@ dependencies {
 
 fun DependencyHandlerScope.bundled(dependency: Provider<MinimalExternalModuleDependency>) {
     add("implementation", dependency)
+    add("include", dependency)
+}
+
+fun DependencyHandlerScope.bundledApi(dependency: Provider<MinimalExternalModuleDependency>) {
+    add("api", dependency)
     add("include", dependency)
 }
 

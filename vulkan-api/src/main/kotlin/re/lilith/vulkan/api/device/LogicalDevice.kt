@@ -25,7 +25,7 @@ import re.lilith.vulkan.api.types.flags.CommandPoolFlags
  */
 class LogicalDevice internal constructor(
     val physicalDevice: PhysicalDevice,
-    internal val handle: VkDevice,
+    val handle: VkDevice,
     val config: DeviceConfig,
 ) : VulkanResource(), ResourceRegistrar {
     private var queuesByFamily: Map<Int, List<Queue>> = emptyMap()

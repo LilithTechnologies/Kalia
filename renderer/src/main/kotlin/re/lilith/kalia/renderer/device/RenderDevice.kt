@@ -47,6 +47,15 @@ interface RenderDevice : AutoCloseable {
     var settings: DeviceSettings
 
     /**
+     * Renderer invited to draw over each frame before it is presented, or null.
+     *
+     * @see PresentHook
+     */
+    var presentHook: PresentHook?
+        get() = null
+        set(_) = throw UnsupportedOperationException("This backend cannot host an external renderer.")
+
+    /**
      * Creates a GPU buffer.
      *
      * @param description Buffer creation parameters.

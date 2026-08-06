@@ -10,6 +10,7 @@ import re.lilith.kalia.renderer.device.CapturedFrame
 import re.lilith.kalia.renderer.device.DeviceCapabilities
 import re.lilith.kalia.renderer.device.DeviceSettings
 import re.lilith.kalia.renderer.device.PlatformSurface
+import re.lilith.kalia.renderer.device.PresentHook
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.format.VertexStepMode
@@ -36,6 +37,7 @@ import re.lilith.vulkan.api.memory.Buffer
 import re.lilith.vulkan.api.memory.BufferConfig
 import re.lilith.vulkan.api.memory.MemoryUsage
 import re.lilith.vulkan.api.pipeline.*
+import re.lilith.vulkan.api.presentation.AcquiredSwapchainImage
 import re.lilith.vulkan.api.presentation.present
 import re.lilith.vulkan.api.resource.VulkanResource
 import re.lilith.vulkan.api.sync.Fence
@@ -67,6 +69,12 @@ internal class VulkanRenderDevice(
 
     private var insideFrame = false
 
+    var acquiredOrNull: AcquiredSwapchainImage? = null
+        private set
+
+    val acquired: AcquiredSwapchainImage
+        get() = acquiredOrNull ?: error("There is no acquired swapchain image outside a frame.")
+
     private val computeTimeline = context.computeQueue?.let { context.device.createTimelineSemaphore(0L) }
     private var computeValue = 0L
     private var submittedComputeValue = 0L
@@ -77,7 +85,7 @@ internal class VulkanRenderDevice(
     private val pipelineCache = ConcurrentHashMap<GraphicsPipelineDescription, VulkanPipeline>()
     private val samplerCache = ConcurrentHashMap<SamplerDescription, VulkanSampler>()
 
-    private var swapchain = VulkanSwapchain.create(
+    var swapchain = VulkanSwapchain.create(
         context = context,
         device = this,
         resolved = checkNotNull(
@@ -436,6 +444,8 @@ internal class VulkanRenderDevice(
         return VertexInputState(bindings = bindings, attributes = attributes)
     }
 
+    override var presentHook: PresentHook? = null
+
     override fun render(graph: RenderGraph): Boolean {
         val target = platformSurface.framebufferExtent
         val requested = pendingResize ?: target.takeIf { it != builtForExtent }
@@ -456,7 +466,7 @@ internal class VulkanRenderDevice(
         submittedComputeValue = 0L
         flushUploads()
 
-        val acquired = swapchain.acquire(frame.imageAvailable) ?: run {
+        acquiredOrNull = swapchain.acquire(frame.imageAvailable) ?: run {
             insideFrame = false
             if (!rebuildSwapchain(target)) {
                 pendingResize = target
@@ -475,7 +485,12 @@ internal class VulkanRenderDevice(
             backbufferExtent = swapchain.extent,
         )
 
-        swapchain.recordPresentBlit(recorder, acquired)
+        val hook = presentHook
+        swapchain.recordPresentBlit(
+            recorder,
+            acquired,
+            finalLayout = if (hook != null) ImageLayout.ColorAttachmentOptimal else ImageLayout.PresentSource,
+        )
         val recorded = recorder.end()
 
         flushUploads()
@@ -545,12 +560,37 @@ internal class VulkanRenderDevice(
                         QueueSubmission(
                             commandBuffers = listOf(recorded),
                             waitSemaphores = waits,
-                            signalSemaphores = listOf(SemaphoreSignal(renderFinished)),
+                            signalSemaphores = if (hook == null) listOf(SemaphoreSignal(renderFinished)) else emptyList(),
                         ),
                     )
                 },
-                fence = frame.inFlightFence,
+                fence = if (hook == null) frame.inFlightFence else null,
             )
+        }
+
+        if (hook != null) {
+            runCatching { hook.onPresent() }.onFailure { failure ->
+                presentHook = null
+                System.err.println("Kalia: the external present renderer failed and was detached.")
+                failure.printStackTrace()
+            }
+
+            frame.presentCommandBuffer.reset()
+            val presentRecorder = frame.presentCommandBuffer.begin()
+            swapchain.recordPresentTransition(presentRecorder, acquired)
+            val recordedPresent = presentRecorder.end()
+
+            context.withQueueLock {
+                context.graphicsQueue.submit(
+                    submissions = listOf(
+                        QueueSubmission(
+                            commandBuffers = listOf(recordedPresent),
+                            signalSemaphores = listOf(SemaphoreSignal(renderFinished)),
+                        ),
+                    ),
+                    fence = frame.inFlightFence,
+                )
+            }
         }
 
         val presented = runCatching {
@@ -570,6 +610,7 @@ internal class VulkanRenderDevice(
         }
 
         insideFrame = false
+        acquiredOrNull = null
         frameIndex = (frameIndex + 1) % frames.size
         return true
     }

@@ -7,9 +7,11 @@ import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.graph.LoadOp
 import re.lilith.kalia.renderer.graph.RenderGraph
 import re.lilith.kalia.renderer.graph.RenderGraphBuilder
+
 import re.lilith.kalia.renderer.graph.TextureHandle
 import re.lilith.kalia.renderer.graph.renderGraph
 import re.lilith.kalia.renderer.post.postChain
+import re.lilith.kalia.rendering.ExternalRenderers
 import re.lilith.kalia.rendering.KaliaFrameRenderer
 import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
 import re.lilith.kalia.rendering.ui.GuiBlur
@@ -52,6 +54,14 @@ object GameFrameGraph {
             }
         }
 
+        val worldPostProcessors = if (world) ExternalRenderers.activeWorldPostProcessors() else emptyList()
+        var processedScene = scene
+        worldPostProcessors.forEachIndexed { index, processor ->
+            val next = texture("world-post-$index", sceneFormat)
+            processor.render(this, processedScene, next, depth, device.surfaceExtent)
+            processedScene = next
+        }
+
         val worldBlurred =
             GuiBackgroundBlur.enabled &&
                     world
@@ -60,7 +70,7 @@ object GameFrameGraph {
             if (worldBlurred) {
                 val blurredScene = texture("world-blurred", sceneFormat)
 
-                postChain(scene, blurredScene, name = "world-blur") {
+                postChain(processedScene, blurredScene, name = "world-blur") {
                     stage("horizontal", GuiBlur.PROGRAM) {
                         params {
                             vec2(1f, 0f)
@@ -78,7 +88,7 @@ object GameFrameGraph {
 
                 blurredScene
             } else {
-                scene
+                processedScene
             }
 
         val atlasColour = GuiItems.atlasTexture

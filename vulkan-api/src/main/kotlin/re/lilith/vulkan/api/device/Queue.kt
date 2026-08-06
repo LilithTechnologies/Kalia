@@ -11,7 +11,7 @@ import re.lilith.vulkan.api.sync.Fence
  */
 class Queue internal constructor(
     internal val device: LogicalDevice,
-    internal val handle: VkQueue,
+    val handle: VkQueue,
     val familyIndex: Int,
     val queueIndex: Int,
 )

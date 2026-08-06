@@ -44,7 +44,11 @@ internal class VulkanSwapchain private constructor(
 
     fun renderFinishedSemaphore(imageIndex: Int): BinarySemaphore = renderFinished[imageIndex]
 
-    fun recordPresentBlit(recorder: CommandRecorder, acquired: AcquiredSwapchainImage) {
+    fun recordPresentBlit(
+        recorder: CommandRecorder,
+        acquired: AcquiredSwapchainImage,
+        finalLayout: ImageLayout = ImageLayout.PresentSource,
+    ) {
         val target = acquired.image
         val colorRange = ImageSubresourceRange(ImageAspect.Color, levelCount = 1, layerCount = 1)
 
@@ -54,7 +58,7 @@ internal class VulkanSwapchain private constructor(
                     ImageBarrier(
                         image = target,
                         oldLayout = imageLayouts[acquired.index],
-                        newLayout = ImageLayout.PresentSource,
+                        newLayout = finalLayout,
                         sourceStageMask = PipelineStageMask.TopOfPipe,
                         destinationStageMask = PipelineStageMask.BottomOfPipe,
                         sourceAccessMask = AccessMask.None,
@@ -63,7 +67,7 @@ internal class VulkanSwapchain private constructor(
                     ),
                 ),
             )
-            imageLayouts[acquired.index] = ImageLayout.PresentSource
+            imageLayouts[acquired.index] = finalLayout
             return
         }
 
@@ -105,12 +109,40 @@ internal class VulkanSwapchain private constructor(
                 ImageBarrier(
                     image = target,
                     oldLayout = ImageLayout.TransferDestinationOptimal,
-                    newLayout = ImageLayout.PresentSource,
+                    newLayout = finalLayout,
                     sourceStageMask = PipelineStageMask.Transfer,
-                    destinationStageMask = PipelineStageMask.BottomOfPipe,
+                    destinationStageMask = if (finalLayout == ImageLayout.PresentSource) {
+                        PipelineStageMask.BottomOfPipe
+                    } else {
+                        PipelineStageMask.ColorAttachmentOutput
+                    },
                     sourceAccessMask = AccessMask.TransferWrite,
-                    destinationAccessMask = AccessMask.None,
+                    destinationAccessMask = if (finalLayout == ImageLayout.PresentSource) {
+                        AccessMask.None
+                    } else {
+                        AccessMask.ColorAttachmentWrite
+                    },
                     subresourceRange = colorRange,
+                ),
+            ),
+        )
+        imageLayouts[acquired.index] = finalLayout
+    }
+
+    fun recordPresentTransition(recorder: CommandRecorder, acquired: AcquiredSwapchainImage) {
+        if (imageLayouts[acquired.index] == ImageLayout.PresentSource) return
+
+        recorder.pipelineBarrier(
+            listOf(
+                ImageBarrier(
+                    image = acquired.image,
+                    oldLayout = imageLayouts[acquired.index],
+                    newLayout = ImageLayout.PresentSource,
+                    sourceStageMask = PipelineStageMask.ColorAttachmentOutput,
+                    destinationStageMask = PipelineStageMask.BottomOfPipe,
+                    sourceAccessMask = AccessMask.ColorAttachmentWrite,
+                    destinationAccessMask = AccessMask.None,
+                    subresourceRange = ImageSubresourceRange(ImageAspect.Color, levelCount = 1, layerCount = 1),
                 ),
             ),
         )

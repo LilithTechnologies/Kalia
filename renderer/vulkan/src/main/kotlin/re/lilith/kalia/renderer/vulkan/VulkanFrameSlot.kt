@@ -13,6 +13,7 @@ internal class VulkanFrameSlot(
     val imageAvailable: BinarySemaphore,
     val commandBuffer: CommandBuffer,
     val uploadCommandBuffer: CommandBuffer,
+    val presentCommandBuffer: CommandBuffer,
     val uploadsFinished: BinarySemaphore,
     private val descriptorPool: DescriptorPool,
     private val transferPool: CommandPool?,
@@ -87,6 +88,7 @@ internal class VulkanFrameSlot(
         uploadsFinished.close()
         commandBuffer.close()
         uploadCommandBuffer.close()
+        presentCommandBuffer.close()
         transferCommandBuffers.forEach(CommandBuffer::close)
         transferCommandBuffers.clear()
         computeCommandBuffers.forEach(CommandBuffer::close)
@@ -104,6 +106,7 @@ internal class VulkanFrameSlot(
             imageAvailable = context.device.createBinarySemaphore(),
             commandBuffer = context.commandPool.allocatePrimary(),
             uploadCommandBuffer = context.commandPool.allocatePrimary(),
+            presentCommandBuffer = context.commandPool.allocatePrimary(),
             uploadsFinished = context.device.createBinarySemaphore(),
             descriptorPool = context.device.createDescriptorPool(
                 DescriptorPoolConfig(

@@ -20,11 +20,13 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.draw.NametagTextRenderer;
 import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher;
+import re.lilith.kalia.rendering.world.NametagStyle;
 import re.lilith.kalia.frame.graph.entity.shadow.ShadowBatcher;
 import re.lilith.kalia.gl.MatrixState;
 import re.lilith.kalia.gl.tables.TextureTable;
 
-@Mixin(EntityRenderer.class)
+// Below the default so a mod restyling labels can inject into this merged body deterministically
+@Mixin(value = EntityRenderer.class, priority = 900)
 public class MixinEntityRenderer<T extends Entity> {
     @Shadow
     protected float shadowSize;
@@ -76,11 +78,13 @@ public class MixinEntityRenderer<T extends Entity> {
         Matrix4f modelView = MatrixState.INSTANCE.modelView();
 
         NametagBatcher.INSTANCE.beginLabel();
-        NametagBatcher.INSTANCE.recordBackground(
-                modelView,
-                -halfWidth - 1, -1 + yOffset, halfWidth + 1, 8 + yOffset,
-                0x40
-        );
+        if (NametagStyle.INSTANCE.getDrawBackground()) {
+            NametagBatcher.INSTANCE.recordBackground(
+                    modelView,
+                    -halfWidth - 1, -1 + yOffset, halfWidth + 1, 8 + yOffset,
+                    NametagStyle.INSTANCE.getBackgroundArgb()
+            );
+        }
         textRenderer.kalia$drawNametag(text, -halfWidth, yOffset, 0x20FFFFFF);
 
         GlStateManager.enableDepthTest();
