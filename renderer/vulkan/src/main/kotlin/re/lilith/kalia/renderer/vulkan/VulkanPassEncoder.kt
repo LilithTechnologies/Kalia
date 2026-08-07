@@ -529,6 +529,12 @@ internal class VulkanPassEncoder(
                 extent = Extent2D(target.width.coerceAtLeast(0), target.height.coerceAtLeast(0)),
             ),
         )
+
+        // MoltenVK implements attachment clears as draws
+        // so we shouldn't trust cached resource bindings afterward
+        val activePipeline = pipeline
+        invalidateBoundState()
+        pipeline = activePipeline
     }
 
     override fun resolve(handle: TextureHandle): GpuTexture =
