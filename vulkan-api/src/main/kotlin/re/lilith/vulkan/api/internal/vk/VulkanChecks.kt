@@ -1,0 +1,38 @@
+package re.lilith.vulkan.api.internal.vk
+
+import org.lwjgl.vulkan.EXTDebugReport.VK_ERROR_VALIDATION_FAILED_EXT
+import org.lwjgl.vulkan.KHRSurface.VK_ERROR_SURFACE_LOST_KHR
+import org.lwjgl.vulkan.KHRSwapchain.VK_ERROR_OUT_OF_DATE_KHR
+import org.lwjgl.vulkan.KHRSwapchain.VK_SUBOPTIMAL_KHR
+import org.lwjgl.vulkan.VK10.*
+import re.lilith.vulkan.api.core.VulkanResultException
+
+fun checkVulkanResult(result: Int, action: String) {
+    if (result != VK_SUCCESS) {
+        throw VulkanResultException(result, "$action (${resultName(result)})")
+    }
+}
+
+internal fun resultName(result: Int): String = when (result) {
+    VK_SUCCESS -> "VK_SUCCESS"
+    VK_NOT_READY -> "VK_NOT_READY"
+    VK_TIMEOUT -> "VK_TIMEOUT"
+    VK_ERROR_OUT_OF_HOST_MEMORY -> "VK_ERROR_OUT_OF_HOST_MEMORY"
+    VK_ERROR_OUT_OF_DEVICE_MEMORY -> "VK_ERROR_OUT_OF_DEVICE_MEMORY"
+    VK_ERROR_INITIALIZATION_FAILED -> "VK_ERROR_INITIALIZATION_FAILED"
+    VK_ERROR_DEVICE_LOST -> "VK_ERROR_DEVICE_LOST"
+    VK_ERROR_MEMORY_MAP_FAILED -> "VK_ERROR_MEMORY_MAP_FAILED"
+    VK_ERROR_LAYER_NOT_PRESENT -> "VK_ERROR_LAYER_NOT_PRESENT"
+    VK_ERROR_EXTENSION_NOT_PRESENT -> "VK_ERROR_EXTENSION_NOT_PRESENT"
+    VK_ERROR_FEATURE_NOT_PRESENT -> "VK_ERROR_FEATURE_NOT_PRESENT"
+    VK_ERROR_INCOMPATIBLE_DRIVER -> "VK_ERROR_INCOMPATIBLE_DRIVER"
+    VK_ERROR_TOO_MANY_OBJECTS -> "VK_ERROR_TOO_MANY_OBJECTS"
+    VK_ERROR_FORMAT_NOT_SUPPORTED -> "VK_ERROR_FORMAT_NOT_SUPPORTED"
+    VK_ERROR_SURFACE_LOST_KHR -> "VK_ERROR_SURFACE_LOST_KHR"
+    VK_SUBOPTIMAL_KHR -> "VK_SUBOPTIMAL_KHR"
+    VK_ERROR_OUT_OF_DATE_KHR -> "VK_ERROR_OUT_OF_DATE_KHR"
+    VK_ERROR_VALIDATION_FAILED_EXT -> "VK_ERROR_VALIDATION_FAILED_EXT"
+    VK_ERROR_UNKNOWN -> "VK_ERROR_UNKNOWN"
+    else -> "VK_RESULT_$result"
+}
+

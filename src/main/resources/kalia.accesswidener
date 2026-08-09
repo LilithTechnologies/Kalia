@@ -1,0 +1,16 @@
+accessWidener v1	named
+
+# TODO: make this an accessor
+accessible field net/minecraft/client/render/BufferBuilder buffer Ljava/nio/ByteBuffer;
+
+# Sodium reads the fixed-function camera matrices straight out of Frustum's own buffers.
+accessible field net/minecraft/client/render/Camera PROJECTION_MATRIX Ljava/nio/FloatBuffer;
+accessible field net/minecraft/client/render/Camera MODEL_MATRIX Ljava/nio/FloatBuffer;
+
+# Terrain rendering binds the lightmap alongside the block atlas.
+accessible field net/minecraft/client/render/GameRenderer lightmapTextureId Lnet/minecraft/util/Identifier;
+
+# Chunk meshing needs the quad's sprite and the biome colour resolvers.
+accessible field net/minecraft/client/render/model/TexturedBakedQuad sprite Lnet/minecraft/client/texture/Sprite;
+accessible class net/minecraft/client/color/world/BiomeColors$ColorProvider
+accessible method net/minecraft/block/AbstractFluidBlock getFluidVec (Lnet/minecraft/world/BlockView;Lnet/minecraft/util/math/BlockPos;)Lnet/minecraft/util/math/Vec3d;
