@@ -45,10 +45,10 @@ dependencies {
     implementation(project(path = ":terrain:argentum", configuration = "namedElements"))
 
     // son son son sahur
-    modImplementation(
+    implementation(
         project(
             path = ":terrain:argentum",
-            configuration = "remappedElements"
+            configuration = "namedElements"
         )
     )
     include(
