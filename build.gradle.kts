@@ -202,7 +202,7 @@ tasks {
             rename { "CELERITAS_LICENSE.md" }
         }
 
-        from(rootProject.file("terrain/argentum/LICENSE.md")) {
+        from(rootProject.file("terrain/LICENSE.md")) {
             rename { "ARGENTUM_LICENSE.md" }
         }
 
