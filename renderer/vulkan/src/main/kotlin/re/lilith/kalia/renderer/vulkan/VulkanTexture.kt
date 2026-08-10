@@ -57,8 +57,8 @@ internal class VulkanTexture(
         height = (extent.height shr level).coerceAtLeast(1),
     )
 
-    fun barrierTo(target: ImageLayout): ImageBarrier? {
-        if (layout == target) {
+    fun barrierTo(target: ImageLayout, force: Boolean = false): ImageBarrier? {
+        if (layout == target && !force) {
             return null
         }
         val barrier = ImageBarrier(

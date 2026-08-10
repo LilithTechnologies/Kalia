@@ -114,6 +114,18 @@ interface RenderDevice : AutoCloseable {
     }
 
     /**
+     * The frame slot the next [render] will record into, in `0 until [DeviceCapabilities.framesInFlight]`.
+     */
+    val frameSlot: Int get() = 0
+
+    /**
+     * Waits until the GPU is finished with the resources belonging to [frameSlot], and
+     * recycles them.
+     */
+    fun beginFrame() {
+    }
+
+    /**
      * Submits any staged uploads that are still pending, without waiting for them.
      */
     fun flushUploads() {

@@ -446,6 +446,21 @@ internal class VulkanRenderDevice(
 
     override var presentHook: PresentHook? = null
 
+    override val frameSlot: Int get() = frameIndex
+
+    private var framePrepared = false
+
+    override fun beginFrame() {
+        if (framePrepared) {
+            return
+        }
+        val frame = frames[frameIndex]
+        frame.inFlightFence.wait()
+        frame.recycle(resourceEpoch)
+        releaseTarget = frame
+        framePrepared = true
+    }
+
     override fun render(graph: RenderGraph): Boolean {
         val target = platformSurface.framebufferExtent
         val requested = pendingResize ?: target.takeIf { it != builtForExtent }
@@ -456,10 +471,8 @@ internal class VulkanRenderDevice(
             }
         }
 
+        beginFrame()
         val frame = frames[frameIndex]
-        frame.inFlightFence.wait()
-        frame.recycle(resourceEpoch)
-        releaseTarget = frame
         insideFrame = true
 
         submittedTransferValue = 0L
@@ -612,6 +625,7 @@ internal class VulkanRenderDevice(
         insideFrame = false
         acquiredOrNull = null
         frameIndex = (frameIndex + 1) % frames.size
+        framePrepared = false
         return true
     }
 
@@ -706,6 +720,8 @@ internal class VulkanRenderDevice(
         frames = List(FRAMES_IN_FLIGHT) { VulkanFrameSlot.create(context) }
         frameIndex = 0
         releaseTarget = null
+        // The slots are new, so whatever was prepared before belongs to closed objects.
+        framePrepared = false
         return true
     }
 

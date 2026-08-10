@@ -131,14 +131,16 @@ internal class VulkanGraphExecutor(
             ?: error("Pass '${pass.name}' has no attachments to size the render area from.")
 
         val barriers = buildList {
-            colorTargets.forEach { target -> target.barrierTo(ImageLayout.ColorAttachmentOptimal)?.let(::add) }
+            colorTargets.forEach { target ->
+                target.barrierTo(ImageLayout.ColorAttachmentOptimal, force = true)?.let(::add)
+            }
             depthTarget?.let { target ->
                 val layout = if (pass.depthAttachment?.write == false) {
                     ImageLayout.DepthStencilReadOnlyOptimal
                 } else {
                     ImageLayout.DepthStencilAttachmentOptimal
                 }
-                target.barrierTo(layout)?.let(::add)
+                target.barrierTo(layout, force = true)?.let(::add)
             }
             pass.sampledInputs.forEach { handle ->
                 bound.getValue(handle.id).barrierTo(ImageLayout.ShaderReadOnlyOptimal)?.let(::add)

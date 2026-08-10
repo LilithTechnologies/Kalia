@@ -21,7 +21,8 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
         )
     }
 
-    private var streamIndex = 0
+
+    private val streamIndex: Int get() = device.frameSlot % streams.size
 
     val vertexArena: StreamArena get() = streams[streamIndex].vertexArena
 
@@ -69,7 +70,6 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
 
     fun beginFrame() {
         RenderStats.beginFrame()
-        streamIndex = (streamIndex + 1) % streams.size
         vertexArena.reset()
         sceneUniforms.beginFrame()
     }

@@ -184,8 +184,10 @@ internal class VulkanPassEncoder(
 
     private fun barrier(color: List<VulkanTexture>, depth: VulkanTexture?) {
         val barriers = buildList {
-            color.forEach { target -> target.barrierTo(ImageLayout.ColorAttachmentOptimal)?.let(::add) }
-            depth?.barrierTo(ImageLayout.DepthStencilAttachmentOptimal)?.let(::add)
+            color.forEach { target ->
+                target.barrierTo(ImageLayout.ColorAttachmentOptimal, force = true)?.let(::add)
+            }
+            depth?.barrierTo(ImageLayout.DepthStencilAttachmentOptimal, force = true)?.let(::add)
         }
         if (barriers.isNotEmpty()) {
             recorder.pipelineBarrier(barriers)

@@ -64,10 +64,10 @@ public final class UniformRing implements AutoCloseable {
             this.slicesPerBand = this.slicesPerBand * 2;
             this.buffer.close();
             this.buffer = allocate();
-            this.band = 0;
             this.peak = 0;
         }
-        this.band = (this.band + 1) % this.bands;
+        // moment a frame renders no terrain, and the band is then rewritten while in flight
+        this.band = this.device.getFrameSlot() % this.bands;
         this.next = 0;
     }
 
