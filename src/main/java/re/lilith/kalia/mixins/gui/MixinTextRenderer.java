@@ -1,5 +1,6 @@
 package re.lilith.kalia.mixins.gui;
 
+import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.texture.TextureManager;
 import net.minecraft.util.Identifier;
@@ -8,6 +9,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
+import re.lilith.kalia.frame.draw.EntityBatchers;
 import re.lilith.kalia.rendering.ui.UI;
 import re.lilith.kalia.rendering.ui.text.Font;
 import re.lilith.kalia.rendering.ui.text.Glyphs;
@@ -46,6 +48,26 @@ public abstract class MixinTextRenderer implements Font {
 
     @Shadow
     protected abstract String mirror(String text);
+
+    @Shadow
+    private float alpha;
+    @Shadow
+    private float blue;
+    @Shadow
+    private float green;
+    @Shadow
+    private float red;
+
+    @Shadow
+    public abstract int draw(String text, int x, int y, int color);
+
+    @Shadow
+    private float x;
+    @Shadow
+    private float y;
+
+    @Shadow
+    protected abstract void draw(String text, boolean shadow);
 
     @Unique
     private static final String kalia$SHEET_HEX =
@@ -91,6 +113,34 @@ public abstract class MixinTextRenderer implements Font {
      */
     @Overwrite
     private int drawLayer(String text, float x, float y, int color, boolean shadow) {
+        if (EntityBatchers.INSTANCE.isRenderingEntitiesNoSuppression()) {
+            if (text == null) {
+                return 0;
+            } else {
+                if (this.rightToLeft) {
+                    text = this.mirror(text);
+                }
+
+                if ((color & -67108864) == 0) {
+                    color |= -16777216;
+                }
+
+                if (shadow) {
+                    color = (color & 16579836) >> 2 | color & -16777216;
+                }
+
+                this.red = (float)(color >> 16 & 255) / 255.0F;
+                this.green = (float)(color >> 8 & 255) / 255.0F;
+                this.blue = (float)(color & 255) / 255.0F;
+                this.alpha = (float)(color >> 24 & 255) / 255.0F;
+                GlStateManager.color(this.red, this.green, this.blue, this.alpha);
+                this.x = x;
+                this.y = y;
+                this.draw(text, shadow);
+                return (int) this.x;
+            }
+        }
+
         if (text == null) {
             return 0;
         }

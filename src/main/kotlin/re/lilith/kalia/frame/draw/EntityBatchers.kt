@@ -9,8 +9,22 @@ import re.lilith.kalia.frame.graph.ui.GuiBatcher
 
 object EntityBatchers {
     private var entityDepth = 0
+    private var suppressionDepth = 0
 
-    val isRenderingEntities: Boolean get() = entityDepth > 0
+    @JvmStatic
+    fun pushSuppression() {
+        suppressionDepth++
+    }
+
+    @JvmStatic
+    fun popSuppression() {
+        if (suppressionDepth > 0) {
+            suppressionDepth--
+        }
+    }
+
+    val isRenderingEntities: Boolean get() = entityDepth > 0 && suppressionDepth == 0
+    val isRenderingEntitiesNoSuppression: Boolean get() = entityDepth > 0
 
     fun enterEntity() {
         entityDepth++

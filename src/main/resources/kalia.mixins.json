@@ -21,6 +21,7 @@
     "access.SpriteAccess",
     "access.WorldRendererAccess",
     "entity.MixinDataTracker",
+    "entity.MixinSignBlockEntityRenderer",
     "gl.MixinGL11_Compat",
     "gl.MixinGL11_DisplayLists",
     "gl.MixinGL11_FFP",
