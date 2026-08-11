@@ -38,3 +38,8 @@ kotlin {
     jvmToolchain(21)
     compilerOptions.freeCompilerArgs.add("-Xjvm-default=all")
 }
+
+
+tasks.runClient {
+    enabled = false
+}

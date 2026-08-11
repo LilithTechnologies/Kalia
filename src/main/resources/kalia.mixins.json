@@ -36,6 +36,7 @@
     "gui.MixinDebugHud",
     "gui.MixinDrawableHelper",
     "gui.MixinInGameHud",
+    "gui.MixinSignEditScreen",
     "gui.MixinSurvivalInventoryScreen",
     "gui.MixinTextRenderer",
     "render.MixinArmorFeatureRenderer",
@@ -59,8 +60,5 @@
     "render.MixinTitleScreen",
     "render.MixinVertexBuffer",
     "render.MixinWorldRenderer"
-  ],
-  "injectors": {
-    "defaultRequire": 1
-  }
+  ]
 }
