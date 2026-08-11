@@ -33,6 +33,7 @@
     "gl.MixinGL30",
     "gl.MixinGlStateManager",
     "gl.MixinGLX",
+    "gui.AchievementsScreenMixin",
     "gui.MixinDebugHud",
     "gui.MixinDrawableHelper",
     "gui.MixinInGameHud",
