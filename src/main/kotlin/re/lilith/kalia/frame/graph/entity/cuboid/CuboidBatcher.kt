@@ -201,13 +201,14 @@ object CuboidBatcher {
         sizeX: Int, sizeY: Int, sizeZ: Int,
         inflate: Float,
         textureWidth: Float, textureHeight: Float,
+        mirror: Boolean,
         scale: Float,
     ) {
         val instances = activeInstances ?: return
         writeInstance(
             instances.reserve(),
             modelView, centerX, centerY, centerZ,
-            texU, texV, sizeX, sizeY, sizeZ, inflate, textureWidth, textureHeight, scale,
+            texU, texV, sizeX, sizeY, sizeZ, inflate, textureWidth, textureHeight, scale, mirror,
             layer = activeLayer,
         )
         pendingInstances++
@@ -266,7 +267,7 @@ object CuboidBatcher {
         sizeX: Int, sizeY: Int, sizeZ: Int,
         inflate: Float,
         textureWidth: Float, textureHeight: Float,
-        scale: Float,
+        scale: Float, mirror: Boolean,
         layer: Int,
     ) {
         var p = address
@@ -308,8 +309,10 @@ object CuboidBatcher {
         var flags = 0
         if (ShaderUniforms.isLightmapEnabled()) flags = flags or 1
         if (ShaderUniforms.isLightingEnabled()) flags = flags or 2
+        if (mirror) flags = flags or 4
+
         MemoryAccess.putShort(p, sizeZ.toShort()); p += 2
-        MemoryAccess.putShort(p, (layer * 4 + flags).toShort()); p += 2
+        MemoryAccess.putShort(p, ((layer shl 3) or flags).toShort()); p += 2
         MemoryAccess.putShort(p, textureWidth.toInt().toShort()); p += 2
         MemoryAccess.putShort(p, textureHeight.toInt().toShort()); p += 2
 

@@ -28,15 +28,21 @@ public class MixinModelBox implements ModelBoxCuboidData {
     @Unique
     private float kalia$textureHeight;
 
+    @Unique
+    private boolean kalia$mirror;
+
     @Inject(
             method = "<init>(Lnet/minecraft/client/render/model/ModelPart;IIFFFIIIFZ)V",
             at = @At("RETURN")
     )
     private void kalia$captureParams(
-            ModelPart part, int texU, int texV,
+            ModelPart part,
+            int texU,
+            int texV,
             float x, float y, float z,
             int sizeX, int sizeY, int sizeZ,
-            float inflate, boolean mirror,
+            float inflate,
+            boolean mirror,
             CallbackInfo ci
     ) {
         this.kalia$texU = texU;
@@ -47,8 +53,8 @@ public class MixinModelBox implements ModelBoxCuboidData {
         this.kalia$inflate = inflate;
         this.kalia$textureWidth = part.textureWidth;
         this.kalia$textureHeight = part.textureHeight;
+        this.kalia$mirror = mirror;
     }
-
     @Override
     public int kalia$texU() {
         return kalia$texU;
@@ -87,5 +93,10 @@ public class MixinModelBox implements ModelBoxCuboidData {
     @Override
     public float kalia$textureHeight() {
         return kalia$textureHeight;
+    }
+
+    @Override
+    public boolean kalia$mirror() {
+        return kalia$mirror;
     }
 }

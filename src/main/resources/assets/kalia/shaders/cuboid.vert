@@ -73,8 +73,6 @@ void main() {
         faceIndex, float(instBoxA.x), float(instBoxA.y), sizeX, sizeY, sizeZ,
         textureWidth, textureHeight, rectMin, rectMax
     );
-    vUv0 = mix(rectMin, rectMax, aUV);
-
     vNormal = normalize(vec3(
         dot(instRow0.xyz, FACE_NORMALS[faceIndex]),
         dot(instRow1.xyz, FACE_NORMALS[faceIndex]),
@@ -84,10 +82,20 @@ void main() {
     vColor = instTint;
     vOverlay = instOverlay;
     int packed = instBoxB.y;
+    bool mirror = (packed & 4) != 0;
+
+    vec2 uv = aUV;
+    if (!mirror) {
+        uv.x = 1.0 - uv.x;
+    }
+
+    vUv0 = mix(rectMin, rectMax, uv);
+
     vMisc = vec4(
-        (packed & 1) != 0 ? 1.0 : 0.0,
-        (packed & 2) != 0 ? 1.0 : 0.0,
-        0.0,
-        float(packed >> 2));
+            (packed & 1) != 0 ? 1.0 : 0.0,
+            (packed & 2) != 0 ? 1.0 : 0.0,
+            0.0,
+            float(packed >> 3)
+    );
     vLightUv = instLightUv;
 }

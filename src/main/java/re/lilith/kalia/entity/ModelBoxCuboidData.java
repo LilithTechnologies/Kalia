@@ -16,4 +16,6 @@ public interface ModelBoxCuboidData {
     float kalia$textureWidth();
 
     float kalia$textureHeight();
+
+    boolean kalia$mirror();
 }

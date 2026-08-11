@@ -147,6 +147,7 @@ public class MixinModelPart {
                     data.kalia$sizeX(), data.kalia$sizeY(), data.kalia$sizeZ(),
                     data.kalia$inflate(),
                     data.kalia$textureWidth(), data.kalia$textureHeight(),
+                    data.kalia$mirror(),
                     scale
             );
         }
