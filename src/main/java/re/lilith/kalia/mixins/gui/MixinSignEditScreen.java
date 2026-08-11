@@ -55,9 +55,9 @@ public abstract class MixinSignEditScreen extends Screen {
         int boardH = 56;
 
         int boardX = this.width / 2 - boardW / 2;
-        int boardY = 58;
+        int boardY = 68;
 
-        int textTop = boardY + 8;
+        int textTop = boardY + 4;
 
         this.client.getTextureManager().bindTexture(SIGN_TEXTURE);
 
@@ -65,18 +65,24 @@ public abstract class MixinSignEditScreen extends Screen {
         DrawableHelper.drawTexture(
                 this.width / 2 - 5,
                 boardY + boardH - 2,
-                2, 16,
-                2, 14,
-                10, 65,
-                64, 32
+                2,
+                16,
+                2,
+                14,
+                10,
+                65,
+                64,
+                32
         );
 
         // board
         DrawableHelper.drawTexture(
                 boardX,
                 boardY,
-                4, 2,
-                24, 12,
+                2,
+                2,
+                24,
+                12,
                 boardW,
                 boardH,
                 64,
