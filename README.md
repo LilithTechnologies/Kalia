@@ -4,6 +4,11 @@
 
 An abstracted rendering engine implementation for Minecraft, allowing you to use Vulkan on 1.8.9.
 
+## Download
+
+We have no published releases of the mod right now. The only way you can get an artifact is via the experimental CI builds.
+
+[Click here to download the latest nightly](https://nightly.link/LilithTechnologies/Kalia/workflows/build-commit/master/kalia-artifacts-master.zip).
 
 ## Minimum Graphical Requirements
 Vulkan 1.2 supported graphics card, should be anything in the last ten years. Vulkan requires dynamic rendering. If multi draw is supported, it is utilised. Otherwise, indirect rendering is used.
