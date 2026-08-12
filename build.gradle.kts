@@ -43,7 +43,7 @@ dependencies {
     implementation(include(project(":terrain"))!!)
 
     // son son son sahur
-    modImplementation(project(
+    implementation(project(
         path = ":terrain:argentum",
         configuration = "namedElements"
     ))
