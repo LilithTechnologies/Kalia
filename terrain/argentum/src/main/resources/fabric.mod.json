@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "id": "argentum",
+  "name": "Argentum",
+  "version": "1.0.0",
+  "environment": "client",
+  "description": "An open-source client performance mod for Minecraft",
+  "authors": ["embeddedt", "rdh"],
+  "license": "LGPL-3.0-only",
+  "contributors": ["JellySquid", "IMS212"],
+  "mixins": ["argentum.mixins.json"]
+}

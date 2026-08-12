@@ -25,15 +25,6 @@ dependencies {
     api(project(":renderer"))
 }
 
-val remappedElements by configurations.creating {
-    isCanBeConsumed = true
-    isCanBeResolved = false
-}
-
-artifacts {
-    add("remappedElements", tasks.named("remapJar"))
-}
-
 kotlin {
     jvmToolchain(21)
     compilerOptions.freeCompilerArgs.add("-Xjvm-default=all")

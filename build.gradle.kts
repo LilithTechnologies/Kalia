@@ -42,21 +42,13 @@ dependencies {
     api(include(project(":renderer:vulkan"))!!)
     implementation(include(project(":terrain"))!!)
 
-    implementation(project(path = ":terrain:argentum", configuration = "namedElements"))
-
     // son son son sahur
-    implementation(
-        project(
-            path = ":terrain:argentum",
-            configuration = "namedElements"
-        )
-    )
-    include(
-        project(
-            path = ":terrain:argentum",
-            configuration = "remappedElements"
-        )
-    )
+    modImplementation(project(
+        path = ":terrain:argentum",
+        configuration = "namedElements"
+    ))
+
+    include(project(":terrain:argentum"))
 
     testImplementation(kotlin("test"))
     testImplementation(project(":renderer:headless")) // the headless renderer is not shipped
@@ -209,13 +201,5 @@ tasks {
         from(rootProject.file("LICENSE.md")) {
             rename { "LICENSE.md" }
         }
-    }
-
-    processIncludeJars {
-        dependsOn(project(":terrain:argentum").tasks.build)
-    }
-
-    test {
-        dependsOn(":terrain:argentum:remapJar")
     }
 }
