@@ -9,10 +9,14 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.*;
 
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import re.lilith.kalia.KaliaHooks;
 
 @Mixin(MinecraftClient.class)
 public abstract class MixinMinecraftClient {
+    @Shadow
+    public net.minecraft.client.option.GameOptions options;
+
     @Shadow
     protected abstract void loadLogo(TextureManager textureManager);
 
@@ -22,6 +26,11 @@ public abstract class MixinMinecraftClient {
     @ModifyConstant(method = "getMaxFramerate", constant = @Constant(intValue = 30))
     int impl$getMaxFramerate(int constant) {
         return 120;
+    }
+
+    @Inject(method = "isFramerateValid", at = @At("HEAD"), cancellable = true)
+    private void kalia$extendFramerateLimit(CallbackInfoReturnable<Boolean> callback) {
+        callback.setReturnValue(this.options.maxFramerate <= 1000);
     }
 
     @Inject(method = "loadLogo", at = @At("HEAD"), cancellable = true)

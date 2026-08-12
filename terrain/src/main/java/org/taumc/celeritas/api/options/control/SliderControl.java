@@ -7,10 +7,9 @@ import org.embeddedt.embeddium.impl.util.Dim2i;
 
 public class SliderControl implements Control<Integer> {
     private final Option<Integer> option;
-
     private final int min, max, interval;
-
     private final ControlValueFormatter mode;
+    private final int[] values;
 
     private static void assertTrue(boolean condition, String msg) {
         if (!condition) {
@@ -29,11 +28,21 @@ public class SliderControl implements Control<Integer> {
         this.max = max;
         this.interval = interval;
         this.mode = mode;
+        this.values = null;
+    }
+
+    public SliderControl(Option<Integer> option, int[] values, ControlValueFormatter mode) {
+        this.option = option;
+        this.min = 0;
+        this.max = values.length - 1;
+        this.interval = 1;
+        this.mode = mode;
+        this.values = values.clone();
     }
 
     @Override
     public ControlElement<Integer> createElement(Dim2i dim) {
-        return new Button(this.option, dim, this.min, this.max, this.interval, this.mode);
+        return new Button(this.option, dim, this.min, this.max, this.interval, this.mode, this.values);
     }
 
     @Override
@@ -56,18 +65,20 @@ public class SliderControl implements Control<Integer> {
         private final int max;
         private final int range;
         private final int interval;
+        private final int[] values;
 
         private double thumbPosition;
 
         private boolean sliderHeld;
 
-        public Button(Option<Integer> option, Dim2i dim, int min, int max, int interval, ControlValueFormatter formatter) {
+        public Button(Option<Integer> option, Dim2i dim, int min, int max, int interval, ControlValueFormatter formatter, int[] values) {
             super(option, dim);
 
             this.min = min;
             this.max = max;
             this.range = max - min;
             this.interval = interval;
+            this.values = values;
             this.thumbPosition = this.getThumbPositionForValue(option.getValue());
             this.formatter = formatter;
 
@@ -106,7 +117,10 @@ public class SliderControl implements Control<Integer> {
 
             this.thumbPosition = this.getThumbPositionForValue(this.option.getValue());
 
-            double thumbOffset = org.joml.Math.clamp(0, sliderWidth, (double) (this.getIntValue() - this.min) / this.range * sliderWidth);
+            double thumbOffset = org.joml.Math.clamp(
+                0, sliderWidth,
+                (double) (this.getSliderValue() - this.min) / this.range * sliderWidth
+            );
 
             int thumbX = (int) (sliderX + thumbOffset - THUMB_WIDTH);
             int trackY = (int) (sliderY + (sliderHeight / 2f) - ((double) TRACK_HEIGHT / 2));
@@ -122,6 +136,11 @@ public class SliderControl implements Control<Integer> {
         }
 
         public int getIntValue() {
+            int sliderValue = this.getSliderValue();
+            return this.values != null ? this.values[sliderValue] : sliderValue;
+        }
+
+        private int getSliderValue() {
             return this.min + (this.interval * (int) Math.round(this.getSnappedThumbPosition() / this.interval));
         }
 
@@ -130,7 +149,19 @@ public class SliderControl implements Control<Integer> {
         }
 
         public double getThumbPositionForValue(int value) {
-            return (value - this.min) * (1.0D / this.range);
+            int sliderValue = value;
+            if (this.values != null) {
+                sliderValue = 0;
+                int nearestDistance = Integer.MAX_VALUE;
+                for (int index = 0; index < this.values.length; index++) {
+                    int distance = Math.abs(this.values[index] - value);
+                    if (distance < nearestDistance) {
+                        sliderValue = index;
+                        nearestDistance = distance;
+                    }
+                }
+            }
+            return (sliderValue - this.min) * (1.0D / this.range);
         }
 
         @Override
@@ -176,5 +207,4 @@ public class SliderControl implements Control<Integer> {
             return false;
         }
     }
-
 }

@@ -5,7 +5,6 @@ import net.minecraft.client.util.Window;
 import org.embeddedt.embeddium.impl.gui.framework.TextComponent;
 import org.embeddedt.embeddium.impl.render.chunk.compile.executor.ChunkBuilder;
 import org.embeddedt.embeddium.impl.render.chunk.occlusion.AsyncOcclusionMode;
-import org.lwjgl.opengl.Display;
 import org.taumc.celeritas.api.IHooks;
 import org.taumc.celeritas.api.options.OptionIdentifier;
 import org.taumc.celeritas.api.options.control.ControlValueFormatter;
@@ -25,11 +24,29 @@ import org.taumc.celeritas.impl.config.JsonOptionStorage;
 import java.util.List;
 
 final class CeleritasOptionPages {
+    private static final int UNLIMITED_FRAMERATE = 1001;
+    private static final int[] FRAMERATE_LIMITS = createFramerateLimits();
     private static final GameOptionsStorage VANILLA = new GameOptionsStorage();
     private static final CeleritasConfig CONFIG = Celeritas.CONFIG;
     private static final JsonOptionStorage<CeleritasConfig> CONFIG_STORAGE = Celeritas.CONFIG_STORAGE;
 
     private CeleritasOptionPages() {
+    }
+
+    private static int[] createFramerateLimits() {
+        int[] values = new int[
+            1 + (240 / 5)
+            + ((500 - 240) / 20)
+            + ((1000 - 500) / 50)
+            + 1
+        ];
+        int index = 0;
+        values[index++] = 0; // VSync
+        for (int fps = 5; fps <= 240; fps += 5) values[index++] = fps;
+        for (int fps = 260; fps <= 500; fps += 20) values[index++] = fps;
+        for (int fps = 550; fps <= 1000; fps += 50) values[index++] = fps;
+        values[index] = UNLIMITED_FRAMERATE;
+        return values;
     }
 
     static OptionPage general() {
@@ -87,11 +104,11 @@ final class CeleritasOptionPages {
                         .setId(StandardOptions.Option.MAX_FRAMERATE.cast())
                         .setName(vanilla("options.framerateLimit"))
                         .setTooltip(text("framerate_limit.tooltip"))
-                        .setControl(option -> new SliderControl(option, 0, 260, 5,
+                        .setControl(option -> new SliderControl(option, FRAMERATE_LIMITS,
                                 value -> {
                                     if (value == 0) {
                                         return text("value.vsync");
-                                    } else if (value == 260) {
+                                    } else if (value == UNLIMITED_FRAMERATE) {
                                         return text("value.unlimited");
                                     } else {
                                         return text("value.fps", value);
@@ -99,7 +116,7 @@ final class CeleritasOptionPages {
 								}))
                         .setBinding((options, value) -> {
                             options.vsync = value == 0;
-                            options.maxFramerate = options.vsync ? 260 : value;
+                            options.maxFramerate = options.vsync ? UNLIMITED_FRAMERATE : value;
                             IHooks.INSTANCE.setVsyncEnabled(options.vsync);
                         }, options -> options.vsync ? 0 : options.maxFramerate)
                         .setImpact(OptionImpact.VARIES)
