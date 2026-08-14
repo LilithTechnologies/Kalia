@@ -39,6 +39,8 @@ celeritas.options.chunk_fade_in_duration.value=%s ms
 celeritas.options.chunk_fade_in_duration.tooltip=Controls how long it takes for newly loaded chunks to fully appear. Longer durations create a smoother transition between unloaded and loaded chunks, reducing visual popping, but may make distant terrain appear to 'fade in' more slowly.
 sodium.options.entity_shadows.tooltip=If enabled basic shadows will be rendered beneath mobs and other entities.
 celeritas.options.mipmap_levels.tooltip=Controls the number of mipmaps which will be used for block model textures. Higher values provide better rendering of blocks in the distance but may adversely affect performance with many animated textures.
+celeritas.options.thin_fog.name=Thin Fog
+celeritas.options.thin_fog.tooltip=Makes the Nether/End fog less thick, similar to OptiFine.
 
 sodium.options.chunk_update_threads.name=Chunk Update Threads
 sodium.options.chunk_update_threads.tooltip=Specifies the number of threads to use for chunk building. Using more threads can speed up chunk loading and update speed but may negatively impact frame times.

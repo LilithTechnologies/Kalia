@@ -229,6 +229,15 @@ final class CeleritasOptionPages {
                         .setImpact(OptionImpact.MEDIUM)
                         .setFlags(OptionFlag.REQUIRES_ASSET_RELOAD)
                         .build())
+                .add(OptionImpl.createBuilder(boolean.class, CONFIG_STORAGE)
+                        .setId(StandardOptions.Option.THIN_FOG.cast())
+                        .setName(TextComponent.translatable("celeritas.options.thin_fog.name"))
+                        .setTooltip(TextComponent.translatable("celeritas.options.thin_fog.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((options, value) -> options.thinFog = value, options -> options.thinFog)
+                        .setImpact(OptionImpact.LOW)
+                        .build()
+                )
                 .build();
 
         return new OptionPage(StandardOptions.Pages.QUALITY, text("pages.quality"),

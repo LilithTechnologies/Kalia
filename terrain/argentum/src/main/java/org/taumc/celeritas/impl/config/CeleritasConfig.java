@@ -9,6 +9,7 @@ public class CeleritasConfig {
     public boolean deferChunkUpdates = true;
     public AsyncOcclusionMode asyncOcclusion = AsyncOcclusionMode.EVERYTHING;
     public boolean fogCulling = true;
+    public boolean thinFog = false;
     public boolean entityCulling = true;
     public int entityOcclusionIntervalMs = 50;
     public boolean particleCulling = true;
