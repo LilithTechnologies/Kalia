@@ -21,7 +21,7 @@ public class CeleritasConfig {
     public int cpuRenderAheadLimit = 3;
     public int biomeBlendRadius = 3;
     public Set<String> renderPassDowngradeDenylist = new HashSet<>();
-    public boolean safeChunkEdges = true;
+    public boolean safeChunkEdges = false;
     public boolean compactVertexFormat = false;
     public boolean fpsOverlay = true;
 
