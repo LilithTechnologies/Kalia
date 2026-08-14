@@ -185,10 +185,6 @@ allprojects {
 }
 
 tasks {
-    runClientRenderDoc {
-        jvmArgs("-Ddevauth.enabled=true")
-    }
-
     jar {
         from(rootProject.file("terrain/LICENSE.md")) {
             rename { "CELERITAS_LICENSE.md" }
