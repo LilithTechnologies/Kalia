@@ -25,6 +25,12 @@ object VulkanInterop {
     }
 
     @JvmStatic
+    fun graphicsQueueFamilyIndex(device: RenderDevice): Int {
+        val vulkanRenderDevice = device as VulkanRenderDevice
+        return vulkanRenderDevice.context.graphicsFamilyIndex
+    }
+
+    @JvmStatic
     fun vkDeviceAddress(device: RenderDevice): Long {
         val vulkanRenderDevice = device as VulkanRenderDevice
         return vulkanRenderDevice.context.device.handle.address()
