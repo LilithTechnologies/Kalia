@@ -67,10 +67,14 @@ void main() {
     vViewDistance = abs(eye.z);
     gl_Position = kaliaProjection * vec4(eye, 1.0);
 
+    int packed = instBoxB.y;
+    bool mirror = (packed & 4) != 0;
+
     int faceIndex = gl_VertexIndex / 4;
+    int rectFace = (mirror && faceIndex >= 2 && faceIndex <= 3) ? (faceIndex ^ 1) : faceIndex;
     vec2 rectMin, rectMax;
     faceRect(
-        faceIndex, float(instBoxA.x), float(instBoxA.y), sizeX, sizeY, sizeZ,
+        rectFace, float(instBoxA.x), float(instBoxA.y), sizeX, sizeY, sizeZ,
         textureWidth, textureHeight, rectMin, rectMax
     );
     vNormal = normalize(vec3(
@@ -81,15 +85,13 @@ void main() {
 
     vColor = instTint;
     vOverlay = instOverlay;
-    int packed = instBoxB.y;
-    bool mirror = (packed & 4) != 0;
 
     vec2 uv = aUV;
     if (!mirror) {
         uv.x = 1.0 - uv.x;
     }
 
-    vUv0 = mix(rectMin, rectMax, uv);
+    vUv0 = (kaliaTextureMatrix * vec4(mix(rectMin, rectMax, uv), 0.0, 1.0)).xy;
 
     vMisc = vec4(
             (packed & 1) != 0 ? 1.0 : 0.0,
