@@ -3,6 +3,7 @@ package re.lilith.kalia.rendering.ui.hud
 import net.minecraft.block.Blocks
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.network.PlayerListEntry
+import net.minecraft.client.texture.SpriteAtlasTexture
 import net.minecraft.entity.player.ClientPlayerEntity
 import net.minecraft.entity.player.PlayerEntity
 import net.minecraft.item.Item
@@ -44,6 +45,12 @@ object KaliaInGameHud {
 
         renderPumpkinOverlay(client, width, height)
         renderVignette(client, width, height, state.vignetteDarkness)
+        renderPortalOverlay(
+            client,
+            width,
+            height,
+            player.lastTimeInPortal + (player.timeInPortal - player.lastTimeInPortal) * state.tickDelta,
+        )
 
         if (showCrosshair(client)) {
             renderCrosshair(width, height)
@@ -500,6 +507,38 @@ object KaliaInGameHud {
         }
         UI.inLayer(GuiLayer.BACKGROUND) {
             stretch(PUMPKIN_BLUR, width.toFloat(), height.toFloat(), UI.OPAQUE_WHITE)
+        }
+    }
+
+    fun renderPortalOverlay(client: MinecraftClient, width: Int, height: Int, timeInPortal: Float) {
+        if (timeInPortal <= 0f) {
+            return
+        }
+        var strength = timeInPortal
+        if (strength < 1f) {
+            strength *= strength
+            strength *= strength
+            strength = strength * 0.8f + 0.2f
+        }
+        val sprite = client.blockRenderManager?.models?.getParticleSprite(Blocks.NETHER_PORTAL.defaultState) ?: return
+        val alpha = (strength.coerceIn(0f, 1f) * 255f).toInt()
+
+        client.textureManager.bindTexture(SpriteAtlasTexture.BLOCK_ATLAS_TEX)
+        UI.inLayer(GuiLayer.BACKGROUND) {
+            UI.withMaterial(GuiMaterial.TRANSLUCENT) {
+                UI.texturedQuad(
+                    textureId = UI.boundTextureId(),
+                    x0 = 0f,
+                    y0 = 0f,
+                    x1 = width.toFloat(),
+                    y1 = height.toFloat(),
+                    u0 = sprite.minU,
+                    v0 = sprite.minV,
+                    u1 = sprite.maxU,
+                    v1 = sprite.maxV,
+                    argb = (alpha shl 24) or 0xFFFFFF,
+                )
+            }
         }
     }
 
