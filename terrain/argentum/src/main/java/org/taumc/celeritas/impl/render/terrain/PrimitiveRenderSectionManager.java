@@ -46,7 +46,7 @@ public class PrimitiveRenderSectionManager extends RenderSectionManager {
     }
 
     public static PrimitiveRenderSectionManager create(ChunkVertexType vertexType, World world, int renderDistance, RenderDevice device) {
-        int maxSection = world.getEffectiveHeight() / 16;
+        int maxSection = world.getMaxBuildHeight() / 16;
         return new PrimitiveRenderSectionManager(PrimitiveRenderPassConfigurationBuilder.build(vertexType,
                 Celeritas.CONFIG.translucencySorting, Celeritas.CONFIG.chunkFadeInDuration), world, renderDistance, device,
                 0, maxSection,

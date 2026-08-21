@@ -90,7 +90,7 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
 
     @Override
     public int getMaximumBuildHeight() {
-        return this.world.getEffectiveHeight();
+        return this.world.getMaxBuildHeight();
     }
 
     @Override
