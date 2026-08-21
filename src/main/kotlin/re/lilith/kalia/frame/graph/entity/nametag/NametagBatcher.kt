@@ -31,6 +31,8 @@ import java.nio.ByteOrder
 object NametagBatcher {
     private const val BYTES_PER_INSTANCE = 88
 
+    const val FLOATS_PER_GLYPH: Int = 9
+
     val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instRow0", 1, VertexAttributeFormat.FLOAT4)
         attribute("instRow1", 2, VertexAttributeFormat.FLOAT4)
@@ -98,9 +100,47 @@ object NametagBatcher {
         )
     }
 
-    fun recordGlyph(modelView: Matrix4f, x0: Float, y0: Float, x1: Float, y1: Float, u0: Float, v0: Float, u1: Float, v1: Float, rgba: Int) {
+    fun recordGlyphs(modelView: Matrix4f, glyphs: FloatArray, baseX: Float, baseY: Float, alphaByte: Int) {
         val instances = activeInstances ?: return
-        writeInstance(instances.reserve(), modelView, x0, y0, x1, y1, u0, v0, u1, v1, rgba)
+        val count = glyphs.size / FLOATS_PER_GLYPH
+        if (count == 0) return
+
+        val m00 = modelView.m00(); val m10 = modelView.m10(); val m20 = modelView.m20(); val m30 = modelView.m30()
+        val m01 = modelView.m01(); val m11 = modelView.m11(); val m21 = modelView.m21(); val m31 = modelView.m31()
+        val m02 = modelView.m02(); val m12 = modelView.m12(); val m22 = modelView.m22(); val m32 = modelView.m32()
+        val cutout = ShaderUniforms.alphaCutout()
+
+        var p = instances.reserve(count)
+        var off = 0
+        while (off < glyphs.size) {
+            MemoryAccess.putFloat(p, m00); MemoryAccess.putFloat(p + 4, m10)
+            MemoryAccess.putFloat(p + 8, m20); MemoryAccess.putFloat(p + 12, m30)
+            MemoryAccess.putFloat(p + 16, m01); MemoryAccess.putFloat(p + 20, m11)
+            MemoryAccess.putFloat(p + 24, m21); MemoryAccess.putFloat(p + 28, m31)
+            MemoryAccess.putFloat(p + 32, m02); MemoryAccess.putFloat(p + 36, m12)
+            MemoryAccess.putFloat(p + 40, m22); MemoryAccess.putFloat(p + 44, m32)
+
+            MemoryAccess.putFloat(p + 48, baseX + glyphs[off])
+            MemoryAccess.putFloat(p + 52, baseY + glyphs[off + 1])
+            MemoryAccess.putFloat(p + 56, baseX + glyphs[off + 2])
+            MemoryAccess.putFloat(p + 60, baseY + glyphs[off + 3])
+
+            MemoryAccess.putFloat(p + 64, glyphs[off + 4])
+            MemoryAccess.putFloat(p + 68, glyphs[off + 5])
+            MemoryAccess.putFloat(p + 72, glyphs[off + 6])
+            MemoryAccess.putFloat(p + 76, glyphs[off + 7])
+
+            val rgba = java.lang.Float.floatToRawIntBits(glyphs[off + 8])
+            MemoryAccess.putByte(p + 80, ((rgba ushr 24) and 255).toByte())
+            MemoryAccess.putByte(p + 81, ((rgba ushr 16) and 255).toByte())
+            MemoryAccess.putByte(p + 82, ((rgba ushr 8) and 255).toByte())
+            MemoryAccess.putByte(p + 83, alphaByte.toByte())
+
+            MemoryAccess.putFloat(p + 84, cutout)
+
+            p += BYTES_PER_INSTANCE
+            off += FLOATS_PER_GLYPH
+        }
     }
 
     fun recordBackground(modelView: Matrix4f, x0: Float, y0: Float, x1: Float, y1: Float, rgba: Int) {
@@ -265,17 +305,24 @@ object NametagBatcher {
         var count: Int = 0
             private set
 
-        fun reserve(): Long {
-            if (data.remaining() < BYTES_PER_INSTANCE) {
-                val grown = ByteBuffer.allocateDirect(data.capacity() * 2).order(ByteOrder.nativeOrder())
+        fun reserve(): Long = reserve(1)
+
+        fun reserve(instances: Int): Long {
+            val needed = instances * BYTES_PER_INSTANCE
+            if (data.remaining() < needed) {
+                var capacity = data.capacity()
+                do {
+                    capacity *= 2
+                } while (capacity - data.position() < needed)
+                val grown = ByteBuffer.allocateDirect(capacity).order(ByteOrder.nativeOrder())
                 data.flip()
                 grown.put(data)
                 data = grown
                 baseAddress = MemoryAccess.addressOf(data)
             }
             val address = baseAddress + data.position()
-            data.position(data.position() + BYTES_PER_INSTANCE)
-            count++
+            data.position(data.position() + needed)
+            count += instances
             return address
         }
 

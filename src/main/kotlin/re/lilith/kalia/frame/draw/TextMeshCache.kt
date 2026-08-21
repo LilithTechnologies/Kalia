@@ -7,11 +7,17 @@ object TextMeshCache {
     const val PAGE_DEFAULT: Int = -1
     const val PAGE_DECORATION: Int = -2
 
+    const val OUT_MESH: Int = 1
+    const val OUT_INSTANCES: Int = 2
+
+    @JvmField
+    val NO_INSTANCES: FloatArray = FloatArray(0)
+
     private const val MAX_ENTRIES = 2048
 
     class Segment(
         @JvmField val page: Int,
-        @JvmField val vertexData: ByteBuffer,
+        @JvmField val vertexData: ByteBuffer?,
         @JvmField val vertexCount: Int,
         @JvmField val instanceData: FloatArray,
     )
@@ -22,7 +28,7 @@ object TextMeshCache {
     ) {
         fun free() {
             for (segment in segments) {
-                releaseSegmentBuffer(segment.vertexData)
+                segment.vertexData?.let(::releaseSegmentBuffer)
             }
         }
     }
@@ -87,13 +93,15 @@ object TextMeshCache {
         @JvmField var color: Int,
         @JvmField var unicode: Boolean,
         @JvmField var styleBits: Int,
+        @JvmField var outputs: Int,
     ) {
-        fun set(text: String, shadow: Boolean, color: Int, unicode: Boolean, styleBits: Int): Key {
+        fun set(text: String, shadow: Boolean, color: Int, unicode: Boolean, styleBits: Int, outputs: Int): Key {
             this.text = text
             this.shadow = shadow
             this.color = color
             this.unicode = unicode
             this.styleBits = styleBits
+            this.outputs = outputs
             return this
         }
 
@@ -101,6 +109,7 @@ object TextMeshCache {
             if (other !is Key) return false
             return color == other.color &&
                 styleBits == other.styleBits &&
+                outputs == other.outputs &&
                 shadow == other.shadow &&
                 unicode == other.unicode &&
                 text == other.text
@@ -110,13 +119,14 @@ object TextMeshCache {
             var h = text.hashCode()
             h = h * 31 + color
             h = h * 31 + styleBits
+            h = h * 31 + outputs
             h = h * 31 + (if (shadow) 1 else 0)
             h = h * 31 + (if (unicode) 2 else 0)
             return h
         }
     }
 
-    private val lookupKey = Key("", false, 0, false, 0)
+    private val lookupKey = Key("", false, 0, false, 0, 0)
 
     private val cache = object : LinkedHashMap<Key, CachedText>(512, 0.75f, true) {
         override fun removeEldestEntry(eldest: MutableMap.MutableEntry<Key, CachedText>): Boolean {
@@ -129,12 +139,12 @@ object TextMeshCache {
     }
 
     @JvmStatic
-    fun find(text: String, shadow: Boolean, color: Int, unicode: Boolean, styleBits: Int): CachedText? =
-        cache[lookupKey.set(text, shadow, color, unicode, styleBits)]
+    fun find(text: String, shadow: Boolean, color: Int, unicode: Boolean, styleBits: Int, outputs: Int): CachedText? =
+        cache[lookupKey.set(text, shadow, color, unicode, styleBits, outputs)]
 
     @JvmStatic
-    fun put(text: String, shadow: Boolean, color: Int, unicode: Boolean, styleBits: Int, value: CachedText) {
-        cache.put(Key(text, shadow, color, unicode, styleBits), value)?.free()
+    fun put(text: String, shadow: Boolean, color: Int, unicode: Boolean, styleBits: Int, outputs: Int, value: CachedText) {
+        cache.put(Key(text, shadow, color, unicode, styleBits, outputs), value)?.free()
     }
 
     @JvmStatic

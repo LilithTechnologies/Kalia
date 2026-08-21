@@ -131,6 +131,11 @@ public class MixinTextRenderer implements NametagTextRenderer {
     @Unique
     private int kalia$segStartByte;
     @Unique
+    private int kalia$segQuads;
+
+    @Unique
+    private int kalia$bakeOutputs = TextMeshCache.OUT_MESH | TextMeshCache.OUT_INSTANCES;
+    @Unique
     private final List<TextMeshCache.Segment> kalia$segments = new ArrayList<>();
 
     @Unique
@@ -246,13 +251,13 @@ public class MixinTextRenderer implements NametagTextRenderer {
                 | (this.obfuscated ? 16 : 0);
         TextMeshCache.CachedText cached = this.obfuscated
                 ? null
-                : TextMeshCache.find(text, shadow, opaqueColor, this.unicode, styleBits);
+                : TextMeshCache.find(text, shadow, opaqueColor, this.unicode, styleBits, TextMeshCache.OUT_MESH);
         boolean owned = false;
         if (cached == null) {
             boolean cacheable = !this.obfuscated && !kalia$containsObfuscationCode(text);
-            cached = kalia$bake(text, shadow, opaqueColor);
+            cached = kalia$bake(text, shadow, opaqueColor, TextMeshCache.OUT_MESH);
             if (cacheable) {
-                TextMeshCache.put(text, shadow, opaqueColor, this.unicode, styleBits, cached);
+                TextMeshCache.put(text, shadow, opaqueColor, this.unicode, styleBits, TextMeshCache.OUT_MESH, cached);
             } else {
                 owned = true;
             }
@@ -326,13 +331,14 @@ public class MixinTextRenderer implements NametagTextRenderer {
         float alpha = (float) (argb >>> 24) / 255.0F;
         int opaqueColor = kalia$packColor(r, g, b, 1.0F);
 
-        TextMeshCache.CachedText cached = TextMeshCache.find(text, false, opaqueColor, this.unicode, 0);
+        TextMeshCache.CachedText cached =
+                TextMeshCache.find(text, false, opaqueColor, this.unicode, 0, TextMeshCache.OUT_INSTANCES);
         boolean owned = false;
         if (cached == null) {
             boolean cacheable = !kalia$containsObfuscationCode(text);
-            cached = kalia$bake(text, false, opaqueColor);
+            cached = kalia$bake(text, false, opaqueColor, TextMeshCache.OUT_INSTANCES);
             if (cacheable) {
-                TextMeshCache.put(text, false, opaqueColor, this.unicode, 0, cached);
+                TextMeshCache.put(text, false, opaqueColor, this.unicode, 0, TextMeshCache.OUT_INSTANCES, cached);
             } else {
                 owned = true;
             }
@@ -367,27 +373,7 @@ public class MixinTextRenderer implements NametagTextRenderer {
             }
 
             NametagBatcher.INSTANCE.beginSegment();
-
-            float[] instances = segment.instanceData;
-            for (int off = 0; off < instances.length; off += 9) {
-                float x0 = instances[off];
-                float y0 = instances[off + 1];
-                float x1 = instances[off + 2];
-                float y1 = instances[off + 3];
-                float u0 = instances[off + 4];
-                float v0 = instances[off + 5];
-                float u1 = instances[off + 6];
-                float v1 = instances[off + 7];
-                int rgba = Float.floatToRawIntBits(instances[off + 8]);
-
-                int glyphRgba = (rgba & ~0xFF) | alphaByte;
-                NametagBatcher.INSTANCE.recordGlyph(
-                        modelView,
-                        baseX + x0, baseY + y0, baseX + x1, baseY + y1,
-                        u0, v0, u1, v1,
-                        glyphRgba
-                );
-            }
+            NametagBatcher.INSTANCE.recordGlyphs(modelView, segment.instanceData, baseX, baseY, alphaByte);
 
             if (decoration) {
                 GlStateManager.enableTexture();
@@ -396,18 +382,22 @@ public class MixinTextRenderer implements NametagTextRenderer {
     }
 
     @Unique
-    private TextMeshCache.CachedText kalia$bake(String text, boolean shadow, int baseColor) {
-        // Worst case: every char bold (2 quads) plus decorations.
-        int worstBytes = (text.length() * 8 + kalia$MAX_DECOS * 4) * kalia$VERTEX_BYTES;
-        if (kalia$scratch.capacity() < worstBytes) {
-            kalia$scratch = MemoryUtil.memRealloc(kalia$scratch, Integer.highestOneBit(worstBytes) * 2);
-        }
+    private TextMeshCache.CachedText kalia$bake(String text, boolean shadow, int baseColor, int outputs) {
+        kalia$bakeOutputs = outputs;
         ByteBuffer scratch = kalia$scratch;
-        scratch.clear();
+        if ((outputs & TextMeshCache.OUT_MESH) != 0) {
+            int worstBytes = (text.length() * 8 + kalia$MAX_DECOS * 4) * kalia$VERTEX_BYTES;
+            if (scratch.capacity() < worstBytes) {
+                scratch = MemoryUtil.memRealloc(scratch, Integer.highestOneBit(worstBytes) * 2);
+                kalia$scratch = scratch;
+            }
+            scratch.clear();
+        }
 
         kalia$segments.clear();
         kalia$segPage = kalia$PAGE_NONE;
         kalia$segStartByte = 0;
+        kalia$segQuads = 0;
         kalia$instanceScratch.clear();
         kalia$instanceSegStart = 0;
         int decoCount = 0;
@@ -509,7 +499,7 @@ public class MixinTextRenderer implements NametagTextRenderer {
 
         if (decoCount > 0) {
             kalia$segPage = TextMeshCache.PAGE_DECORATION;
-            kalia$segStartByte = scratch.position();
+            kalia$segStartByte = (outputs & TextMeshCache.OUT_MESH) != 0 ? scratch.position() : 0;
             for (int d = 0; d < decoCount; d++) {
                 int di = d * kalia$DECO_STRIDE;
                 float x1 = kalia$decoData[di];
@@ -517,11 +507,16 @@ public class MixinTextRenderer implements NametagTextRenderer {
                 float x2 = kalia$decoData[di + 2];
                 float y2 = kalia$decoData[di + 3];
                 int decoRgba = Float.floatToRawIntBits(kalia$decoData[di + 4]);
-                kalia$vertex(scratch, x1, y2, 0.0F, 0.0F, decoRgba);
-                kalia$vertex(scratch, x2, y2, 0.0F, 0.0F, decoRgba);
-                kalia$vertex(scratch, x2, y1, 0.0F, 0.0F, decoRgba);
-                kalia$vertex(scratch, x1, y1, 0.0F, 0.0F, decoRgba);
-                kalia$pushInstance(x1, y2, x2, y1, 0.0F, 0.0F, 0.0F, 0.0F, decoRgba);
+                if ((outputs & TextMeshCache.OUT_MESH) != 0) {
+                    kalia$vertex(scratch, x1, y2, 0.0F, 0.0F, decoRgba);
+                    kalia$vertex(scratch, x2, y2, 0.0F, 0.0F, decoRgba);
+                    kalia$vertex(scratch, x2, y1, 0.0F, 0.0F, decoRgba);
+                    kalia$vertex(scratch, x1, y1, 0.0F, 0.0F, decoRgba);
+                }
+                if ((outputs & TextMeshCache.OUT_INSTANCES) != 0) {
+                    kalia$pushInstance(x1, y2, x2, y1, 0.0F, 0.0F, 0.0F, 0.0F, decoRgba);
+                }
+                kalia$segQuads++;
             }
             kalia$closeSegment(scratch);
         }
@@ -550,11 +545,16 @@ public class MixinTextRenderer implements NametagTextRenderer {
             float u1 = ((float) texU + fw - 1.0F) / 128.0F;
             float v1 = ((float) texV + 7.99F) / 128.0F;
 
-            kalia$vertex(scratch, relX + (float) slant, shiftY, u0, v0, rgba);
-            kalia$vertex(scratch, relX - (float) slant, shiftY + 7.99F, u0, v1, rgba);
-            kalia$vertex(scratch, relX + fw - 1.0F - (float) slant, shiftY + 7.99F, u1, v1, rgba);
-            kalia$vertex(scratch, relX + fw - 1.0F + (float) slant, shiftY, u1, v0, rgba);
-            kalia$pushInstance(relX, shiftY, relX + fw - 1.0F, shiftY + 7.99F, u0, v0, u1, v1, rgba);
+            if ((kalia$bakeOutputs & TextMeshCache.OUT_MESH) != 0) {
+                kalia$vertex(scratch, relX + (float) slant, shiftY, u0, v0, rgba);
+                kalia$vertex(scratch, relX - (float) slant, shiftY + 7.99F, u0, v1, rgba);
+                kalia$vertex(scratch, relX + fw - 1.0F - (float) slant, shiftY + 7.99F, u1, v1, rgba);
+                kalia$vertex(scratch, relX + fw - 1.0F + (float) slant, shiftY, u1, v0, rgba);
+            }
+            if ((kalia$bakeOutputs & TextMeshCache.OUT_INSTANCES) != 0) {
+                kalia$pushInstance(relX, shiftY, relX + fw - 1.0F, shiftY + 7.99F, u0, v0, u1, v1, rgba);
+            }
+            kalia$segQuads++;
 
             return (float) w;
         } else {
@@ -575,11 +575,16 @@ public class MixinTextRenderer implements NametagTextRenderer {
             float u1 = (texX + glyphW) / 256.0F;
             float v1 = (texY + 15.98F) / 256.0F;
 
-            kalia$vertex(scratch, relX + slant, shiftY, u0, v0, rgba);
-            kalia$vertex(scratch, relX - slant, shiftY + 7.99F, u0, v1, rgba);
-            kalia$vertex(scratch, relX + glyphW / 2.0F - slant, shiftY + 7.99F, u1, v1, rgba);
-            kalia$vertex(scratch, relX + glyphW / 2.0F + slant, shiftY, u1, v0, rgba);
-            kalia$pushInstance(relX, shiftY, relX + glyphW / 2.0F, shiftY + 7.99F, u0, v0, u1, v1, rgba);
+            if ((kalia$bakeOutputs & TextMeshCache.OUT_MESH) != 0) {
+                kalia$vertex(scratch, relX + slant, shiftY, u0, v0, rgba);
+                kalia$vertex(scratch, relX - slant, shiftY + 7.99F, u0, v1, rgba);
+                kalia$vertex(scratch, relX + glyphW / 2.0F - slant, shiftY + 7.99F, u1, v1, rgba);
+                kalia$vertex(scratch, relX + glyphW / 2.0F + slant, shiftY, u1, v0, rgba);
+            }
+            if ((kalia$bakeOutputs & TextMeshCache.OUT_INSTANCES) != 0) {
+                kalia$pushInstance(relX, shiftY, relX + glyphW / 2.0F, shiftY + 7.99F, u0, v0, u1, v1, rgba);
+            }
+            kalia$segQuads++;
 
             return (gEnd - gStart) / 2.0F + 1.0F;
         }
@@ -590,37 +595,46 @@ public class MixinTextRenderer implements NametagTextRenderer {
         if (kalia$segPage != page) {
             kalia$closeSegment(scratch);
             kalia$segPage = page;
-            kalia$segStartByte = scratch.position();
+            kalia$segStartByte = (kalia$bakeOutputs & TextMeshCache.OUT_MESH) != 0 ? scratch.position() : 0;
         }
     }
 
     @Unique
     private void kalia$closeSegment(ByteBuffer scratch) {
-        int endByte = scratch.position();
-        int length = endByte - kalia$segStartByte;
-        if (kalia$segPage != kalia$PAGE_NONE && length > 0) {
-            ByteBuffer vertexData = TextMeshCache.allocSegmentBuffer(length);
+        int endByte = (kalia$bakeOutputs & TextMeshCache.OUT_MESH) != 0 ? scratch.position() : 0;
+        if (kalia$segPage != kalia$PAGE_NONE && kalia$segQuads > 0) {
+            ByteBuffer cachedBuffer = null;
+            int vertexCount = 0;
 
-            MemoryUtil.memCopy(
-                    MemoryUtil.memAddress0(scratch) + kalia$segStartByte,
-                    MemoryUtil.memAddress0(vertexData),
-                    length
-            );
+            if ((kalia$bakeOutputs & TextMeshCache.OUT_MESH) != 0) {
+                int length = endByte - kalia$segStartByte;
+                ByteBuffer vertexData = TextMeshCache.allocSegmentBuffer(length);
 
-            vertexData.position(0);
-            vertexData.limit(length);
+                MemoryUtil.memCopy(
+                        MemoryUtil.memAddress0(scratch) + kalia$segStartByte,
+                        MemoryUtil.memAddress0(vertexData),
+                        length
+                );
 
-            ByteBuffer cachedBuffer = vertexData.asReadOnlyBuffer();
+                vertexData.position(0);
+                vertexData.limit(length);
+
+                cachedBuffer = vertexData.asReadOnlyBuffer();
+                vertexCount = length / kalia$VERTEX_BYTES;
+            }
+
+            float[] instanceData = TextMeshCache.NO_INSTANCES;
+            if ((kalia$bakeOutputs & TextMeshCache.OUT_INSTANCES) != 0) {
+                instanceData = Arrays.copyOfRange(
+                        kalia$instanceScratch.elements(), kalia$instanceSegStart, kalia$instanceScratch.size());
+            }
 
             kalia$segments.add(new TextMeshCache.Segment(
-                    kalia$segPage,
-                    cachedBuffer,
-                    length / kalia$VERTEX_BYTES,
-                    kalia$instanceScratch.subList(kalia$instanceSegStart, kalia$instanceScratch.size()).toFloatArray()
-            ));
+                    kalia$segPage, cachedBuffer, vertexCount, instanceData));
         }
         kalia$segPage = kalia$PAGE_NONE;
         kalia$segStartByte = endByte;
+        kalia$segQuads = 0;
         kalia$instanceSegStart = kalia$instanceScratch.size();
     }
 
