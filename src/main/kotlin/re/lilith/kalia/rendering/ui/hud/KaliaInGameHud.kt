@@ -36,21 +36,21 @@ object KaliaInGameHud {
         val height = UI.height.toInt()
         val player = client.player ?: return
 
-        if (client.options.hudHidden) {
-            renderChat(client, font, ticks, height)
-            return
-        }
-
-        val spectator = client.interactionManager?.isSpectator ?: false
-
-        renderPumpkinOverlay(client, width, height)
         renderVignette(client, width, height, state.vignetteDarkness)
+        renderPumpkinOverlay(client, width, height)
         renderPortalOverlay(
             client,
             width,
             height,
             player.lastTimeInPortal + (player.timeInPortal - player.lastTimeInPortal) * state.tickDelta,
         )
+
+        if (client.options.hudHidden) {
+            renderChat(client, font, ticks, height)
+            return
+        }
+
+        val spectator = client.interactionManager?.isSpectator ?: false
 
         if (showCrosshair(client)) {
             renderCrosshair(width, height)
@@ -506,7 +506,9 @@ object KaliaInGameHud {
             return
         }
         UI.inLayer(GuiLayer.BACKGROUND) {
-            stretch(PUMPKIN_BLUR, width.toFloat(), height.toFloat(), UI.OPAQUE_WHITE)
+            UI.withMaterial(GuiMaterial.TRANSLUCENT) {
+                stretch(PUMPKIN_BLUR, width.toFloat(), height.toFloat(), UI.OPAQUE_WHITE)
+            }
         }
     }
 
