@@ -5,6 +5,7 @@ import net.minecraft.client.gui.hud.DebugHud;
 import net.minecraft.client.gui.hud.InGameHud;
 import net.minecraft.client.util.Window;
 import net.minecraft.item.ItemStack;
+import net.minecraft.util.Formatting;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Overwrite;
@@ -68,7 +69,7 @@ public abstract class MixinInGameHud {
         kalia$state.setVignetteDarkness(this.vignetteDarkness);
         kalia$state.setLastHealthValue(this.lastHealthValue);
         kalia$state.setHeartJumpEndTick(this.heartJumpEndTick);
-        kalia$state.setHeldItemName(this.heldItem == null ? null : this.heldItem.getCustomName());
+        kalia$state.setHeldItemName(kalia$heldItemName());
         kalia$state.setHeldItemFade(this.heldItemTooltipFade);
         kalia$state.setOverlayMessage(this.overlayMessage);
         kalia$state.setOverlayRemaining(this.overlayRemaining);
@@ -88,5 +89,14 @@ public abstract class MixinInGameHud {
                 this.ticks,
                 kalia$state
         );
+    }
+
+    @Unique
+    private String kalia$heldItemName() {
+        if (this.heldItem == null) {
+            return null;
+        }
+        String name = this.heldItem.getCustomName();
+        return this.heldItem.hasCustomName() ? Formatting.ITALIC + name : name;
     }
 }

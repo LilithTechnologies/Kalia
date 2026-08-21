@@ -59,14 +59,15 @@ object KaliaInGameHud {
         renderHotbarBar(player, width, height, spectator)
 
         val interaction = client.interactionManager
-        if (interaction == null || interaction.hasStatusBars()) {
+        val statusBars = interaction == null || interaction.hasStatusBars()
+        if (statusBars) {
             renderStatusBars(player, width, height, ticks, state)
         }
         if (interaction == null || interaction.hasExperienceBar()) {
             renderExperience(client, player, width, height)
         }
 
-        renderHeldItemName(font, width, height, state)
+        renderHeldItemName(font, width, height, state, statusBars)
         if (client.options.debugEnabled) {
             state.debugHud?.run()
         }
@@ -265,19 +266,21 @@ object KaliaInGameHud {
         val right = width / 2 + 91
         val top = height - 39
 
-        renderHealthRow(player, health, maxHealth, absorption, left, top, wobbling, ticks)
+        UI.withMaterial(GuiMaterial.TRANSLUCENT) {
+            renderHealthRow(player, health, maxHealth, absorption, left, top, wobbling, ticks)
 
-        val armour = player.inventory.armorProtectionValue
-        if (armour > 0) {
-            renderArmourRow(armour, left, top - 10)
-        }
+            val armour = player.inventory.armorProtectionValue
+            if (armour > 0) {
+                renderArmourRow(armour, left, top - 10)
+            }
 
-        val food = player.hungerManager.foodLevel
-        renderFoodRow(player, food, right, top)
+            val food = player.hungerManager.foodLevel
+            renderFoodRow(player, food, right, top)
 
-        val air = player.air
-        if (player.isTouchingWater || air < MAX_AIR) {
-            renderAirRow(air, right, top - 10)
+            val air = player.air
+            if (player.isTouchingWater || air < MAX_AIR) {
+                renderAirRow(air, right, top - 10)
+            }
         }
     }
 
@@ -404,7 +407,7 @@ object KaliaInGameHud {
         Glyphs.draw(font, text, x, top.toFloat(), EXPERIENCE_GREEN, shadow = false)
     }
 
-    fun renderHeldItemName(font: Font, width: Int, height: Int, state: HudState) {
+    fun renderHeldItemName(font: Font, width: Int, height: Int, state: HudState, statusBars: Boolean) {
         val name = state.heldItemName ?: return
         if (state.heldItemFade <= 0) {
             return
@@ -416,8 +419,9 @@ object KaliaInGameHud {
         }
 
         val x = (width - Glyphs.widthOf(font, name)) / 2f
+        val y = (height - 59 + if (statusBars) 0 else SURVIVAL_ITEM_NAME_OFFSET).toFloat()
         val colour = (alpha shl 24) or 0x00FFFFFF
-        Glyphs.drawWithShadow(font, name, x, (height - 59).toFloat(), colour)
+        Glyphs.drawWithShadow(font, name, x, y, colour)
     }
 
     private fun renderOverlayMessage(font: Font, width: Int, height: Int, state: HudState) {
@@ -608,6 +612,7 @@ object KaliaInGameHud {
     private const val SUBTITLE_SCALE = 2f
     private const val SUBTITLE_Y = 5f
 
+    private const val SURVIVAL_ITEM_NAME_OFFSET = 14
     private const val CHAT_BOTTOM_OFFSET = 40f
 
     private const val HEART_V_BACKGROUND = 16f
