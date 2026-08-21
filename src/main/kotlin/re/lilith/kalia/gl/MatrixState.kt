@@ -1,13 +1,12 @@
 package re.lilith.kalia.gl
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
-import it.unimi.dsi.fastutil.objects.ObjectArrayFIFOQueue
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import org.joml.Matrix4f
 import java.nio.FloatBuffer
+import kotlin.math.sqrt
 
 object MatrixState {
-
     private val modelViewStack = ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) }
     private val projectionStack = ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) }
     private val textureStacks = Int2ObjectOpenHashMap<ObjectArrayList<Matrix4f>>()
@@ -90,9 +89,16 @@ object MatrixState {
         markDirty()
     }
 
-    fun rotate(degrees: Float, x: Float, y: Float, z: Float) {
+    fun rotate(degrees: Float, axisX: Float, axisY: Float, axisZ: Float) {
         val radians = Math.toRadians(degrees.toDouble()).toFloat()
         val matrix = current()
+
+        val length = sqrt(axisX * axisX + axisY * axisY + axisZ * axisZ)
+        if (length == 0f) return
+        val x = axisX / length
+        val y = axisY / length
+        val z = axisZ / length
+
         if (y == 0f && z == 0f) {
             when (x) {
                 1f -> matrix.rotateX(radians)
