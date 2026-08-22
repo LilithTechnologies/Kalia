@@ -17,6 +17,7 @@ class GuiBatchBuilder {
     private var batchScissor = IntArray(INITIAL_BATCHES)
     private var batchMaterial = IntArray(INITIAL_BATCHES)
     private var batchPhase = IntArray(INITIAL_BATCHES)
+    private var batchGroup = IntArray(INITIAL_BATCHES)
     private var batchSlotCount = IntArray(INITIAL_BATCHES)
     private var batchSlotTextures = IntArray(INITIAL_BATCHES * MAX_TEXTURE_SLOTS)
 
@@ -40,6 +41,7 @@ class GuiBatchBuilder {
     fun scissorOf(batch: Int): Int = batchScissor[batch]
     fun materialOf(batch: Int): Int = batchMaterial[batch]
     fun phaseOf(batch: Int): Int = batchPhase[batch]
+    fun groupOf(batch: Int): Int = batchGroup[batch]
     fun slotCountOf(batch: Int): Int = batchSlotCount[batch]
     fun slotTextureOf(batch: Int, slot: Int): Int = batchSlotTextures[batch * MAX_TEXTURE_SLOTS + slot]
 
@@ -76,6 +78,7 @@ class GuiBatchBuilder {
         var currentScissor = state.scissorIdOf(order[0])
         var currentMaterial = state.materialOf(order[0])
         var currentPhase = state.phaseOf(order[0])
+        var currentGroup = state.groupOf(order[0])
         liveSlots = 0
 
         for (position in 0 until count) {
@@ -83,22 +86,24 @@ class GuiBatchBuilder {
             val scissor = state.scissorIdOf(element)
             val material = state.materialOf(element)
             val phase = state.phaseOf(element)
+            val group = state.groupOf(element)
             val texture = state.textureIdOf(element)
 
             var slot = if (position == batchStart) {
                 claimSlot(texture)
-            } else if (scissor == currentScissor && material == currentMaterial && phase == currentPhase) {
+            } else if (scissor == currentScissor && material == currentMaterial && phase == currentPhase && group == currentGroup) {
                 claimSlot(texture)
             } else {
                 SLOT_UNAVAILABLE
             }
 
             if (slot == SLOT_UNAVAILABLE) {
-                emit(batchStart, position - batchStart, currentScissor, currentMaterial, currentPhase)
+                emit(batchStart, position - batchStart, currentScissor, currentMaterial, currentPhase, currentGroup)
                 batchStart = position
                 currentScissor = scissor
                 currentMaterial = material
                 currentPhase = phase
+                currentGroup = group
                 liveSlots = 0
                 slot = claimSlot(texture)
             }
@@ -106,7 +111,7 @@ class GuiBatchBuilder {
             slots[position] = slot
         }
 
-        emit(batchStart, count - batchStart, currentScissor, currentMaterial, currentPhase)
+        emit(batchStart, count - batchStart, currentScissor, currentMaterial, currentPhase, currentGroup)
     }
 
     private fun claimSlot(texture: Int): Int {
@@ -125,7 +130,7 @@ class GuiBatchBuilder {
         return liveSlots++
     }
 
-    private fun emit(first: Int, count: Int, scissor: Int, material: Int, phase: Int) {
+    private fun emit(first: Int, count: Int, scissor: Int, material: Int, phase: Int, group: Int) {
         if (count <= 0) {
             return
         }
@@ -138,6 +143,7 @@ class GuiBatchBuilder {
         batchScissor[index] = scissor
         batchMaterial[index] = material
         batchPhase[index] = phase
+        batchGroup[index] = group
         batchSlotCount[index] = liveSlots
 
         val base = index * MAX_TEXTURE_SLOTS
@@ -166,6 +172,7 @@ class GuiBatchBuilder {
         batchScissor = batchScissor.copyOf(grown)
         batchMaterial = batchMaterial.copyOf(grown)
         batchPhase = batchPhase.copyOf(grown)
+        batchGroup = batchGroup.copyOf(grown)
         batchSlotCount = batchSlotCount.copyOf(grown)
         batchSlotTextures = batchSlotTextures.copyOf(grown * MAX_TEXTURE_SLOTS)
     }

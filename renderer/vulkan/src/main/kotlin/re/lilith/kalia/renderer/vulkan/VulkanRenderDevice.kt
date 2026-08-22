@@ -9,6 +9,7 @@ import org.lwjgl.vulkan.KHRSwapchain
 import re.lilith.kalia.renderer.device.CapturedFrame
 import re.lilith.kalia.renderer.device.DeviceCapabilities
 import re.lilith.kalia.renderer.device.DeviceSettings
+import re.lilith.kalia.renderer.device.HudBoundaryHook
 import re.lilith.kalia.renderer.device.PlatformSurface
 import re.lilith.kalia.renderer.device.PresentHook
 import re.lilith.kalia.renderer.device.RenderDevice
@@ -445,6 +446,12 @@ internal class VulkanRenderDevice(
     }
 
     override var presentHook: PresentHook? = null
+    override var hudBoundaryHook: HudBoundaryHook? = null
+
+    // Set by VulkanGraphExecutor right before firing hudBoundaryHook, so VulkanInterop can hand
+    // the hook's Vulkan-specific implementation the image it should draw into -- HudBoundaryHook
+    // itself stays parameter-less, mirroring PresentHook's own backend-agnostic contract.
+    internal var hudBoundaryTarget: VulkanTexture? = null
 
     override val frameSlot: Int get() = frameIndex
 
@@ -490,21 +497,46 @@ internal class VulkanRenderDevice(
         frame.commandBuffer.reset()
         val recorder = frame.commandBuffer.begin()
 
-        executor.execute(
+        val earlyWaits = buildList {
+            val timeline = transferTimeline
+            if (timeline != null && submittedTransferValue > 0L) {
+                add(
+                    SemaphoreWait(
+                        timeline,
+                        PipelineStageMask.VertexInput + PipelineStageMask.Transfer,
+                        submittedTransferValue,
+                    ),
+                )
+            }
+            val compute = computeTimeline
+            if (compute != null && submittedComputeValue > 0L) {
+                add(
+                    SemaphoreWait(
+                        compute,
+                        PipelineStageMask.DrawIndirect + PipelineStageMask.VertexInput +
+                                PipelineStageMask.VertexShader + PipelineStageMask.FragmentShader,
+                        submittedComputeValue,
+                    ),
+                )
+            }
+        }
+
+        val finalRecorder = executor.execute(
             graph = graph,
             recorder = recorder,
             frame = frame,
             backbuffer = swapchain.backbuffer,
             backbufferExtent = swapchain.extent,
+            earlyWaits = earlyWaits,
         )
 
         val hook = presentHook
         swapchain.recordPresentBlit(
-            recorder,
+            finalRecorder,
             acquired,
             finalLayout = if (hook != null) ImageLayout.ColorAttachmentOptimal else ImageLayout.PresentSource,
         )
-        val recorded = recorder.end()
+        val recorded = finalRecorder.end()
 
         flushUploads()
 

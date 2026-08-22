@@ -5,6 +5,7 @@ import org.lwjgl.vulkan.VK10
 import org.lwjgl.vulkan.VK12
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.TextureFormat
+import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.vulkan.api.interop.RawHandles
@@ -128,6 +129,26 @@ object VulkanInterop {
     fun <T> withQueueLock(device: RenderDevice, action: () -> T): T {
         val vulkanRenderDevice = device as VulkanRenderDevice
         return vulkanRenderDevice.context.withQueueLock(action)
+    }
+
+    @JvmStatic
+    fun currentUiTargetImageHandle(device: RenderDevice): Long {
+        val vulkanRenderDevice = device as VulkanRenderDevice
+        val target = vulkanRenderDevice.hudBoundaryTarget ?: return 0L
+        return RawHandles.image(target.image)
+    }
+
+    @JvmStatic
+    fun currentUiTargetExtent(device: RenderDevice): Extent {
+        val vulkanRenderDevice = device as VulkanRenderDevice
+        return vulkanRenderDevice.hudBoundaryTarget?.extent ?: Extent(1, 1)
+    }
+
+    @JvmStatic
+    fun currentUiTargetFormat(device: RenderDevice): Int {
+        val vulkanRenderDevice = device as VulkanRenderDevice
+        val target = vulkanRenderDevice.hudBoundaryTarget ?: return VK10.VK_FORMAT_UNDEFINED
+        return vkFormat(target.format)
     }
 
     @JvmStatic

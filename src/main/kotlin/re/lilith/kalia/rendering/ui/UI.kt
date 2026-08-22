@@ -77,6 +77,10 @@ object UI {
         rendererFor(pass.device).execute(pass, scissors, textures, phase)
     }
 
+    fun drawGroup(pass: PassContext, phase: GuiBlurPhase, group: Int) {
+        rendererFor(pass.device).executeGroup(pass, scissors, textures, phase, group)
+    }
+
     fun discard() {
         isRecording = false
         state.reset()

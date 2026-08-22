@@ -140,6 +140,8 @@ object GameFrameGraph {
             draw { WorldFrameTimings.part(WorldFrameTimings.PART_UI_PASS) { frameRenderer.renderUiBeforeBlur(this) } }
         }
 
+        val hookInstalled = device.hudBoundaryHook != null
+
         if (GuiBlur.enabled) {
             val blurred = texture("gui-blurred", sceneFormat)
 
@@ -158,25 +160,49 @@ object GameFrameGraph {
                 }
             }
 
-            pass("ui/after-blur") {
-                color(blurred, load = LoadOp.LOAD)
-                depth(depth, load = LoadOp.LOAD)
-                atlasHandle?.let(::reads)
-                previewHandle?.let(::reads)
-                draw { WorldFrameTimings.part(WorldFrameTimings.PART_UI_PASS) { frameRenderer.renderUiAfterBlur(this) } }
-            }
+            uiAfterBlurPasses(blurred, depth, atlasHandle, previewHandle, hookInstalled)
 
             postChain(blurred, TextureHandle.BACK_BUFFER, name = "present") {}
         } else {
+            uiAfterBlurPasses(sceneForUi, depth, atlasHandle, previewHandle, hookInstalled)
+
+            postChain(sceneForUi, TextureHandle.BACK_BUFFER, name = "present") {}
+        }
+    }
+
+    private fun RenderGraphBuilder.uiAfterBlurPasses(
+        target: TextureHandle,
+        depth: TextureHandle,
+        atlasHandle: TextureHandle?,
+        previewHandle: TextureHandle?,
+        hookInstalled: Boolean,
+    ) {
+        if (!hookInstalled) {
             pass("ui/after-blur") {
-                color(sceneForUi, load = LoadOp.LOAD)
+                color(target, load = LoadOp.LOAD)
                 depth(depth, load = LoadOp.LOAD)
                 atlasHandle?.let(::reads)
                 previewHandle?.let(::reads)
                 draw { WorldFrameTimings.part(WorldFrameTimings.PART_UI_PASS) { frameRenderer.renderUiAfterBlur(this) } }
             }
+            return
+        }
 
-            postChain(sceneForUi, TextureHandle.BACK_BUFFER, name = "present") {}
+        pass("ui/after-blur/hud") {
+            color(target, load = LoadOp.LOAD)
+            depth(depth, load = LoadOp.LOAD)
+            atlasHandle?.let(::reads)
+            previewHandle?.let(::reads)
+            sideEffects()
+            draw { WorldFrameTimings.part(WorldFrameTimings.PART_UI_PASS) { frameRenderer.renderUiAfterBlurHud(this) } }
+        }
+        hudBoundary(afterPass = "ui/after-blur/hud")
+        pass("ui/after-blur/screen") {
+            color(target, load = LoadOp.LOAD)
+            depth(depth, load = LoadOp.LOAD)
+            atlasHandle?.let(::reads)
+            previewHandle?.let(::reads)
+            draw { WorldFrameTimings.part(WorldFrameTimings.PART_UI_PASS) { frameRenderer.renderUiAfterBlurScreen(this) } }
         }
     }
 }

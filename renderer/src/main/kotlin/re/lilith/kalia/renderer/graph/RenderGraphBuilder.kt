@@ -17,6 +17,7 @@ class RenderGraphBuilder internal constructor(private val graphName: String) {
     private val textures = mutableListOf<GraphTexture>()
     private val passes = mutableListOf<GraphPass>()
     private var nextId = 1
+    private var hudBoundaryAfterPass: String? = null
 
     /**
      * Declares a graph-owned color texture.
@@ -72,6 +73,10 @@ class RenderGraphBuilder internal constructor(private val graphName: String) {
         passes += pass
     }
 
+    fun hudBoundary(afterPass: String) {
+        hudBoundaryAfterPass = afterPass
+    }
+
     private fun declare(
         name: String,
         format: TextureFormat,
@@ -84,6 +89,6 @@ class RenderGraphBuilder internal constructor(private val graphName: String) {
         return handle
     }
 
-    internal fun build(): RenderGraph = RenderGraph(graphName, textures.toList(), passes.toList())
+    internal fun build(): RenderGraph = RenderGraph(graphName, textures.toList(), passes.toList(), hudBoundaryAfterPass)
 }
 

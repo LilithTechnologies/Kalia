@@ -55,6 +55,10 @@ interface RenderDevice : AutoCloseable {
         get() = null
         set(_) = throw UnsupportedOperationException("This backend cannot host an external renderer.")
 
+    var hudBoundaryHook: HudBoundaryHook?
+        get() = null
+        set(_) = throw UnsupportedOperationException("This backend cannot host an external renderer.")
+
     /**
      * Creates a GPU buffer.
      *

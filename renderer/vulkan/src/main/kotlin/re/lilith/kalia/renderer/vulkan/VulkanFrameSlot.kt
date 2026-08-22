@@ -12,6 +12,7 @@ internal class VulkanFrameSlot(
     val inFlightFence: Fence,
     val imageAvailable: BinarySemaphore,
     val commandBuffer: CommandBuffer,
+    val hudBoundaryCommandBuffer: CommandBuffer,
     val uploadCommandBuffer: CommandBuffer,
     val presentCommandBuffer: CommandBuffer,
     val uploadsFinished: BinarySemaphore,
@@ -87,6 +88,7 @@ internal class VulkanFrameSlot(
         imageAvailable.close()
         uploadsFinished.close()
         commandBuffer.close()
+        hudBoundaryCommandBuffer.close()
         uploadCommandBuffer.close()
         presentCommandBuffer.close()
         transferCommandBuffers.forEach(CommandBuffer::close)
@@ -105,6 +107,7 @@ internal class VulkanFrameSlot(
             inFlightFence = context.device.createFence(signaled = true),
             imageAvailable = context.device.createBinarySemaphore(),
             commandBuffer = context.commandPool.allocatePrimary(),
+            hudBoundaryCommandBuffer = context.commandPool.allocatePrimary(),
             uploadCommandBuffer = context.commandPool.allocatePrimary(),
             presentCommandBuffer = context.commandPool.allocatePrimary(),
             uploadsFinished = context.device.createBinarySemaphore(),

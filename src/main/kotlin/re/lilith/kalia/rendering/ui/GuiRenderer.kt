@@ -86,12 +86,25 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
         val indices = FrameResources.of(device).indices.forQuads(1)
 
         if (phase == null) {
-            executePhase(pass, textures, scissors, slice, indices, GuiBlurPhase.BEFORE_BLUR.ordinal)
-            executePhase(pass, textures, scissors, slice, indices, GuiBlurPhase.AFTER_BLUR.ordinal)
+            executePhase(pass, textures, scissors, slice, indices, GuiBlurPhase.BEFORE_BLUR.ordinal, group = ANY_GROUP)
+            executePhase(pass, textures, scissors, slice, indices, GuiBlurPhase.AFTER_BLUR.ordinal, group = ANY_GROUP)
         } else {
-            executePhase(pass, textures, scissors, slice, indices, phase.ordinal)
+            executePhase(pass, textures, scissors, slice, indices, phase.ordinal, group = ANY_GROUP)
         }
 
+        pass.scissor(null)
+    }
+
+    fun executeGroup(
+        pass: PassContext,
+        scissors: GuiScissorStack,
+        textures: GuiTextureRegistry,
+        phase: GuiBlurPhase,
+        group: Int,
+    ) {
+        val slice = uploaded ?: return
+        val indices = FrameResources.of(device).indices.forQuads(1)
+        executePhase(pass, textures, scissors, slice, indices, phase.ordinal, group)
         pass.scissor(null)
     }
 
@@ -144,6 +157,7 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
         slice: StreamArena.Slice,
         indices: GpuBuffer,
         phase: Int,
+        group: Int,
     ) {
         val resources = FrameResources.of(device)
         val fallbackTexture = resources.whiteTexture
@@ -155,6 +169,9 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
 
         for (batch in 0 until builder.batches) {
             if (builder.phaseOf(batch) != phase) {
+                continue
+            }
+            if (group != ANY_GROUP && builder.groupOf(batch) != group) {
                 continue
             }
 
@@ -212,5 +229,6 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
         const val QUAD_VERTICES = 4
         const val INDICES_PER_QUAD = 6
         const val INITIAL_INSTANCES = 4096
+        const val ANY_GROUP = -1
     }
 }

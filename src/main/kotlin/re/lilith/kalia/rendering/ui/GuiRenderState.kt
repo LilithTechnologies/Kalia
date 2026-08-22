@@ -120,6 +120,7 @@ class GuiRenderState {
     fun materialOf(index: Int): Int = materials[index]
     fun flagsOf(index: Int): Int = flags[index]
     fun phaseOf(index: Int): Int = keys[index] ushr (LAYER_BITS + GROUP_BITS)
+    fun groupOf(index: Int): Int = (keys[index] ushr LAYER_BITS) and GROUP_MASK
     fun offsetOf(index: Int): Int = index * FLOATS_PER_ELEMENT
 
     val floatData get() = data
@@ -147,6 +148,7 @@ class GuiRenderState {
         private const val LAYER_BITS = 3
         private const val GROUP_BITS = 1
         private const val LAYER_MASK = 0x7
+        private const val GROUP_MASK = 0x1
         private const val INITIAL_CAPACITY = 4096
     }
 }

@@ -9,8 +9,11 @@ import re.lilith.vulkan.api.command.CommandRecorder
 import re.lilith.vulkan.api.debug.beginDebugLabel
 import re.lilith.vulkan.api.debug.endDebugLabel
 import re.lilith.vulkan.api.command.pipelineBarrier
+import re.lilith.vulkan.api.device.QueueSubmission
+import re.lilith.vulkan.api.device.submit
 import re.lilith.vulkan.api.rendering.RenderingAttachmentInfo
 import re.lilith.vulkan.api.rendering.RenderingInfo
+import re.lilith.vulkan.api.sync.SemaphoreWait
 import re.lilith.vulkan.api.types.clear.ClearColorValue
 import re.lilith.vulkan.api.types.clear.ClearDepthStencilValue
 import re.lilith.vulkan.api.types.clear.ClearValue
@@ -30,25 +33,58 @@ internal class VulkanGraphExecutor(
         frame: VulkanFrameSlot,
         backbuffer: VulkanTexture,
         backbufferExtent: Extent,
-    ) {
+        earlyWaits: List<SemaphoreWait> = emptyList(),
+    ): CommandRecorder {
         val passes = graph.livePasses
         if (passes.isEmpty()) {
-            return
+            return recorder
         }
 
         val lifetimes = graph.textureLifetimes
         val bound = HashMap<Int, VulkanTexture>()
         bound[TextureHandle.BACK_BUFFER.id] = backbuffer
 
+        var active = recorder
         try {
             passes.forEachIndexed { index, pass ->
                 materialize(graph, pass, bound, backbufferExtent)
-                recordPass(pass, bound, recorder, frame)
+                recordPass(pass, bound, active, frame)
                 releaseExpired(graph, lifetimes, bound, index)
+
+                if (pass.name == graph.hudBoundaryAfterPass) {
+                    val target = pass.colorAttachments.firstOrNull()?.target?.let { bound[it.id] }
+                    active = flushHudBoundary(active, frame, earlyWaits, target)
+                }
             }
         } finally {
             pool.reclaimAll()
         }
+        return active
+    }
+
+    private fun flushHudBoundary(
+        recorder: CommandRecorder,
+        frame: VulkanFrameSlot,
+        earlyWaits: List<SemaphoreWait>,
+        target: VulkanTexture?,
+    ): CommandRecorder {
+        val recorded = recorder.end()
+        device.context.withQueueLock {
+            device.context.graphicsQueue.submit(
+                submissions = listOf(QueueSubmission(commandBuffers = listOf(recorded), waitSemaphores = earlyWaits)),
+            )
+        }
+
+        device.hudBoundaryTarget = target
+        runCatching { device.hudBoundaryHook?.onHudBoundary() }.onFailure { failure ->
+            device.hudBoundaryHook = null
+            System.err.println("Kalia: the external HUD-boundary renderer failed and was detached.")
+            failure.printStackTrace()
+        }
+        device.hudBoundaryTarget = null
+
+        frame.hudBoundaryCommandBuffer.reset()
+        return frame.hudBoundaryCommandBuffer.begin()
     }
 
     private fun materialize(

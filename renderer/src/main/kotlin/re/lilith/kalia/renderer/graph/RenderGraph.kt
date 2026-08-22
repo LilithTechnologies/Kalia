@@ -25,6 +25,8 @@ class RenderGraph internal constructor(
      * Passes declared by the graph.
      */
     val passes: List<GraphPass>,
+
+    val hudBoundaryAfterPass: String? = null,
 ) {
     /**
      * Passes that remain after dead-pass elimination.
