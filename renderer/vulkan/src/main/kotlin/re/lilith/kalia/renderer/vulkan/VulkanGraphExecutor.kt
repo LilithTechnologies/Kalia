@@ -122,6 +122,8 @@ internal class VulkanGraphExecutor(
             )
     }
 
+    private val encoder = VulkanPassEncoder(device)
+
     private val stableRenderingInfos = HashMap<String, RenderingInfo>()
 
     private fun stableRendering(passName: String, rebuilt: RenderingInfo): RenderingInfo {
@@ -225,8 +227,7 @@ internal class VulkanGraphExecutor(
             ),
         )
 
-        val encoder = VulkanPassEncoder(
-            backend = device,
+        encoder.begin(
             recorder = recorder,
             frame = frame,
             defaultColor = colorTargets,

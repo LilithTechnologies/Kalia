@@ -44,25 +44,22 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import re.lilith.vulkan.api.types.geometry.Viewport as VkViewport
 
-internal class VulkanPassEncoder(
-    private val backend: VulkanRenderDevice,
-    private val recorder: CommandRecorder,
-    private val frame: VulkanFrameSlot,
-    private val defaultColor: List<VulkanTexture>,
-    private val defaultDepth: VulkanTexture?,
-    private val defaultRendering: RenderingInfo,
-    private val defaultLayout: AttachmentLayout,
-    private val resolvable: Map<Int, VulkanTexture>,
-) : PassContext {
+internal class VulkanPassEncoder(private val backend: VulkanRenderDevice) : PassContext {
+
+    private lateinit var recorder: CommandRecorder
+    private lateinit var frame: VulkanFrameSlot
+    private var defaultColor: List<VulkanTexture> = emptyList()
+    private var defaultDepth: VulkanTexture? = null
+    private lateinit var defaultRendering: RenderingInfo
+    private var defaultLayout: AttachmentLayout = EMPTY_LAYOUT
+    private var resolvable: Map<Int, VulkanTexture> = emptyMap()
 
     override val device: RenderDevice get() = backend
 
-    override var extent: Extent = defaultColor.firstOrNull()?.extent
-        ?: defaultDepth?.extent
-        ?: Extent(1, 1)
+    override var extent: Extent = FALLBACK_EXTENT
         private set
 
-    override var attachments: AttachmentLayout = defaultLayout
+    override var attachments: AttachmentLayout = EMPTY_LAYOUT
         private set
 
     private var pipeline: VulkanPipeline? = null
@@ -99,14 +96,45 @@ internal class VulkanPassEncoder(
 
 
     // What is actually attached right now, which [retarget] moves away from the pass defaults
-    internal var colorTargets: List<VulkanTexture> = defaultColor
+    internal var colorTargets: List<VulkanTexture> = emptyList()
         private set
 
-    internal var depthTarget: VulkanTexture? = defaultDepth
+    internal var depthTarget: VulkanTexture? = null
         private set
 
     // The command buffer this pass records into, for renderers that record their own commands
     internal val commandBuffer get() = recorder.commandBuffer.handle
+
+    fun begin(
+        recorder: CommandRecorder,
+        frame: VulkanFrameSlot,
+        defaultColor: List<VulkanTexture>,
+        defaultDepth: VulkanTexture?,
+        defaultRendering: RenderingInfo,
+        defaultLayout: AttachmentLayout,
+        resolvable: Map<Int, VulkanTexture>,
+    ) {
+        this.recorder = recorder
+        this.frame = frame
+        this.defaultColor = defaultColor
+        this.defaultDepth = defaultDepth
+        this.defaultRendering = defaultRendering
+        this.defaultLayout = defaultLayout
+        this.resolvable = resolvable
+
+        extent = defaultColor.firstOrNull()?.extent ?: defaultDepth?.extent ?: FALLBACK_EXTENT
+        attachments = defaultLayout
+        colorTargets = defaultColor
+        depthTarget = defaultDepth
+        rendering = false
+
+        boundTextures.fill(null)
+        boundSamplers.fill(null)
+        for (slot in boundBuffers) {
+            slot.reset()
+        }
+        invalidateBoundState()
+    }
 
     fun open() {
         check(!rendering) { "Rendering is already open!" }
@@ -682,6 +710,13 @@ internal class VulkanPassEncoder(
         var offset: Long = 0L
         var size: Long = 0L
         var kind: BindingKind? = null
+
+        fun reset() {
+            buffer = null
+            offset = 0L
+            size = 0L
+            kind = null
+        }
     }
 
     private companion object {
@@ -692,5 +727,8 @@ internal class VulkanPassEncoder(
         // VkDrawIndexedIndirectCommand
         const val INDIRECT_STRIDE = 20
         const val INITIAL_INDIRECT_CAPACITY = 1L shl 20
+
+        val FALLBACK_EXTENT = Extent(1, 1)
+        val EMPTY_LAYOUT: AttachmentLayout = AttachmentLayout.of(emptyList())
     }
 }
