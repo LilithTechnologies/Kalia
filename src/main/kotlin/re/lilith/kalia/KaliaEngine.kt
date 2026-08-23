@@ -127,7 +127,10 @@ object KaliaEngine {
 
     fun awaitRender() {
         val worker = renderThread ?: return
-        runCatching { worker.awaitIdle() }.onFailure { failure ->
+        runCatching {
+            worker.awaitIdle()
+            (state as? State.Running)?.device?.presentFrame()
+        }.onFailure { failure ->
             KaliaMod.LOGGER.error("A Kalia frame has failed. The engine will be terminating shortly.", failure)
             terminate()
             val report = CrashReport.create(failure, "A Kalia frame has failed, and the engine was terminated.")
@@ -141,6 +144,7 @@ object KaliaEngine {
         val running = state as? State.Running ?: return false
 
         WorldFrameTimings.end(WorldFrameTimings.GRAPH_BUILD)
+        running.device.acquireFrame()
         pendingExclusive = GameFrameShape.replaysVanilla
         renderThread(running.device).submit(running.device.frameSlot)
         running.device.endFrame()
@@ -170,6 +174,7 @@ object KaliaEngine {
     fun terminate() {
         renderThread?.let { worker ->
             runCatching { worker.awaitIdle() }
+            runCatching { (state as? State.Running)?.device?.presentFrame() }
             worker.close()
             renderThread = null
         }

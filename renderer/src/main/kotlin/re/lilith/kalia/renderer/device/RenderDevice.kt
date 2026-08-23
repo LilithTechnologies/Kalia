@@ -154,6 +154,24 @@ interface RenderDevice : AutoCloseable {
 
     fun render(graph: RenderGraph, slot: Int): Boolean = render(graph)
 
+    /**
+     * Acquires the swapchain image that [render] will target for the current [frameSlot],
+     * on whichever thread owns window/surface presentation.
+     *
+     * Must be called, and must complete, before [render] is invoked for that frame slot.
+     *
+     * @return `true` if an image was acquired, `false` if rendering should be skipped
+     * this frame (e.g. the surface is being resized).
+     */
+    fun acquireFrame(): Boolean = true
+
+    /**
+     * Presents the image acquired by [acquireFrame] once [render] has submitted its work.
+     *
+     * This must run on the thread that owns window/surface presentation.
+     */
+    fun presentFrame() {}
+
     fun endFrame() {}
 
     fun textureIndex(texture: GpuTexture, sampler: GpuSampler): Int = -1

@@ -129,6 +129,7 @@ class GuiItemAtlas(
             lastFills++
         }
 
+        pass.viewport(Viewport.of(pass.extent))
         pass.scissor(null)
     }
 

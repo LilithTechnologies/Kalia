@@ -483,32 +483,68 @@ internal class VulkanRenderDevice(
     }
 
     override fun render(graph: RenderGraph): Boolean {
-        val target = platformSurface.framebufferExtent
-        val requested = pendingResize ?: target.takeIf { it != builtForExtent }
-        if (requested != null) {
-            pendingResize = requested.takeIf { !rebuildSwapchain(it) }
-            if (pendingResize != null) {
-                return false
-            }
-        }
-
         beginFrame()
+        if (!acquireFrame()) {
+            return false
+        }
         val completed = encode(graph, frameIndex)
         if (completed) {
+            presentFrame()
             advancePending = true
             framePrepared = false
         }
         return completed
     }
 
-    override fun render(graph: RenderGraph, slot: Int): Boolean {
+    override fun render(graph: RenderGraph, slot: Int): Boolean = encode(graph, slot)
+
+    override fun acquireFrame(): Boolean {
         val target = surfaceExtentSnapshot
         val requested = pendingResize ?: target.takeIf { it != builtForExtent }
         if (requested != null) {
             pendingResize = requested.takeIf { !rebuildSwapchain(it) }
             return false
         }
-        return encode(graph, slot)
+
+        val frame = frames[frameIndex]
+        val acquireStarted = System.nanoTime()
+        val acquiredImage = swapchain.acquire(frame.imageAvailable)
+        RenderStats.recordGpuWait(System.nanoTime() - acquireStarted)
+
+        acquiredOrNull = acquiredImage
+        if (acquiredImage == null) {
+            if (!rebuildSwapchain(target)) {
+                pendingResize = target
+            }
+            return false
+        }
+        return true
+    }
+
+    override fun presentFrame() {
+        val acquired = acquiredOrNull ?: return
+        acquiredOrNull = null
+
+        val target = surfaceExtentSnapshot
+        val renderFinished = swapchain.renderFinishedSemaphore(acquired.index)
+
+        val presentStarted = System.nanoTime()
+        val presented = runCatching {
+            context.withQueueLock {
+                context.presentQueue.present(swapchain.swapchain, acquired.index, renderFinished)
+            }
+        }
+        RenderStats.recordGpuWait(System.nanoTime() - presentStarted)
+        presented.exceptionOrNull()?.let { failure ->
+            if (failure is VulkanResultException && failure.isSwapchainStale) {
+                pendingResize = target
+            } else {
+                throw failure
+            }
+        }
+        if (acquired.suboptimal && target != builtForExtent) {
+            pendingResize = target
+        }
     }
 
     override val occlusionQueryCapacity: Int get() = occlusionQueries.capacity
@@ -530,27 +566,20 @@ internal class VulkanRenderDevice(
     }
 
     private fun encode(graph: RenderGraph, slot: Int): Boolean {
-        val target = surfaceExtentSnapshot
         val frame = frames[slot]
         insideFrame = true
+
+        val acquired = acquiredOrNull
+        if (acquired == null) {
+            insideFrame = false
+            return false
+        }
 
         submittedTransferValue = 0L
         submittedComputeValue = 0L
         val uploadStarted = System.nanoTime()
         flushUploads()
         RenderStats.recordUploadTime(System.nanoTime() - uploadStarted)
-
-        val acquireStarted = System.nanoTime()
-        val acquiredImage = swapchain.acquire(frame.imageAvailable)
-        RenderStats.recordGpuWait(System.nanoTime() - acquireStarted)
-
-        acquiredOrNull = acquiredImage ?: run {
-            insideFrame = false
-            if (!rebuildSwapchain(target)) {
-                pendingResize = target
-            }
-            return false
-        }
 
         frame.commandBuffer.reset()
         val recorder = frame.commandBuffer.begin()
@@ -702,26 +731,7 @@ internal class VulkanRenderDevice(
 
         RenderStats.recordSubmit(System.nanoTime() - submitStarted)
 
-        val presentStarted = System.nanoTime()
-        val presented = runCatching {
-            context.withQueueLock {
-                context.presentQueue.present(swapchain.swapchain, acquired.index, renderFinished)
-            }
-        }
-        RenderStats.recordGpuWait(System.nanoTime() - presentStarted)
-        presented.exceptionOrNull()?.let { failure ->
-            if (failure is VulkanResultException && failure.isSwapchainStale) {
-                pendingResize = target
-            } else {
-                throw failure
-            }
-        }
-        if (acquired.suboptimal && target != builtForExtent) {
-            pendingResize = target
-        }
-
         insideFrame = false
-        acquiredOrNull = null
         occlusionQueries.submitted()
         return true
     }
