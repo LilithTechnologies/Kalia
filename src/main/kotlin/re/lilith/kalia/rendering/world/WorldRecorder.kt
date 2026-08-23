@@ -7,23 +7,12 @@ import re.lilith.kalia.gl.MatrixState
 import re.lilith.kalia.platform.KaliaMod
 import re.lilith.kalia.renderer.command.list.CommandListRecorder
 import re.lilith.kalia.renderer.command.list.CommandListReplayer
-import re.lilith.kalia.renderer.command.list.CommandStream
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.pipeline.AttachmentLayout
 
 object WorldRecorder {
-    private val streams = arrayOfNulls<CommandStream>(WorldPhase.VALUES.size)
-    private val submitted = BooleanArray(WorldPhase.VALUES.size)
-
     private var attachments: AttachmentLayout? = null
     private var attachmentsDevice: RenderDevice? = null
-
-    fun beginFrame() {
-        for (stream in streams) {
-            stream?.reset()
-        }
-        submitted.fill(false)
-    }
 
     fun record(
         submissions: WorldSubmissions,
@@ -34,7 +23,7 @@ object WorldRecorder {
     ): Boolean {
         val device = KaliaEngine.device ?: return false
 
-        val stream = streams[phase.ordinal] ?: CommandStream().also { streams[phase.ordinal] = it }
+        val stream = submissions.streamFor(phase)
         val before = stream.commandCount
 
         val recorder = CommandListRecorder(device.surfaceExtent, attachmentsFor(device), stream)
@@ -53,8 +42,8 @@ object WorldRecorder {
             return false
         }
 
-        if (!submitted[phase.ordinal]) {
-            submitted[phase.ordinal] = true
+        if (!submissions.hasRecorded(phase)) {
+            submissions.markRecorded(phase)
             submissions.submit(
                 WorldSubmission.Custom(phase = phase, material = material) { pass ->
                     val started = System.nanoTime()

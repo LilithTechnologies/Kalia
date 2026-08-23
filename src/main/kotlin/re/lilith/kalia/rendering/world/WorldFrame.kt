@@ -22,7 +22,6 @@ object WorldFrame {
 
     fun collect(tickDelta: Float) {
         submissions.reset()
-        WorldRecorder.beginFrame()
         lastSubmissions = 0
 
         WorldFrameTimings.begin()
