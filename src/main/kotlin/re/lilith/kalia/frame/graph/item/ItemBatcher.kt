@@ -40,9 +40,7 @@ object ItemBatcher {
         attribute("instLight", VertexLocations.INSTANCE_LIGHT, VertexAttributeFormat.FLOAT4)
     }
 
-    private val environment = BatchEnvironment()
-
-    private data class GroupKey(
+    internal data class GroupKey(
         val description: GraphicsPipelineDescription,
         val mesh: PersistentMesh,
         val texture: GpuTexture,
@@ -51,41 +49,27 @@ object ItemBatcher {
         val lightmapSampler: GpuSampler,
     )
 
-    private val groups = LinkedHashMap<GroupKey, InstanceArena>()
-    private val instancePool = ArrayDeque<InstanceArena>()
+    private val threadState = ThreadLocal.withInitial { ItemBatchData() }
 
-    private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
-    private var pipelineDevice: RenderDevice? = null
+    private val state: ItemBatchData get() = threadState.get()
 
-    private var lastDescAttachments: AttachmentLayout? = null
-    private var lastDescVertexFormat: VertexFormat? = null
-    private var lastDescRaster: RasterState? = null
-    private var lastDescDepth: DepthState? = null
-    private var lastDescBlend: BlendState? = null
-    private var lastDescColorMask: ColorMask? = null
-    private var lastDescription: GraphicsPipelineDescription? = null
+    internal fun bindContext(data: ItemBatchData) {
+        threadState.set(data)
+    }
 
-    private var lastKeyDescription: GraphicsPipelineDescription? = null
-    private var lastKeyMesh: PersistentMesh? = null
-    private var lastKeyTexture: GpuTexture? = null
-    private var lastKeySampler: GpuSampler? = null
-    private var lastKeyLightmap: GpuTexture? = null
-    private var lastKeyLightmapSampler: GpuSampler? = null
-    private var lastInstances: InstanceArena? = null
-
-    private var environmentVersion = 0L
+    internal fun context(): ItemBatchData = state
 
     fun record(mesh: PersistentMesh, modelView: Matrix4f) {
         val format = mesh.format ?: return
         val encoder = GameFrame.current ?: return
 
-        if (ShaderUniforms.environmentVersion != environmentVersion) {
+        if (ShaderUniforms.environmentVersion != state.environmentVersion) {
             flush()
-            environmentVersion = ShaderUniforms.environmentVersion
+            state.environmentVersion = ShaderUniforms.environmentVersion
         }
 
         val resources = FrameResources.of(encoder.device)
-        environment.open(resources)
+        state.environment.open(resources)
         val texture = KaliaDraw.textureForUnit(0, resources)
         val sampler = KaliaDraw.samplerForUnit(0, resources)
         val lightmap = KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources)
@@ -93,23 +77,23 @@ object ItemBatcher {
         val description = descriptionFor(encoder.attachments, format.format)
 
         val instances: InstanceArena
-        val cached = lastInstances
+        val cached = state.lastInstances
         if (cached != null &&
-            lastKeyDescription === description && lastKeyMesh === mesh &&
-            lastKeyTexture === texture && lastKeySampler === sampler &&
-            lastKeyLightmap === lightmap && lastKeyLightmapSampler === lightmapSampler
+            state.lastKeyDescription === description && state.lastKeyMesh === mesh &&
+            state.lastKeyTexture === texture && state.lastKeySampler === sampler &&
+            state.lastKeyLightmap === lightmap && state.lastKeyLightmapSampler === lightmapSampler
         ) {
             instances = cached
         } else {
             val key = GroupKey(description, mesh, texture, sampler, lightmap, lightmapSampler)
-            instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
-            lastKeyDescription = description
-            lastKeyMesh = mesh
-            lastKeyTexture = texture
-            lastKeySampler = sampler
-            lastKeyLightmap = lightmap
-            lastKeyLightmapSampler = lightmapSampler
-            lastInstances = instances
+            instances = state.groups.getOrPut(key) { state.instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
+            state.lastKeyDescription = description
+            state.lastKeyMesh = mesh
+            state.lastKeyTexture = texture
+            state.lastKeySampler = sampler
+            state.lastKeyLightmap = lightmap
+            state.lastKeyLightmapSampler = lightmapSampler
+            state.lastInstances = instances
         }
         writeInstance(instances.reserve(), modelView)
     }
@@ -120,14 +104,14 @@ object ItemBatcher {
         val blend = GlState.blendState()
         val colorMask = GlState.colorMask()
 
-        val cached = lastDescription
+        val cached = state.lastDescription
         if (cached != null &&
-            lastDescAttachments === attachments &&
-            lastDescVertexFormat === vertexFormat &&
-            lastDescRaster === raster &&
-            lastDescDepth === depth &&
-            lastDescBlend === blend &&
-            lastDescColorMask === colorMask
+            state.lastDescAttachments === attachments &&
+            state.lastDescVertexFormat === vertexFormat &&
+            state.lastDescRaster === raster &&
+            state.lastDescDepth === depth &&
+            state.lastDescBlend === blend &&
+            state.lastDescColorMask === colorMask
         ) {
             return cached
         }
@@ -141,13 +125,13 @@ object ItemBatcher {
             colorMask = colorMask,
             instanceFormat = INSTANCE_FORMAT,
         )
-        lastDescAttachments = attachments
-        lastDescVertexFormat = vertexFormat
-        lastDescRaster = raster
-        lastDescDepth = depth
-        lastDescBlend = blend
-        lastDescColorMask = colorMask
-        lastDescription = created
+        state.lastDescAttachments = attachments
+        state.lastDescVertexFormat = vertexFormat
+        state.lastDescRaster = raster
+        state.lastDescDepth = depth
+        state.lastDescBlend = blend
+        state.lastDescColorMask = colorMask
+        state.lastDescription = created
         return created
     }
 
@@ -184,7 +168,7 @@ object ItemBatcher {
     private fun unorm(value: Float): Byte = (value * 255f + 0.5f).toInt().coerceIn(0, 255).toByte()
 
     fun flush() {
-        if (groups.isEmpty()) {
+        if (state.groups.isEmpty()) {
             return
         }
         val encoder = GameFrame.current
@@ -194,23 +178,23 @@ object ItemBatcher {
         }
         val device = encoder.device
         val resources = FrameResources.of(device)
-        if (pipelineDevice !== device) {
-            pipelines.clear()
-            pipelineDevice = device
+        if (state.pipelineDevice !== device) {
+            state.pipelines.clear()
+            state.pipelineDevice = device
         }
 
-        for ((key, instances) in groups) {
+        for ((key, instances) in state.groups) {
             val vertexBuffer = key.mesh.vertexBuffer ?: continue
             val quadCount = key.mesh.vertexCount / 4
             if (quadCount <= 0) continue
 
-            val pipeline = pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
+            val pipeline = state.pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
             encoder.bindPipeline(pipeline)
             GlBridge.applyDepthBias()
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
             encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
-            environment.apply(encoder)
+            state.environment.apply(encoder)
 
             val data = instances.finish()
             val slice = resources.vertexArena.append(data, data.remaining())
@@ -223,22 +207,22 @@ object ItemBatcher {
     }
 
     private fun recycle() {
-        for (instances in groups.values) {
-            if (instancePool.size < POOL_CAPACITY) {
-                instancePool.addLast(instances)
+        for (instances in state.groups.values) {
+            if (state.instancePool.size < POOL_CAPACITY) {
+                state.instancePool.addLast(instances)
             } else {
                 instances.release()
             }
         }
-        groups.clear()
-        environment.close()
-        lastKeyDescription = null
-        lastKeyMesh = null
-        lastKeyTexture = null
-        lastKeySampler = null
-        lastKeyLightmap = null
-        lastKeyLightmapSampler = null
-        lastInstances = null
+        state.groups.clear()
+        state.environment.close()
+        state.lastKeyDescription = null
+        state.lastKeyMesh = null
+        state.lastKeyTexture = null
+        state.lastKeySampler = null
+        state.lastKeyLightmap = null
+        state.lastKeyLightmapSampler = null
+        state.lastInstances = null
     }
 
     private const val INITIAL_INSTANCES = 64

@@ -44,15 +44,22 @@ object ShadowBatcher {
         dstAlpha = BlendFactor.ONE_MINUS_SRC_ALPHA,
     )
 
-    private var pipeline: GpuPipeline? = null
-    private var pipelineDevice: RenderDevice? = null
+    private val threadState = ThreadLocal.withInitial { ShadowBatchData() }
 
-    private var instances = ByteBuffer.allocateDirect(INITIAL_CAPACITY).order(ByteOrder.nativeOrder())
-    private var instanceAddress = MemoryAccess.addressOf(instances)
-    private var count = 0
+    private val state: ShadowBatchData get() = threadState.get()
 
-    @JvmField
-    var texture: GlTexture? = null
+    internal fun bindContext(data: ShadowBatchData) {
+        threadState.set(data)
+    }
+
+    internal fun context(): ShadowBatchData = state
+
+    @JvmStatic
+    var texture: GlTexture?
+        get() = state.texture
+        set(value) {
+            state.texture = value
+        }
 
     fun record(
         originX: Float, originY: Float, originZ: Float,
@@ -62,15 +69,15 @@ object ShadowBatcher {
     ) {
         if (GameFrame.current == null) return
 
-        if (instances.remaining() < BYTES_PER_INSTANCE) {
-            val grown = ByteBuffer.allocateDirect(instances.capacity() * 2).order(ByteOrder.nativeOrder())
-            instances.flip()
-            grown.put(instances)
-            instances = grown
-            instanceAddress = MemoryAccess.addressOf(instances)
+        if (state.instances.remaining() < BYTES_PER_INSTANCE) {
+            val grown = ByteBuffer.allocateDirect(state.instances.capacity() * 2).order(ByteOrder.nativeOrder())
+            state.instances.flip()
+            grown.put(state.instances)
+            state.instances = grown
+            state.instanceAddress = MemoryAccess.addressOf(state.instances)
         }
         val m = MatrixState.modelView()
-        var p = instanceAddress + instances.position()
+        var p = state.instanceAddress + state.instances.position()
         MemoryAccess.putFloat(p, originX); p += 4
         MemoryAccess.putFloat(p, originY); p += 4
         MemoryAccess.putFloat(p, originZ); p += 4
@@ -94,8 +101,8 @@ object ShadowBatcher {
         MemoryAccess.putFloat(p, uvU); p += 4
         MemoryAccess.putFloat(p, alpha)
 
-        instances.position(instances.position() + BYTES_PER_INSTANCE)
-        count++
+        state.instances.position(state.instances.position() + BYTES_PER_INSTANCE)
+        state.count++
     }
 
     private fun textureFor(bound: GlTexture?, resources: FrameResources): GpuTexture =
@@ -105,22 +112,22 @@ object ShadowBatcher {
         bound?.let { resources.sampler(it.sampler) } ?: resources.defaultSampler
 
     fun flush() {
-        if (count == 0) {
+        if (state.count == 0) {
             return
         }
         val encoder = GameFrame.current
         if (encoder == null) {
-            count = 0
-            instances.clear()
+            state.count = 0
+            state.instances.clear()
             return
         }
         val device = encoder.device
-        if (pipelineDevice !== device) {
-            pipeline?.close()
-            pipeline = null
-            pipelineDevice = device
+        if (state.pipelineDevice !== device) {
+            state.pipeline?.close()
+            state.pipeline = null
+            state.pipelineDevice = device
         }
-        val builtPipeline = pipeline ?: device.createPipeline(
+        val builtPipeline = state.pipeline ?: device.createPipeline(
             GraphicsPipelineDescription(
                 program = ShadowShaders.program,
                 vertexFormat = ShadowMesh.VERTEX_FORMAT,
@@ -130,7 +137,7 @@ object ShadowBatcher {
                 blend = BLEND,
                 instanceFormat = INSTANCE_FORMAT,
             ),
-        ).also { pipeline = it }
+        ).also { state.pipeline = it }
 
         val resources = FrameResources.of(device)
         val bound = texture
@@ -146,16 +153,16 @@ object ShadowBatcher {
         )
         encoder.pushConstants(ShaderUniforms.pushConstants())
 
-        instances.flip()
-        val slice = resources.vertexArena.append(instances, instances.remaining())
+        state.instances.flip()
+        val slice = resources.vertexArena.append(state.instances, state.instances.remaining())
         encoder.bindVertexBuffer(0, ShadowMesh.vertices(device))
         encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
         encoder.bindIndexBuffer(ShadowMesh.indices(device), IndexFormat.UINT32)
-        encoder.drawIndexed(ShadowMesh.INDEX_COUNT, count, 0, 0, 0)
+        encoder.drawIndexed(ShadowMesh.INDEX_COUNT, state.count, 0, 0, 0)
 
-        instances.clear()
-        count = 0
+        state.instances.clear()
+        state.count = 0
     }
 
-    private const val INITIAL_CAPACITY = 256 * BYTES_PER_INSTANCE
+    internal const val INITIAL_CAPACITY = 256 * BYTES_PER_INSTANCE
 }

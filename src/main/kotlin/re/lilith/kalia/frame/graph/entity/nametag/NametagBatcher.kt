@@ -42,65 +42,50 @@ object NametagBatcher {
         attribute("instAlphaCutout", 7, VertexAttributeFormat.FLOAT)
     }
 
-    private data class GroupKey(
+    internal data class GroupKey(
         val description: GraphicsPipelineDescription,
         val texture: GpuTexture,
         val sampler: GpuSampler,
     )
 
-    private val groups = LinkedHashMap<GroupKey, InstanceArena>()
-    private val instancePool = ArrayDeque<InstanceArena>()
-    private val environment = BatchEnvironment()
+    private val threadState = ThreadLocal.withInitial { NametagBatchData() }
 
-    private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
-    private var pipelineDevice: RenderDevice? = null
+    private val state: NametagBatchData get() = threadState.get()
 
-    private var lastDescAttachments: AttachmentLayout? = null
-    private var lastDescRaster: RasterState? = null
-    private var lastDescDepth: DepthState? = null
-    private var lastDescBlend: BlendState? = null
-    private var lastDescColorMask: ColorMask? = null
-    private var lastDescription: GraphicsPipelineDescription? = null
+    internal fun bindContext(data: NametagBatchData) {
+        threadState.set(data)
+    }
 
-    private var environmentVersion = 0L
-    private var biasConstant = 0f
-    private var biasSlope = 0f
-    private var lineWidth = 1f
-
-    private var lastKeyDescription: GraphicsPipelineDescription? = null
-    private var lastKeyTexture: GpuTexture? = null
-    private var lastKeySampler: GpuSampler? = null
-    private var lastInstances: InstanceArena? = null
-    private var activeInstances: InstanceArena? = null
+    internal fun context(): NametagBatchData = state
 
     fun beginLabel() {
         if (GameFrame.current == null) return
-        if (ShaderUniforms.environmentVersion != environmentVersion ||
-            GlState.lineWidth != lineWidth ||
-            GlState.effectiveDepthBiasConstant() != biasConstant ||
-            GlState.effectiveDepthBiasSlope() != biasSlope
+        if (ShaderUniforms.environmentVersion != state.environmentVersion ||
+            GlState.lineWidth != state.lineWidth ||
+            GlState.effectiveDepthBiasConstant() != state.biasConstant ||
+            GlState.effectiveDepthBiasSlope() != state.biasSlope
         ) {
             flush()
-            environmentVersion = ShaderUniforms.environmentVersion
-            biasConstant = GlState.effectiveDepthBiasConstant()
-            biasSlope = GlState.effectiveDepthBiasSlope()
-            lineWidth = GlState.lineWidth
+            state.environmentVersion = ShaderUniforms.environmentVersion
+            state.biasConstant = GlState.effectiveDepthBiasConstant()
+            state.biasSlope = GlState.effectiveDepthBiasSlope()
+            state.lineWidth = GlState.lineWidth
         }
     }
 
     fun beginSegment() {
         val resources = beginInstance() ?: run {
-            activeInstances = null
+            state.activeInstances = null
             return
         }
-        activeInstances = instancesFor(
+        state.activeInstances = instancesFor(
             KaliaDraw.textureForUnit(0, resources),
             KaliaDraw.samplerForUnit(0, resources),
         )
     }
 
     fun recordGlyphs(modelView: Matrix4f, glyphs: FloatArray, baseX: Float, baseY: Float, alphaByte: Int) {
-        val instances = activeInstances ?: return
+        val instances = state.activeInstances ?: return
         val count = glyphs.size / FLOATS_PER_GLYPH
         if (count == 0) return
 
@@ -146,28 +131,28 @@ object NametagBatcher {
         val resources = beginInstance() ?: return
         val instances = instancesFor(resources.whiteTexture, resources.defaultSampler) ?: return
         writeInstance(instances.reserve(), modelView, x0, y0, x1, y1, 0f, 0f, 1f, 1f, rgba)
-        activeInstances = null
+        state.activeInstances = null
     }
 
     private fun beginInstance(): FrameResources? {
         val encoder = GameFrame.current ?: return null
-        return FrameResources.of(encoder.device).also(environment::open)
+        return FrameResources.of(encoder.device).also(state.environment::open)
     }
 
     private fun instancesFor(texture: GpuTexture, sampler: GpuSampler): InstanceArena? {
         val encoder = GameFrame.current ?: return null
         val description = descriptionFor(encoder.attachments)
 
-        val cached = lastInstances
-        if (cached != null && lastKeyDescription === description && lastKeyTexture === texture && lastKeySampler === sampler) {
+        val cached = state.lastInstances
+        if (cached != null && state.lastKeyDescription === description && state.lastKeyTexture === texture && state.lastKeySampler === sampler) {
             return cached
         }
         val key = GroupKey(description, texture, sampler)
-        val instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
-        lastKeyDescription = description
-        lastKeyTexture = texture
-        lastKeySampler = sampler
-        lastInstances = instances
+        val instances = state.groups.getOrPut(key) { state.instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
+        state.lastKeyDescription = description
+        state.lastKeyTexture = texture
+        state.lastKeySampler = sampler
+        state.lastInstances = instances
         return instances
     }
 
@@ -177,13 +162,13 @@ object NametagBatcher {
         val blend = GlState.blendState()
         val colorMask = GlState.colorMask()
 
-        val cached = lastDescription
+        val cached = state.lastDescription
         if (cached != null &&
-            lastDescAttachments === attachments &&
-            lastDescRaster === raster &&
-            lastDescDepth === depth &&
-            lastDescBlend === blend &&
-            lastDescColorMask === colorMask
+            state.lastDescAttachments === attachments &&
+            state.lastDescRaster === raster &&
+            state.lastDescDepth === depth &&
+            state.lastDescBlend === blend &&
+            state.lastDescColorMask === colorMask
         ) {
             return cached
         }
@@ -197,12 +182,12 @@ object NametagBatcher {
             colorMask = colorMask,
             instanceFormat = INSTANCE_FORMAT,
         )
-        lastDescAttachments = attachments
-        lastDescRaster = raster
-        lastDescDepth = depth
-        lastDescBlend = blend
-        lastDescColorMask = colorMask
-        lastDescription = created
+        state.lastDescAttachments = attachments
+        state.lastDescRaster = raster
+        state.lastDescDepth = depth
+        state.lastDescBlend = blend
+        state.lastDescColorMask = colorMask
+        state.lastDescription = created
         return created
     }
 
@@ -246,7 +231,7 @@ object NametagBatcher {
     }
 
     fun flush() {
-        if (groups.isEmpty()) {
+        if (state.groups.isEmpty()) {
             return
         }
         val encoder = GameFrame.current
@@ -256,21 +241,21 @@ object NametagBatcher {
         }
         val device = encoder.device
         val resources = FrameResources.of(device)
-        if (pipelineDevice !== device) {
-            pipelines.clear()
-            pipelineDevice = device
+        if (state.pipelineDevice !== device) {
+            state.pipelines.clear()
+            state.pipelineDevice = device
         }
 
         val quadVertices = NametagMesh.vertices(device)
         val quadIndices = NametagMesh.indices(device)
 
-        for ((key, instances) in groups) {
-            val pipeline = pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
+        for ((key, instances) in state.groups) {
+            val pipeline = state.pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
             encoder.bindPipeline(pipeline)
             GlBridge.applyDepthBias()
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
-            environment.apply(encoder)
+            state.environment.apply(encoder)
 
             val data = instances.finish()
             val slice = resources.vertexArena.append(data, data.remaining())
@@ -283,20 +268,20 @@ object NametagBatcher {
     }
 
     private fun recycle() {
-        for (instances in groups.values) {
-            if (instancePool.size < POOL_CAPACITY) {
-                instancePool.addLast(instances)
+        for (instances in state.groups.values) {
+            if (state.instancePool.size < POOL_CAPACITY) {
+                state.instancePool.addLast(instances)
             } else {
                 instances.release()
             }
         }
-        groups.clear()
-        environment.close()
-        lastKeyDescription = null
-        lastKeyTexture = null
-        lastKeySampler = null
-        lastInstances = null
-        activeInstances = null
+        state.groups.clear()
+        state.environment.close()
+        state.lastKeyDescription = null
+        state.lastKeyTexture = null
+        state.lastKeySampler = null
+        state.lastInstances = null
+        state.activeInstances = null
     }
 
     private const val INITIAL_INSTANCES = 256

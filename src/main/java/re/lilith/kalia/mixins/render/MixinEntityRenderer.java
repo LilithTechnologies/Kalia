@@ -111,7 +111,7 @@ public class MixinEntityRenderer<T extends Entity> {
 
         this.dispatcher.textureManager.bindTexture(SHADOW_TEXTURE);
         Texture texture = this.dispatcher.textureManager.getTexture(SHADOW_TEXTURE);
-        ShadowBatcher.texture = TextureTable.INSTANCE.get(texture.getGlId());
+        ShadowBatcher.setTexture(TextureTable.INSTANCE.get(texture.getGlId()));
 
         World world = this.getWorld();
         float g = this.shadowSize;
