@@ -456,10 +456,15 @@ internal class VulkanRenderDevice(
     override val frameSlot: Int get() = frameIndex
 
     private var framePrepared = false
+    private var advancePending = false
 
     override fun beginFrame() {
         if (framePrepared) {
             return
+        }
+        if (advancePending) {
+            advancePending = false
+            frameIndex = (frameIndex + 1) % frames.size
         }
         val frame = frames[frameIndex]
         frame.inFlightFence.wait()
@@ -662,7 +667,7 @@ internal class VulkanRenderDevice(
 
         insideFrame = false
         acquiredOrNull = null
-        frameIndex = (frameIndex + 1) % frames.size
+        advancePending = true
         framePrepared = false
         return true
     }
@@ -757,6 +762,7 @@ internal class VulkanRenderDevice(
         frames.forEach(VulkanFrameSlot::close)
         frames = List(FRAMES_IN_FLIGHT) { VulkanFrameSlot.create(context) }
         frameIndex = 0
+        advancePending = false
         releaseTarget = null
         // The slots are new, so whatever was prepared before belongs to closed objects.
         framePrepared = false
