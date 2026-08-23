@@ -19,8 +19,7 @@ object WorldExecutor {
 
     private var lastMaterial: WorldMaterial? = null
 
-    fun draw(pass: PassContext, submissions: WorldSubmissions, phase: WorldPhase): Int {
-        val state = WorldFrameState
+    fun draw(pass: PassContext, state: WorldFrameState, submissions: WorldSubmissions, phase: WorldPhase): Int {
         val work = submissions[phase]
         if (!state.active || work.isEmpty()) {
             return 0

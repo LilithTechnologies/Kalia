@@ -33,8 +33,7 @@ object WorldExtract {
     private val inverseView = Matrix4f()
     private val frustumOffset = Vector3f()
 
-    fun extract(tickDelta: Float): Boolean {
-        val state = WorldFrameState
+    fun extract(state: WorldFrameState, tickDelta: Float): Boolean {
         state.reset()
 
         val client = MinecraftClient.getInstance() ?: return false

@@ -14,8 +14,11 @@ import re.lilith.kalia.rendering.world.terrain.TerrainSubmitter
 
 object WorldFrame {
     private val submissions = WorldSubmissions()
+    private val frameState = WorldFrameState()
 
-    val isActive get() = WorldFrameState.active
+    val state: WorldFrameState get() = frameState
+
+    val isActive get() = frameState.active
 
     var lastSubmissions = 0
         private set
@@ -25,37 +28,37 @@ object WorldFrame {
         lastSubmissions = 0
 
         WorldFrameTimings.begin()
-        val active = WorldExtract.extract(tickDelta)
+        val active = WorldExtract.extract(frameState, tickDelta)
         WorldFrameTimings.end(WorldFrameTimings.EXTRACT)
         if (!active) {
             return
         }
 
-        val terrain = TerrainSubmitter.prepare(WorldFrameState)
+        val terrain = TerrainSubmitter.prepare(frameState)
         WorldFrameTimings.end(WorldFrameTimings.TERRAIN_PREPARE)
 
-        SkySubmitter.submit(WorldFrameState, submissions)
+        SkySubmitter.submit(frameState, submissions)
         WorldFrameTimings.end(WorldFrameTimings.SKY)
 
-        CloudSubmitter.submit(WorldFrameState, submissions)
+        CloudSubmitter.submit(frameState, submissions)
         WorldFrameTimings.end(WorldFrameTimings.CLOUDS)
 
         if (terrain) {
-            TerrainSubmitter.submit(WorldFrameState, submissions)
+            TerrainSubmitter.submit(frameState, submissions)
         }
         WorldFrameTimings.end(WorldFrameTimings.TERRAIN_SUBMIT)
 
-        EntitySubmitter.submit(WorldFrameState, submissions)
+        EntitySubmitter.submit(frameState, submissions)
         WorldFrameTimings.end(WorldFrameTimings.ENTITIES)
 
-        OverlaySubmitter.submit(WorldFrameState, submissions)
+        OverlaySubmitter.submit(frameState, submissions)
         WorldFrameTimings.end(WorldFrameTimings.OVERLAYS)
 
-        ParticleSubmitter.submit(WorldFrameState, submissions)
+        ParticleSubmitter.submit(frameState, submissions)
         WorldFrameTimings.end(WorldFrameTimings.PARTICLES)
 
-        WeatherSubmitter.submit(WorldFrameState, submissions)
-        HandSubmitter.submit(WorldFrameState, submissions)
+        WeatherSubmitter.submit(frameState, submissions)
+        HandSubmitter.submit(frameState, submissions)
         WorldFrameTimings.end(WorldFrameTimings.WEATHER_HAND)
 
         lastSubmissions = submissions.size
@@ -70,14 +73,14 @@ object WorldFrame {
     fun draw(pass: PassContext) {
         GameFrame.record(pass) {
             for (phase in WorldPhase.VALUES) {
-                WorldExecutor.draw(pass, submissions, phase)
+                WorldExecutor.draw(pass, frameState, submissions, phase)
             }
         }
     }
 
     fun discard() {
         submissions.reset()
-        WorldFrameState.reset()
+        frameState.reset()
         lastSubmissions = 0
     }
 
