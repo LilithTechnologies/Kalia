@@ -11,67 +11,67 @@ import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 
 object UI {
-    val state = GuiRenderState()
-    val scissors = GuiScissorStack()
-    val textures = GuiTextureRegistry()
+    private val threadState = ThreadLocal.withInitial { GuiFrameData() }
+
+    private val frame: GuiFrameData get() = threadState.get()
+
+    fun bindContext(data: GuiFrameData) {
+        threadState.set(data)
+    }
+
+    fun context(): GuiFrameData = frame
+
+    val state: GuiRenderState get() = frame.state
+    val scissors: GuiScissorStack get() = frame.scissors
+    val textures: GuiTextureRegistry get() = frame.textures
 
     private var renderer: GuiRenderer? = null
     private var rendererDevice: RenderDevice? = null
 
-    var width = 1f
-        private set
+    val width: Float get() = frame.width
 
-    var height = 1f
-        private set
+    val height: Float get() = frame.height
 
-    var layer = GuiLayer.SCREEN
-
-    var phase = GuiBlurPhase.AFTER_BLUR
-
-    var material
-        get() = pinnedMaterial ?: GuiMaterial.current()
+    var layer: GuiLayer
+        get() = frame.layer
         set(value) {
-            pinnedMaterial = value
+            frame.layer = value
         }
 
-    private var pinnedMaterial: GuiMaterial? = null
+    var phase: GuiBlurPhase
+        get() = frame.phase
+        set(value) {
+            frame.phase = value
+        }
 
-    var isRecording = false
-        private set
+    var material
+        get() = frame.pinnedMaterial ?: GuiMaterial.current()
+        set(value) {
+            frame.pinnedMaterial = value
+        }
+
+    val isRecording: Boolean get() = frame.isRecording
 
     fun begin(guiWidth: Float, guiHeight: Float) {
-        state.reset()
-        scissors.reset()
-        textures.reset()
-        width = guiWidth
-        height = guiHeight
-        layer = GuiLayer.SCREEN
-        phase = GuiBlurPhase.AFTER_BLUR
-        pinnedMaterial = null
-        isRecording = true
-        prepared = false
+        frame.reset(guiWidth, guiHeight)
     }
 
     fun prepare(device: RenderDevice) {
-        if (prepared) {
+        if (frame.prepared) {
             return
         }
-        prepared = true
-        isRecording = false
+        frame.prepared = true
+        frame.isRecording = false
 
-        lastElements = state.size
-        lastItemElements = state.countLayer(GuiLayer.ITEM)
+        frame.lastElements = state.size
+        frame.lastItemElements = state.countLayer(GuiLayer.ITEM)
 
         rendererFor(device).prepare(state, width, height)
     }
 
-    var lastElements = 0
-        private set
+    val lastElements: Int get() = frame.lastElements
 
-    var lastItemElements = 0
-        private set
-
-    private var prepared = false
+    val lastItemElements: Int get() = frame.lastItemElements
 
     fun draw(pass: PassContext, phase: GuiBlurPhase? = null) {
         rendererFor(pass.device).execute(pass, scissors, textures, phase)
@@ -82,7 +82,7 @@ object UI {
     }
 
     fun discard() {
-        isRecording = false
+        frame.isRecording = false
         state.reset()
         scissors.reset()
         textures.reset()
@@ -291,11 +291,11 @@ object UI {
     }
 
     fun pinMaterial(target: GuiMaterial) {
-        pinnedMaterial = target
+        frame.pinnedMaterial = target
     }
 
     fun releaseMaterial() {
-        pinnedMaterial = null
+        frame.pinnedMaterial = null
     }
 
     var group: Int
