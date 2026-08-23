@@ -11,41 +11,63 @@ import java.io.File
 import java.nio.ByteBuffer
 
 object TextureTable {
+    private val lock = Any()
     private val textures = Int2ObjectOpenHashMap<GlTexture>()
     private var nextId = 1
 
-    private var lastId = 0
-    private var lastTexture: GlTexture? = null
+    @Volatile
+    private var epoch = 0
 
-    fun generate(): Int {
+    private val threadState = ThreadLocal.withInitial { TextureTableData() }
+
+    private val state: TextureTableData get() = threadState.get()
+
+    internal fun bindContext(data: TextureTableData) {
+        threadState.set(data)
+    }
+
+    internal fun context(): TextureTableData = state
+
+    private fun current(): TextureTableData {
+        val active = state
+        val currentEpoch = epoch
+        if (active.epoch != currentEpoch) {
+            active.epoch = currentEpoch
+            active.forget()
+        }
+        return active
+    }
+
+    fun generate(): Int = synchronized(lock) {
         val id = nextId++
         textures[id] = GlTexture(id)
-        return id
+        id
     }
 
     fun delete(id: Int) {
-        if (id == lastId) {
-            lastId = 0
-            lastTexture = null
+        val removed = synchronized(lock) {
+            epoch++
+            textures.remove(id)
         }
-        textures.remove(id)?.close()
+        removed?.close()
     }
 
     fun get(id: Int): GlTexture? {
         if (id <= 0) {
             return null
         }
-        if (id == lastId) {
-            return lastTexture
+        val active = current()
+        if (id == active.lastId) {
+            return active.lastTexture
         }
-        var texture = textures.get(id)
-        if (texture == null) {
-            nextId = maxOf(nextId, id + 1)
-            texture = GlTexture(id)
-            textures.put(id, texture)
+        val texture = synchronized(lock) {
+            textures.get(id) ?: GlTexture(id).also {
+                nextId = maxOf(nextId, id + 1)
+                textures.put(id, it)
+            }
         }
-        lastId = id
-        lastTexture = texture
+        active.lastId = id
+        active.lastTexture = texture
         return texture
     }
 
@@ -64,16 +86,14 @@ object TextureTable {
         } ?: 0
 
         val fits = width in 1..limit && height in 1..limit
-        proxyWidth = if (fits) width else 0
-        proxyHeight = if (fits) height else 0
+        val active = state
+        active.proxyWidth = if (fits) width else 0
+        active.proxyHeight = if (fits) height else 0
     }
 
-    private var proxyWidth = 0
-    private var proxyHeight = 0
-
     fun proxyParameter(name: Int): Int = when (name) {
-        GL_TEXTURE_WIDTH -> proxyWidth
-        GL_TEXTURE_HEIGHT -> proxyHeight
+        GL_TEXTURE_WIDTH -> state.proxyWidth
+        GL_TEXTURE_HEIGHT -> state.proxyHeight
         else -> 0
     }
 
@@ -110,14 +130,17 @@ object TextureTable {
         if (System.getProperty("kalia.dumpMips") != null) {
             Runtime.getRuntime().addShutdownHook(Thread {
                 val directory = File("kalia-mip-dump").apply { mkdirs() }
-                textures.values.forEach { it.dumpStaging(directory) }
+                synchronized(lock) { textures.values.forEach { it.dumpStaging(directory) } }
             })
         }
     }
 
     fun clear() {
-        textures.values.forEach(GlTexture::close)
-        textures.clear()
+        synchronized(lock) {
+            epoch++
+            textures.values.forEach(GlTexture::close)
+            textures.clear()
+        }
     }
 
     private fun device(): RenderDevice? {
