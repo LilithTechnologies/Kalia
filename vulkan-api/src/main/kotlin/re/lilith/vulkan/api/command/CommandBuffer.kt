@@ -1,5 +1,6 @@
 package re.lilith.vulkan.api.command
 
+import org.lwjgl.system.MemoryUtil
 import org.lwjgl.vulkan.VK10
 import org.lwjgl.vulkan.VkCommandBuffer
 import org.lwjgl.vulkan.VkCommandBufferBeginInfo
@@ -24,6 +25,8 @@ class CommandBuffer internal constructor(
         get() = pool.device
 
     private val renderingInfos = HashMap<RenderingInfo, NativeRenderingInfo>()
+
+    internal val vertexBindScratch: Long = MemoryUtil.nmemAllocChecked(VERTEX_BIND_SCRATCH_BYTES)
 
     internal fun nativeRenderingInfo(info: RenderingInfo, useExtension: Boolean): NativeRenderingInfo {
         renderingInfos[info]?.let { return it }
@@ -60,9 +63,11 @@ class CommandBuffer internal constructor(
     override fun closeResource() {
         renderingInfos.values.forEach(NativeRenderingInfo::close)
         renderingInfos.clear()
+        MemoryUtil.nmemFree(vertexBindScratch)
     }
 
     private companion object {
         const val MAX_CACHED_RENDERING_INFOS = 64
+        const val VERTEX_BIND_SCRATCH_BYTES = 16L
     }
 }

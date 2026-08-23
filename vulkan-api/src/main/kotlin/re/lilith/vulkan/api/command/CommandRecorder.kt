@@ -1,7 +1,6 @@
 package re.lilith.vulkan.api.command
 
 import org.lwjgl.system.MemoryUtil.memPutLong
-import org.lwjgl.system.MemoryUtil.nmemAlloc
 import org.lwjgl.vulkan.*
 import re.lilith.vulkan.api.core.Version
 import re.lilith.vulkan.api.internal.vk.VulkanConstants
@@ -14,9 +13,6 @@ import re.lilith.vulkan.api.types.enum.SubpassContents
 import re.lilith.vulkan.api.types.geometry.Rect2D
 import re.lilith.vulkan.api.types.geometry.Viewport
 import re.lilith.vulkan.api.types.transfer.BufferCopy
-
-private val pBuffers = nmemAlloc(8) // one VkBuffer handle
-private val pOffsets = nmemAlloc(8) // one VkDeviceSize
 
 class CommandRecorder internal constructor(
     val commandBuffer: CommandBuffer,
@@ -60,15 +56,16 @@ class CommandRecorder internal constructor(
     }
 
     fun bindVertexBuffer(binding: Int, buffer: Buffer, offset: Long = 0L) = apply {
-        memPutLong(pBuffers, buffer.handle)
-        memPutLong(pOffsets, offset)
+        val scratch = commandBuffer.vertexBindScratch
+        memPutLong(scratch, buffer.handle)
+        memPutLong(scratch + Long.SIZE_BYTES, offset)
 
         VK10.nvkCmdBindVertexBuffers(
             commandBuffer.handle,
             binding,
             1,
-            pBuffers,
-            pOffsets
+            scratch,
+            scratch + Long.SIZE_BYTES
         )
     }
 
