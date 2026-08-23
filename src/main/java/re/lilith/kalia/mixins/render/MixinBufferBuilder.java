@@ -48,8 +48,60 @@ public abstract class MixinBufferBuilder {
     private void grow(int size) {
     }
 
-    @Shadow
+    @Unique
+    private VertexFormat sulfide$layoutFormat;
+    @Unique
+    private int[] sulfide$offsets;
+    @Unique
+    private VertexFormatElement[] sulfide$elements;
+    @Unique
+    private int[] sulfide$nextElement;
+    @Unique
+    private int sulfide$stride;
+
+    @Unique
+    private void sulfide$refreshLayout() {
+        VertexFormat active = format;
+        int count = active.getSize();
+
+        int[] offsets = new int[count];
+        VertexFormatElement[] elements = new VertexFormatElement[count];
+        for (int i = 0; i < count; i++) {
+            offsets[i] = active.getIndex(i);
+            elements[i] = active.get(i);
+        }
+
+        int[] next = new int[count];
+        for (int i = 0; i < count; i++) {
+            int candidate = i;
+            for (int step = 0; step < count; step++) {
+                candidate = (candidate + 1) % count;
+                if (elements[candidate].getType() != VertexFormatElement.Type.PADDING) {
+                    break;
+                }
+            }
+            next[i] = candidate;
+        }
+
+        sulfide$offsets = offsets;
+        sulfide$elements = elements;
+        sulfide$nextElement = next;
+        sulfide$stride = active.getVertexSize();
+        sulfide$layoutFormat = active;
+    }
+
+    /**
+     * @reason Advance through a cached layout instead of re-reading boxed offsets from the format
+     * @author Lunasa
+     */
+    @Overwrite
     private void nextElement() {
+        if (format != sulfide$layoutFormat) {
+            sulfide$refreshLayout();
+        }
+        int next = sulfide$nextElement[currentElementId];
+        currentElementId = next;
+        currentElement = sulfide$elements[next];
     }
 
     @Unique
@@ -76,6 +128,7 @@ public abstract class MixinBufferBuilder {
     @Inject(method = "begin", at = @At("RETURN"))
     private void sulfide$afterBegin(int drawMode, VertexFormat fmt, CallbackInfo ci) {
         sulfide$refreshAddr();
+        sulfide$refreshLayout();
     }
 
     @Inject(method = "grow", at = @At("RETURN"))
@@ -85,9 +138,12 @@ public abstract class MixinBufferBuilder {
 
     @Unique
     private long sulfide$elementPtr() {
+        if (format != sulfide$layoutFormat) {
+            sulfide$refreshLayout();
+        }
         return sulfide$addr
-                + (long) vertexCount * format.getVertexSize()
-                + format.getIndex(currentElementId);
+                + (long) vertexCount * sulfide$stride
+                + sulfide$offsets[currentElementId];
     }
 
     /**
