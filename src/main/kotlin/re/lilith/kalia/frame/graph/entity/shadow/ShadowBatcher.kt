@@ -67,17 +67,18 @@ object ShadowBatcher {
         uvR: Float, uvS: Float, uvT: Float, uvU: Float,
         alpha: Float,
     ) {
+        val active = state
         if (GameFrame.current == null) return
 
-        if (state.instances.remaining() < BYTES_PER_INSTANCE) {
-            val grown = ByteBuffer.allocateDirect(state.instances.capacity() * 2).order(ByteOrder.nativeOrder())
-            state.instances.flip()
-            grown.put(state.instances)
-            state.instances = grown
-            state.instanceAddress = MemoryAccess.addressOf(state.instances)
+        if (active.instances.remaining() < BYTES_PER_INSTANCE) {
+            val grown = ByteBuffer.allocateDirect(active.instances.capacity() * 2).order(ByteOrder.nativeOrder())
+            active.instances.flip()
+            grown.put(active.instances)
+            active.instances = grown
+            active.instanceAddress = MemoryAccess.addressOf(active.instances)
         }
         val m = MatrixState.modelView()
-        var p = state.instanceAddress + state.instances.position()
+        var p = active.instanceAddress + active.instances.position()
         MemoryAccess.putFloat(p, originX); p += 4
         MemoryAccess.putFloat(p, originY); p += 4
         MemoryAccess.putFloat(p, originZ); p += 4
@@ -101,8 +102,8 @@ object ShadowBatcher {
         MemoryAccess.putFloat(p, uvU); p += 4
         MemoryAccess.putFloat(p, alpha)
 
-        state.instances.position(state.instances.position() + BYTES_PER_INSTANCE)
-        state.count++
+        active.instances.position(active.instances.position() + BYTES_PER_INSTANCE)
+        active.count++
     }
 
     private fun textureFor(bound: GlTexture?, resources: FrameResources): GpuTexture =
@@ -112,22 +113,23 @@ object ShadowBatcher {
         bound?.let { resources.sampler(it.sampler) } ?: resources.defaultSampler
 
     fun flush() {
-        if (state.count == 0) {
+        val active = state
+        if (active.count == 0) {
             return
         }
         val encoder = GameFrame.current
         if (encoder == null) {
-            state.count = 0
-            state.instances.clear()
+            active.count = 0
+            active.instances.clear()
             return
         }
         val device = encoder.device
-        if (state.pipelineDevice !== device) {
-            state.pipeline?.close()
-            state.pipeline = null
-            state.pipelineDevice = device
+        if (active.pipelineDevice !== device) {
+            active.pipeline?.close()
+            active.pipeline = null
+            active.pipelineDevice = device
         }
-        val builtPipeline = state.pipeline ?: device.createPipeline(
+        val builtPipeline = active.pipeline ?: device.createPipeline(
             GraphicsPipelineDescription(
                 program = ShadowShaders.program,
                 vertexFormat = ShadowMesh.VERTEX_FORMAT,
@@ -137,7 +139,7 @@ object ShadowBatcher {
                 blend = BLEND,
                 instanceFormat = INSTANCE_FORMAT,
             ),
-        ).also { state.pipeline = it }
+        ).also { active.pipeline = it }
 
         val resources = FrameResources.of(device)
         val bound = texture
@@ -153,15 +155,15 @@ object ShadowBatcher {
         )
         encoder.pushConstants(ShaderUniforms.pushConstants())
 
-        state.instances.flip()
-        val slice = resources.vertexArena.append(state.instances, state.instances.remaining())
+        active.instances.flip()
+        val slice = resources.vertexArena.append(active.instances, active.instances.remaining())
         encoder.bindVertexBuffer(0, ShadowMesh.vertices(device))
         encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
         encoder.bindIndexBuffer(ShadowMesh.indices(device), IndexFormat.UINT32)
-        encoder.drawIndexed(ShadowMesh.INDEX_COUNT, state.count, 0, 0, 0)
+        encoder.drawIndexed(ShadowMesh.INDEX_COUNT, active.count, 0, 0, 0)
 
-        state.instances.clear()
-        state.count = 0
+        active.instances.clear()
+        active.count = 0
     }
 
     internal const val INITIAL_CAPACITY = 256 * BYTES_PER_INSTANCE

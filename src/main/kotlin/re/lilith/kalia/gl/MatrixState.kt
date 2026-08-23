@@ -30,9 +30,10 @@ object MatrixState {
         }
 
     fun matrixMode(glMode: Int) {
-        if (state.mode != glMode) {
-            state.mode = glMode
-            state.cached = null
+        val active = state
+        if (active.mode != glMode) {
+            active.mode = glMode
+            active.cached = null
         }
     }
 
@@ -47,15 +48,17 @@ object MatrixState {
     fun texture(): Matrix4f = textureStack(activeTextureUnit).last()
 
     fun pushMatrix() {
-        state.cached = null
-        val stack = stackFor(state.mode)
+        val active = state
+        active.cached = null
+        val stack = stackFor(active.mode)
         stack.addLast(borrow(stack.last()))
         markDirty()
     }
 
     fun popMatrix() {
-        state.cached = null
-        val stack = stackFor(state.mode)
+        val active = state
+        active.cached = null
+        val stack = stackFor(active.mode)
         if (stack.size > 1) {
             release(stack.removeLast())
         }
@@ -167,25 +170,27 @@ object MatrixState {
     }
 
     fun flush() {
-        if (state.dirtyModelView) {
-            state.dirtyModelView = false
+        val active = state
+        if (active.dirtyModelView) {
+            active.dirtyModelView = false
             ShaderUniforms.setModelView(modelView())
         }
-        if (state.dirtyProjection) {
-            state.dirtyProjection = false
+        if (active.dirtyProjection) {
+            active.dirtyProjection = false
             ShaderUniforms.setProjection(projection())
         }
-        if (state.dirtyTexture) {
-            state.dirtyTexture = false
+        if (active.dirtyTexture) {
+            active.dirtyTexture = false
             ShaderUniforms.setTexture(textureStack(0).last())
         }
     }
 
     private fun markDirty() {
-        when (state.mode) {
-            GlEnums.GL_PROJECTION -> state.dirtyProjection = true
+        val active = state
+        when (active.mode) {
+            GlEnums.GL_PROJECTION -> active.dirtyProjection = true
             GlEnums.GL_TEXTURE -> markTextureDirty()
-            else -> state.dirtyModelView = true
+            else -> active.dirtyModelView = true
         }
     }
 
@@ -196,19 +201,20 @@ object MatrixState {
     }
 
     fun reset() {
-        state.cached = null
-        while (state.modelViewStack.size > 1) release(state.modelViewStack.removeLast())
-        while (state.projectionStack.size > 1) release(state.projectionStack.removeLast())
-        state.textureStacks.values.forEach { stack ->
+        val active = state
+        active.cached = null
+        while (active.modelViewStack.size > 1) release(active.modelViewStack.removeLast())
+        while (active.projectionStack.size > 1) release(active.projectionStack.removeLast())
+        active.textureStacks.values.forEach { stack ->
             while (stack.size > 1) release(stack.removeLast())
             stack.last().identity()
         }
-        state.modelViewStack.last().identity()
-        state.projectionStack.last().identity()
-        state.mode = GlEnums.GL_MODELVIEW
-        state.dirtyModelView = true
-        state.dirtyProjection = true
-        state.dirtyTexture = true
+        active.modelViewStack.last().identity()
+        active.projectionStack.last().identity()
+        active.mode = GlEnums.GL_MODELVIEW
+        active.dirtyModelView = true
+        active.dirtyProjection = true
+        active.dirtyTexture = true
     }
 
     private fun stackFor(glMode: Int) = when (glMode) {
@@ -223,8 +229,9 @@ object MatrixState {
     private fun borrow(source: Matrix4f): Matrix4f = (state.pool.removeLastOrNull() ?: Matrix4f()).set(source)
 
     private fun release(matrix: Matrix4f) {
-        if (state.pool.size < POOL_CAPACITY) {
-            state.pool.addLast(matrix)
+        val active = state
+        if (active.pool.size < POOL_CAPACITY) {
+            active.pool.addLast(matrix)
         }
     }
 

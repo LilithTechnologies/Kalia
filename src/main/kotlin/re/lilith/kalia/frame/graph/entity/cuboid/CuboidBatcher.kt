@@ -75,23 +75,24 @@ object CuboidBatcher {
         }
 
     fun beginPart() {
+        val active = state
         val encoder = GameFrame.current
         if (encoder == null) {
-            state.activeInstances = null
+            active.activeInstances = null
             return
         }
         MatrixState.flush()
         GlState.topology = PrimitiveTopology.TRIANGLES
-        if (ShaderUniforms.environmentVersion != state.environmentVersion ||
-            GlState.lineWidth != state.lineWidth ||
-            GlState.effectiveDepthBiasConstant() != state.biasConstant ||
-            GlState.effectiveDepthBiasSlope() != state.biasSlope
+        if (ShaderUniforms.environmentVersion != active.environmentVersion ||
+            GlState.lineWidth != active.lineWidth ||
+            GlState.effectiveDepthBiasConstant() != active.biasConstant ||
+            GlState.effectiveDepthBiasSlope() != active.biasSlope
         ) {
             flush()
-            state.environmentVersion = ShaderUniforms.environmentVersion
-            state.biasConstant = GlState.effectiveDepthBiasConstant()
-            state.biasSlope = GlState.effectiveDepthBiasSlope()
-            state.lineWidth = GlState.lineWidth
+            active.environmentVersion = ShaderUniforms.environmentVersion
+            active.biasConstant = GlState.effectiveDepthBiasConstant()
+            active.biasSlope = GlState.effectiveDepthBiasSlope()
+            active.lineWidth = GlState.lineWidth
         }
 
         val texId = TextureUnits.boundTexture(0)
@@ -102,20 +103,20 @@ object CuboidBatcher {
         val mask = GlState.colorMask()
         val attachments = encoder.attachments
 
-        if (state.memoValid &&
-            texId == state.memoTexId &&
-            lightmapId == state.memoLightmapId &&
-            raster === state.memoRaster &&
-            depthState === state.memoDepth &&
-            blend === state.memoBlend &&
-            mask === state.memoColorMask &&
-            attachments === state.memoAttachments
+        if (active.memoValid &&
+            texId == active.memoTexId &&
+            lightmapId == active.memoLightmapId &&
+            raster === active.memoRaster &&
+            depthState === active.memoDepth &&
+            blend === active.memoBlend &&
+            mask === active.memoColorMask &&
+            attachments === active.memoAttachments
         ) {
             return
         }
 
         val resources = FrameResources.of(encoder.device)
-        state.environment.open(resources)
+        active.environment.open(resources)
         val boundTexture = TextureTable.boundTexture(0)
         val boundLightmap = TextureTable.boundTexture(GlBridge.LIGHTMAP_UNIT)
         val pooled = TextureArrays.resolve(boundTexture, encoder.device)
@@ -134,37 +135,37 @@ object CuboidBatcher {
         val lightmapSampler = samplerFor(boundLightmap, resources)
 
         val instances: InstanceArena
-        val cached = state.lastInstances
+        val cached = active.lastInstances
         if (cached != null &&
-            state.lastKeyDescription === description &&
-            state.lastKeyTexture === texture &&
-            state.lastKeySampler === sampler &&
-            state.lastKeyLightmap === lightmap &&
-            state.lastKeyLightmapSampler === lightmapSampler
+            active.lastKeyDescription === description &&
+            active.lastKeyTexture === texture &&
+            active.lastKeySampler === sampler &&
+            active.lastKeyLightmap === lightmap &&
+            active.lastKeyLightmapSampler === lightmapSampler
         ) {
             instances = cached
         } else {
             val key = GroupKey(description, texture, sampler, lightmap, lightmapSampler)
-            instances = state.groups.getOrPut(key) { state.instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
-            state.lastKeyDescription = description
-            state.lastKeyTexture = texture
-            state.lastKeySampler = sampler
-            state.lastKeyLightmap = lightmap
-            state.lastKeyLightmapSampler = lightmapSampler
-            state.lastInstances = instances
+            instances = active.groups.getOrPut(key) { active.instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
+            active.lastKeyDescription = description
+            active.lastKeyTexture = texture
+            active.lastKeySampler = sampler
+            active.lastKeyLightmap = lightmap
+            active.lastKeyLightmapSampler = lightmapSampler
+            active.lastInstances = instances
         }
 
-        state.activeInstances = instances
-        state.activeLayer = pooled?.layer ?: 0
+        active.activeInstances = instances
+        active.activeLayer = pooled?.layer ?: 0
 
-        state.memoTexId = texId
-        state.memoLightmapId = lightmapId
-        state.memoRaster = raster
-        state.memoDepth = depthState
-        state.memoBlend = blend
-        state.memoColorMask = mask
-        state.memoAttachments = attachments
-        state.memoValid = true
+        active.memoTexId = texId
+        active.memoLightmapId = lightmapId
+        active.memoRaster = raster
+        active.memoDepth = depthState
+        active.memoBlend = blend
+        active.memoColorMask = mask
+        active.memoAttachments = attachments
+        active.memoValid = true
     }
 
     fun recordBox(
@@ -177,12 +178,13 @@ object CuboidBatcher {
         mirror: Boolean,
         scale: Float,
     ) {
-        val instances = state.activeInstances ?: return
+        val active = state
+        val instances = active.activeInstances ?: return
         writeInstance(
             instances.reserve(),
             modelView, centerX, centerY, centerZ,
             texU, texV, sizeX, sizeY, sizeZ, inflate, textureWidth, textureHeight, scale, mirror,
-            layer = state.activeLayer,
+            layer = active.activeLayer,
         )
         pendingInstances++
     }
@@ -195,14 +197,15 @@ object CuboidBatcher {
         blend: BlendState,
         colorMask: ColorMask,
     ): GraphicsPipelineDescription {
-        val cached = state.lastDescription
+        val active = state
+        val cached = active.lastDescription
         if (cached != null &&
-            state.lastDescProgram === program &&
-            state.lastDescAttachments === attachments &&
-            state.lastDescRaster === raster &&
-            state.lastDescDepth === depth &&
-            state.lastDescBlend === blend &&
-            state.lastDescColorMask === colorMask
+            active.lastDescProgram === program &&
+            active.lastDescAttachments === attachments &&
+            active.lastDescRaster === raster &&
+            active.lastDescDepth === depth &&
+            active.lastDescBlend === blend &&
+            active.lastDescColorMask === colorMask
         ) {
             return cached
         }
@@ -216,13 +219,13 @@ object CuboidBatcher {
             colorMask = colorMask,
             instanceFormat = INSTANCE_FORMAT,
         )
-        state.lastDescProgram = program
-        state.lastDescAttachments = attachments
-        state.lastDescRaster = raster
-        state.lastDescDepth = depth
-        state.lastDescBlend = blend
-        state.lastDescColorMask = colorMask
-        state.lastDescription = created
+        active.lastDescProgram = program
+        active.lastDescAttachments = attachments
+        active.lastDescRaster = raster
+        active.lastDescDepth = depth
+        active.lastDescBlend = blend
+        active.lastDescColorMask = colorMask
+        active.lastDescription = created
         return created
     }
 
@@ -295,7 +298,8 @@ object CuboidBatcher {
     private fun unorm(value: Float): Byte = (value * 255f + 0.5f).toInt().coerceIn(0, 255).toByte()
 
     fun flush() {
-        if (state.groups.isEmpty()) {
+        val active = state
+        if (active.groups.isEmpty()) {
             return
         }
         val encoder = GameFrame.current
@@ -305,22 +309,22 @@ object CuboidBatcher {
         }
         val device = encoder.device
         val resources = FrameResources.of(device)
-        if (state.pipelineDevice !== device) {
-            state.pipelines.clear()
-            state.pipelineDevice = device
+        if (active.pipelineDevice !== device) {
+            active.pipelines.clear()
+            active.pipelineDevice = device
         }
 
         val cubeVertices = CuboidMesh.vertices(device)
         val cubeIndices = CuboidMesh.indices(device)
 
-        for ((key, instances) in state.groups) {
-            val pipeline = state.pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
+        for ((key, instances) in active.groups) {
+            val pipeline = active.pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
             encoder.bindPipeline(pipeline)
             GlBridge.applyDepthBias()
             encoder.lineWidth(GlState.lineWidth)
             encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
             encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
-            state.environment.apply(encoder)
+            active.environment.apply(encoder)
 
             val data = instances.finish()
             val slice = resources.vertexArena.append(data, data.remaining())
@@ -333,25 +337,26 @@ object CuboidBatcher {
     }
 
     private fun recycle() {
-        for (instances in state.groups.values) {
-            if (state.instancePool.size < POOL_CAPACITY) {
-                state.instancePool.addLast(instances)
+        val active = state
+        for (instances in active.groups.values) {
+            if (active.instancePool.size < POOL_CAPACITY) {
+                active.instancePool.addLast(instances)
             } else {
                 instances.release()
             }
         }
-        state.groups.clear()
-        state.environment.close()
+        active.groups.clear()
+        active.environment.close()
         pendingInstances = 0
-        state.activeInstances = null
-        state.memoValid = false
+        active.activeInstances = null
+        active.memoValid = false
 
-        state.lastKeyDescription = null
-        state.lastKeyTexture = null
-        state.lastKeySampler = null
-        state.lastKeyLightmap = null
-        state.lastKeyLightmapSampler = null
-        state.lastInstances = null
+        active.lastKeyDescription = null
+        active.lastKeyTexture = null
+        active.lastKeySampler = null
+        active.lastKeyLightmap = null
+        active.lastKeyLightmapSampler = null
+        active.lastInstances = null
     }
 
     private const val INITIAL_INSTANCES = 256

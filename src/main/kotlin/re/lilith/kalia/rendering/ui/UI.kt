@@ -57,14 +57,15 @@ object UI {
     }
 
     fun prepare(device: RenderDevice) {
+        val active = state
         if (frame.prepared) {
             return
         }
         frame.prepared = true
         frame.isRecording = false
 
-        frame.lastElements = state.size
-        frame.lastItemElements = state.countLayer(GuiLayer.ITEM)
+        frame.lastElements = active.size
+        frame.lastItemElements = active.countLayer(GuiLayer.ITEM)
 
         rendererFor(device).prepare(state, width, height)
     }
@@ -157,12 +158,13 @@ object UI {
         tintTop: Int,
         tintBottom: Int,
     ) {
+        val active = state
         val m = MatrixState.modelView()
         val m00 = m.m00(); val m10 = m.m10(); val m30 = m.m30()
         val m01 = m.m01(); val m11 = m.m11(); val m31 = m.m31()
 
         if (m01 == 0f && m10 == 0f) {
-            state.submitQuad(
+            active.submitQuad(
                 layer = layer,
                 phase = phase,
                 textureId = textureId,
@@ -177,7 +179,7 @@ object UI {
             return
         }
 
-        state.submitCorners(
+        active.submitCorners(
             layer = layer,
             phase = phase,
             textureId = textureId,

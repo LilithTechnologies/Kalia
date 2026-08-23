@@ -21,27 +21,30 @@ object GlState {
     var depthTest: Boolean
         get() = state.depthTest
         set(value) {
-            if (state.depthTest != value) {
-                state.depthTest = value
-                state.depthDirty = true
+        val active = state
+            if (active.depthTest != value) {
+                active.depthTest = value
+                active.depthDirty = true
             }
         }
 
     var depthWrite: Boolean
         get() = state.depthWrite
         set(value) {
-            if (state.depthWrite != value) {
-                state.depthWrite = value
-                state.depthDirty = true
+            val active = state
+            if (active.depthWrite != value) {
+                active.depthWrite = value
+                active.depthDirty = true
             }
         }
 
     var depthFunction: CompareFunction
         get() = state.depthFunction
         set(value) {
-            if (state.depthFunction != value) {
-                state.depthFunction = value
-                state.depthDirty = true
+            val active = state
+            if (active.depthFunction != value) {
+                active.depthFunction = value
+                active.depthDirty = true
             }
         }
 
@@ -72,9 +75,10 @@ object GlState {
     var blendEnabled: Boolean
         get() = state.blendEnabled
         set(value) {
-            if (state.blendEnabled != value) {
-                state.blendEnabled = value
-                state.blendDirty = true
+            val active = state
+            if (active.blendEnabled != value) {
+                active.blendEnabled = value
+                active.blendDirty = true
             }
         }
 
@@ -158,36 +162,40 @@ object GlState {
     var cullEnabled: Boolean
         get() = state.cullEnabled
         set(value) {
-            if (state.cullEnabled != value) {
-                state.cullEnabled = value
-                state.rasterDirty = true
+            val active = state
+            if (active.cullEnabled != value) {
+                active.cullEnabled = value
+                active.rasterDirty = true
             }
         }
 
     var topology: PrimitiveTopology
         get() = state.topology
         set(value) {
-            if (state.topology != value) {
-                state.topology = value
-                state.rasterDirty = true
+            val active = state
+            if (active.topology != value) {
+                active.topology = value
+                active.rasterDirty = true
             }
         }
 
     var polygonMode: PolygonMode
         get() = state.polygonMode
         set(value) {
-            if (state.polygonMode != value) {
-                state.polygonMode = value
-                state.rasterDirty = true
+            val active = state
+            if (active.polygonMode != value) {
+                active.polygonMode = value
+                active.rasterDirty = true
             }
         }
 
     var cullFace: CullMode
         get() = state.cullFace
         set(value) {
-            if (state.cullFace != value) {
-                state.cullFace = value
-                state.rasterDirty = true
+            val active = state
+            if (active.cullFace != value) {
+                active.cullFace = value
+                active.rasterDirty = true
             }
         }
 
@@ -245,8 +253,9 @@ object GlState {
     val polygonOffsetSlope: Float get() = state.polygonOffsetSlope
 
     fun polygonOffset(slope: Float, constant: Float) {
-        state.polygonOffsetSlope = slope
-        state.polygonOffsetConstant = constant
+        val active = state
+        active.polygonOffsetSlope = slope
+        active.polygonOffsetConstant = constant
     }
 
     fun enablePolygonOffset() {
@@ -268,6 +277,7 @@ object GlState {
         }
 
     fun reset() {
+        val active = state
         depthTest = true
         depthWrite = true
         depthFunction = CompareFunction.LESS_EQUAL
@@ -280,9 +290,9 @@ object GlState {
         topology = PrimitiveTopology.TRIANGLES
         polygonMode = PolygonMode.FILL
         colorMask(red = true, green = true, blue = true, alpha = true)
-        state.polygonOffsetEnabled = false
-        state.polygonOffsetConstant = 0f
-        state.polygonOffsetSlope = 0f
+        active.polygonOffsetEnabled = false
+        active.polygonOffsetConstant = 0f
+        active.polygonOffsetSlope = 0f
         lineWidth = 1f
         clearDepth = 1f
         clearColor = Color.BLACK
