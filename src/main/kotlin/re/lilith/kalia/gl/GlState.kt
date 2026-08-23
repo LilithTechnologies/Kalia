@@ -5,84 +5,92 @@ import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.pipeline.*
 
 object GlState {
-    private val depthStates = Object2ObjectOpenHashMap<DepthState, DepthState>()
-    private val blendStates = Object2ObjectOpenHashMap<BlendState, BlendState>()
-    private val rasterStates = Object2ObjectOpenHashMap<RasterState, RasterState>()
-    private val colorMasks = Object2ObjectOpenHashMap<ColorMask, ColorMask>()
+    private val threadState = ThreadLocal.withInitial { GlStateData() }
 
-    private fun <T> intern(table: Object2ObjectOpenHashMap<T, T>, value: T): T = table.getOrPut(value) { value }
+    private val state: GlStateData get() = threadState.get()
 
-    var depthTest: Boolean = true
-        set(value) {
-            if (field != value) {
-                field = value
-                depthDirty = true
-            }
-        }
+    private fun <T : Any> intern(table: Object2ObjectOpenHashMap<T, T>, value: T): T =
+        table.putIfAbsent(value, value) ?: value
 
-    var depthWrite: Boolean = true
-        set(value) {
-            if (field != value) {
-                field = value
-                depthDirty = true
-            }
-        }
-
-    var depthFunction: CompareFunction = CompareFunction.LESS_EQUAL
-        set(value) {
-            if (field != value) {
-                field = value
-                depthDirty = true
-            }
-        }
-
-    var clearDepth: Float = 1f
-
-    private var depthDirty = true
-    private var cachedDepth = intern(depthStates, DepthState.READ_WRITE)
-
-    fun depthState(): DepthState {
-        if (depthDirty) {
-            depthDirty = false
-            val current = cachedDepth
-            if (current.test != depthTest || current.write != depthWrite || current.compare != depthFunction) {
-                cachedDepth = intern(depthStates, DepthState(depthTest, depthWrite, depthFunction))
-            }
-        }
-        return cachedDepth
+    fun bind(data: GlStateData) {
+        threadState.set(data)
     }
 
-    var blendEnabled: Boolean = true
+    fun current(): GlStateData = state
+
+    var depthTest: Boolean
+        get() = state.depthTest
         set(value) {
-            if (field != value) {
-                field = value
-                blendDirty = true
+            if (state.depthTest != value) {
+                state.depthTest = value
+                state.depthDirty = true
             }
         }
 
-    private var srcColor = BlendFactor.SRC_ALPHA
-    private var dstColor = BlendFactor.ONE_MINUS_SRC_ALPHA
-    private var srcAlpha = BlendFactor.ONE
-    private var dstAlpha = BlendFactor.ZERO
-    private var blendOp = BlendOp.ADD
+    var depthWrite: Boolean
+        get() = state.depthWrite
+        set(value) {
+            if (state.depthWrite != value) {
+                state.depthWrite = value
+                state.depthDirty = true
+            }
+        }
 
-    private var logicOpMode: LogicOp = LogicOp.COPY
-    private var logicOpEnabled: Boolean = false
+    var depthFunction: CompareFunction
+        get() = state.depthFunction
+        set(value) {
+            if (state.depthFunction != value) {
+                state.depthFunction = value
+                state.depthDirty = true
+            }
+        }
 
-    private var blendDirty = true
-    private var cachedBlend = intern(blendStates, BlendState.ALPHA)
+    var clearDepth: Float
+        get() = state.clearDepth
+        set(value) {
+            state.clearDepth = value
+        }
+
+    fun depthState(): DepthState {
+        val active = state
+        if (active.depthDirty) {
+            active.depthDirty = false
+            val current = active.cachedDepth
+            if (current.test != active.depthTest ||
+                current.write != active.depthWrite ||
+                current.compare != active.depthFunction
+            ) {
+                active.cachedDepth = intern(
+                    active.depthStates,
+                    DepthState(active.depthTest, active.depthWrite, active.depthFunction),
+                )
+            }
+        }
+        return active.cachedDepth
+    }
+
+    var blendEnabled: Boolean
+        get() = state.blendEnabled
+        set(value) {
+            if (state.blendEnabled != value) {
+                state.blendEnabled = value
+                state.blendDirty = true
+            }
+        }
 
     fun logicOp(op: LogicOp) {
-        if (op != logicOpMode) {
-            logicOpMode = op
-            if (logicOpEnabled) blendDirty = true
+        val active = state
+        if (op != active.logicOpMode) {
+            active.logicOpMode = op
+            if (active.logicOpEnabled) active.blendDirty = true
         }
     }
 
     fun setColorLogicEnabled(enabled: Boolean) {
-        if (enabled != logicOpEnabled) {
-            logicOpEnabled = enabled
-            blendDirty = true
+        val active = state
+        if (enabled != active.logicOpEnabled) {
+            active.logicOpEnabled = enabled
+            active.blendDirty = true
         }
     }
 
@@ -91,165 +99,173 @@ object GlState {
     }
 
     fun blendFuncSeparate(glSrcRgb: Int, glDstRgb: Int, glSrcAlpha: Int, glDstAlpha: Int) {
+        val active = state
         val newSrcColor = GlEnums.blendFactor(glSrcRgb)
         val newDstColor = GlEnums.blendFactor(glDstRgb)
         val newSrcAlpha = GlEnums.blendFactor(glSrcAlpha)
         val newDstAlpha = GlEnums.blendFactor(glDstAlpha)
-        if (newSrcColor == srcColor && newDstColor == dstColor &&
-            newSrcAlpha == srcAlpha && newDstAlpha == dstAlpha
+        if (newSrcColor == active.srcColor && newDstColor == active.dstColor &&
+            newSrcAlpha == active.srcAlpha && newDstAlpha == active.dstAlpha
         ) {
             return
         }
-        srcColor = newSrcColor
-        dstColor = newDstColor
-        srcAlpha = newSrcAlpha
-        dstAlpha = newDstAlpha
-        blendDirty = true
+        active.srcColor = newSrcColor
+        active.dstColor = newDstColor
+        active.srcAlpha = newSrcAlpha
+        active.dstAlpha = newDstAlpha
+        active.blendDirty = true
     }
 
     fun blendEquation(glOp: Int) {
+        val active = state
         val newOp = GlEnums.blendOp(glOp)
-        if (newOp != blendOp) {
-            blendOp = newOp
-            blendDirty = true
+        if (newOp != active.blendOp) {
+            active.blendOp = newOp
+            active.blendDirty = true
         }
     }
 
     fun blendState(): BlendState {
-        if (blendDirty) {
-            blendDirty = false
-            val effectiveLogicOp = if (logicOpEnabled) logicOpMode else null
-            val current = cachedBlend
-            if (current.enabled != blendEnabled ||
-                current.srcColor != srcColor || current.dstColor != dstColor ||
-                current.srcAlpha != srcAlpha || current.dstAlpha != dstAlpha ||
-                current.colorOp != blendOp || current.alphaOp != blendOp ||
+        val active = state
+        if (active.blendDirty) {
+            active.blendDirty = false
+            val effectiveLogicOp = if (active.logicOpEnabled) active.logicOpMode else null
+            val current = active.cachedBlend
+            if (current.enabled != active.blendEnabled ||
+                current.srcColor != active.srcColor || current.dstColor != active.dstColor ||
+                current.srcAlpha != active.srcAlpha || current.dstAlpha != active.dstAlpha ||
+                current.colorOp != active.blendOp || current.alphaOp != active.blendOp ||
                 current.logicOp != effectiveLogicOp
             ) {
-                cachedBlend = intern(
-                    blendStates,
+                active.cachedBlend = intern(
+                    active.blendStates,
                     BlendState(
-                        enabled = blendEnabled,
-                        srcColor = srcColor,
-                        dstColor = dstColor,
-                        colorOp = blendOp,
-                        srcAlpha = srcAlpha,
-                        dstAlpha = dstAlpha,
-                        alphaOp = blendOp,
+                        enabled = active.blendEnabled,
+                        srcColor = active.srcColor,
+                        dstColor = active.dstColor,
+                        colorOp = active.blendOp,
+                        srcAlpha = active.srcAlpha,
+                        dstAlpha = active.dstAlpha,
+                        alphaOp = active.blendOp,
                         logicOp = effectiveLogicOp,
                     ),
                 )
             }
         }
-        return cachedBlend
+        return active.cachedBlend
     }
 
-    var cullEnabled: Boolean = false
+    var cullEnabled: Boolean
+        get() = state.cullEnabled
         set(value) {
-            if (field != value) {
-                field = value
-                rasterDirty = true
+            if (state.cullEnabled != value) {
+                state.cullEnabled = value
+                state.rasterDirty = true
             }
         }
 
-    var topology: PrimitiveTopology = PrimitiveTopology.TRIANGLES
+    var topology: PrimitiveTopology
+        get() = state.topology
         set(value) {
-            if (field != value) {
-                field = value
-                rasterDirty = true
+            if (state.topology != value) {
+                state.topology = value
+                state.rasterDirty = true
             }
         }
 
-    var polygonMode: PolygonMode = PolygonMode.FILL
+    var polygonMode: PolygonMode
+        get() = state.polygonMode
         set(value) {
-            if (field != value) {
-                field = value
-                rasterDirty = true
+            if (state.polygonMode != value) {
+                state.polygonMode = value
+                state.rasterDirty = true
             }
         }
 
-    var cullFace: CullMode = CullMode.BACK
+    var cullFace: CullMode
+        get() = state.cullFace
         set(value) {
-            if (field != value) {
-                field = value
-                rasterDirty = true
+            if (state.cullFace != value) {
+                state.cullFace = value
+                state.rasterDirty = true
             }
         }
-
-    private var rasterDirty = true
-    private var cachedRaster = intern(rasterStates, RasterState.TWO_SIDED)
 
     fun rasterState(): RasterState {
-        if (rasterDirty) {
-            rasterDirty = false
-            val culls = cullEnabled && when (topology) {
+        val active = state
+        if (active.rasterDirty) {
+            active.rasterDirty = false
+            val culls = active.cullEnabled && when (active.topology) {
                 PrimitiveTopology.POINTS, PrimitiveTopology.LINES, PrimitiveTopology.LINE_STRIP -> false
                 else -> true
             }
-            val effectiveCull = if (culls) cullFace else CullMode.NONE
-            val current = cachedRaster
-            if (current.topology != topology ||
+            val effectiveCull = if (culls) active.cullFace else CullMode.NONE
+            val current = active.cachedRaster
+            if (current.topology != active.topology ||
                 current.cullMode != effectiveCull ||
-                current.polygonMode != polygonMode ||
+                current.polygonMode != active.polygonMode ||
                 current.frontFace != FrontFace.COUNTER_CLOCKWISE ||
                 !current.depthBiasEnabled
             ) {
-                cachedRaster = intern(
-                    rasterStates,
+                active.cachedRaster = intern(
+                    active.rasterStates,
                     RasterState(
-                        topology = topology,
+                        topology = active.topology,
                         cullMode = effectiveCull,
                         frontFace = FrontFace.COUNTER_CLOCKWISE,
-                        polygonMode = polygonMode,
+                        polygonMode = active.polygonMode,
                         depthBiasEnabled = true,
                     ),
                 )
             }
         }
-        return cachedRaster
+        return active.cachedRaster
     }
 
-    private var cachedColorMask = intern(colorMasks, ColorMask.ALL)
-
     fun colorMask(red: Boolean, green: Boolean, blue: Boolean, alpha: Boolean) {
-        if (cachedColorMask.red != red || cachedColorMask.green != green ||
-            cachedColorMask.blue != blue || cachedColorMask.alpha != alpha
-        ) {
-            cachedColorMask = intern(colorMasks, ColorMask(red, green, blue, alpha))
+        val active = state
+        val current = active.cachedColorMask
+        if (current.red != red || current.green != green || current.blue != blue || current.alpha != alpha) {
+            active.cachedColorMask = intern(active.colorMasks, ColorMask(red, green, blue, alpha))
         }
     }
 
-    fun colorMask(): ColorMask = cachedColorMask
+    fun colorMask(): ColorMask = state.cachedColorMask
 
-    var clearColor: Color = Color.BLACK
+    var clearColor: Color
+        get() = state.clearColor
+        set(value) {
+            state.clearColor = value
+        }
 
+    val polygonOffsetEnabled: Boolean get() = state.polygonOffsetEnabled
 
-    var polygonOffsetEnabled: Boolean = false
-        private set
+    val polygonOffsetConstant: Float get() = state.polygonOffsetConstant
 
-    var polygonOffsetConstant: Float = 0f
-        private set
-
-    var polygonOffsetSlope: Float = 0f
-        private set
+    val polygonOffsetSlope: Float get() = state.polygonOffsetSlope
 
     fun polygonOffset(slope: Float, constant: Float) {
-        polygonOffsetSlope = slope
-        polygonOffsetConstant = constant
+        state.polygonOffsetSlope = slope
+        state.polygonOffsetConstant = constant
     }
 
     fun enablePolygonOffset() {
-        polygonOffsetEnabled = true
+        state.polygonOffsetEnabled = true
     }
 
     fun disablePolygonOffset() {
-        polygonOffsetEnabled = false
+        state.polygonOffsetEnabled = false
     }
 
-    fun effectiveDepthBiasConstant(): Float = if (polygonOffsetEnabled) polygonOffsetConstant else 0f
-    fun effectiveDepthBiasSlope(): Float = if (polygonOffsetEnabled) polygonOffsetSlope else 0f
+    fun effectiveDepthBiasConstant(): Float = if (state.polygonOffsetEnabled) state.polygonOffsetConstant else 0f
 
-    var lineWidth: Float = 1f
+    fun effectiveDepthBiasSlope(): Float = if (state.polygonOffsetEnabled) state.polygonOffsetSlope else 0f
+
+    var lineWidth: Float
+        get() = state.lineWidth
+        set(value) {
+            state.lineWidth = value
+        }
 
     fun reset() {
         depthTest = true
@@ -263,10 +279,10 @@ object GlState {
         cullEnabled = false
         topology = PrimitiveTopology.TRIANGLES
         polygonMode = PolygonMode.FILL
-        colorMask(true, true, true, true)
-        polygonOffsetEnabled = false
-        polygonOffsetConstant = 0f
-        polygonOffsetSlope = 0f
+        colorMask(red = true, green = true, blue = true, alpha = true)
+        state.polygonOffsetEnabled = false
+        state.polygonOffsetConstant = 0f
+        state.polygonOffsetSlope = 0f
         lineWidth = 1f
         clearDepth = 1f
         clearColor = Color.BLACK
