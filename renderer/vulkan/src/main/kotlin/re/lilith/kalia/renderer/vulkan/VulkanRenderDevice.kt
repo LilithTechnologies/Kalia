@@ -80,6 +80,13 @@ internal class VulkanRenderDevice(
     private var computeValue = 0L
     private var submittedComputeValue = 0L
     private val computePipelines = ConcurrentHashMap<ComputePipelineDescription, VulkanComputePipeline>()
+    internal val pushConstantScratch: ByteBuffer = ByteBuffer
+        .allocateDirect(MAX_PUSH_CONSTANT_BYTES)
+        .order(ByteOrder.nativeOrder())
+
+    internal val descriptorBindScratch = MemoryUtil.nmemAllocChecked(Long.SIZE_BYTES.toLong())
+    internal val dynamicOffsetScratch = MemoryUtil.nmemAllocChecked((MAX_DYNAMIC_OFFSETS * Int.SIZE_BYTES).toLong())
+
     private val transientTextures = TransientTexturePool(this)
     private val executor = VulkanGraphExecutor(this, transientTextures)
 
@@ -106,13 +113,6 @@ internal class VulkanRenderDevice(
     private var captureFence: Fence? = null
 
     private var resourceEpoch = 0
-
-    internal val pushConstantScratch: ByteBuffer = ByteBuffer
-        .allocateDirect(MAX_PUSH_CONSTANT_BYTES)
-        .order(ByteOrder.nativeOrder())
-
-    internal val descriptorBindScratch = MemoryUtil.nmemAllocChecked(Long.SIZE_BYTES.toLong())
-    internal val dynamicOffsetScratch = MemoryUtil.nmemAllocChecked((MAX_DYNAMIC_OFFSETS * Int.SIZE_BYTES).toLong())
 
     private var builtForExtent: Extent = platformSurface.framebufferExtent
 

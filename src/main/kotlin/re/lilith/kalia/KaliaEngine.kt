@@ -112,7 +112,7 @@ object KaliaEngine {
         val running = state as? State.Running ?: return false
 
         running.device.beginFrame()
-        FrameResources.of(running.device).beginFrame()
+        FrameResources.of(running.device).beginFrame(running.device.frameSlot)
         GlBridge.applyDepthBias()
         GlBridge.clearOverlay()
         return true
