@@ -33,9 +33,13 @@ class StreamArena(
         }
 
         val offset = page.used
-        val slice = source.slice()
-        slice.limit(byteCount)
-        page.buffer.write(slice, offset)
+        val limit = source.limit()
+        try {
+            source.limit(source.position() + byteCount)
+            page.buffer.write(source, offset)
+        } finally {
+            source.limit(limit)
+        }
         page.used += byteCount.toLong()
         return Slice(page.buffer, offset, byteCount)
     }

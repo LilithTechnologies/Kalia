@@ -90,8 +90,10 @@ internal class VulkanPassEncoder(
     private var pushedLayout: Any? = null
     private var pushedBytes = -1
     private val pushedData = backend.pushConstantScratch
-    private val dynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
-    private val boundDynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
+    private val dynamicOffsets = IntArray(MAX_BINDINGS)
+    private var dynamicOffsetCount = 0
+    private val boundDynamicOffsets = IntArray(MAX_BINDINGS)
+    private var boundDynamicOffsetCount = 0
     private val dynamicOffsetBySlot = IntArray(MAX_BINDINGS)
     private var dynamicSlotMask = 0
 
@@ -198,7 +200,7 @@ internal class VulkanPassEncoder(
         pipeline = null
         bindingsDirty = true
         boundDescriptorSet = null
-        boundDynamicOffsets.clear()
+        boundDynamicOffsetCount = 0
         boundVertexBuffers.fill(null)
         boundIndexBuffer = null
         boundIndexType = null
@@ -248,7 +250,7 @@ internal class VulkanPassEncoder(
         // A new layout invalidates whatever set was bound, even if the contents are the same.
         bindingsDirty = true
         boundDescriptorSet = null
-        boundDynamicOffsets.clear()
+        boundDynamicOffsetCount = 0
     }
 
     override fun bindTexture(binding: Int, texture: GpuTexture, sampler: GpuSampler) {
@@ -580,20 +582,20 @@ internal class VulkanPassEncoder(
 
         // Vulkan consumes dynamic offsets in ascending binding order, which is not necessarily the
         // order the program happens to declare them in
-        dynamicOffsets.clear()
+        dynamicOffsetCount = 0
         if (dynamicSlotMask != 0) {
             for (slot in 0 until MAX_BINDINGS) {
                 if (dynamicSlotMask and (1 shl slot) != 0) {
-                    dynamicOffsets += dynamicOffsetBySlot[slot]
+                    dynamicOffsets[dynamicOffsetCount++] = dynamicOffsetBySlot[slot]
                 }
             }
         }
 
         val set = frame.descriptorSet(bindingProbe, layout) { target -> writeDescriptors(active, target) }
-        if (set !== boundDescriptorSet || dynamicOffsets != boundDynamicOffsets) {
+        if (set !== boundDescriptorSet || dynamicOffsetsChanged()) {
 
             MemoryAccess.putLong(setHandleScratch, RawHandles.descriptorSet(set))
-            val offsetCount = dynamicOffsets.size
+            val offsetCount = dynamicOffsetCount
             for (index in 0 until offsetCount) {
                 MemoryAccess.putInt(dynamicOffsetScratch + index * Int.SIZE_BYTES, dynamicOffsets[index])
             }
@@ -609,10 +611,22 @@ internal class VulkanPassEncoder(
             )
             RenderStats.recordDescriptorBind()
             boundDescriptorSet = set
-            boundDynamicOffsets.clear()
-            boundDynamicOffsets.addAll(dynamicOffsets)
+            System.arraycopy(dynamicOffsets, 0, boundDynamicOffsets, 0, offsetCount)
+            boundDynamicOffsetCount = offsetCount
         }
         bindingsDirty = false
+    }
+
+    private fun dynamicOffsetsChanged(): Boolean {
+        if (dynamicOffsetCount != boundDynamicOffsetCount) {
+            return true
+        }
+        for (index in 0 until dynamicOffsetCount) {
+            if (dynamicOffsets[index] != boundDynamicOffsets[index]) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun writeDescriptors(active: VulkanPipeline, set: DescriptorSet) {
