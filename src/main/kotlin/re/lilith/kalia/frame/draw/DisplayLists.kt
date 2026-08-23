@@ -1,5 +1,6 @@
 package re.lilith.kalia.frame.draw
 
+import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.resource.BufferDescription
@@ -10,7 +11,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 object DisplayLists {
-    private val lists = HashMap<Int, MutableList<Batch>>()
+    private val lists = Int2ObjectOpenHashMap<MutableList<Batch>>()
     private var recording: MutableList<Batch>? = null
     private var nextName = 1
 

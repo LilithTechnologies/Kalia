@@ -138,7 +138,7 @@ object WorldExecutor {
     }
 
     private fun applyMaterial(material: WorldMaterial, fog: FogSnapshot) {
-        if (lastMaterial == material) {
+        if (lastMaterial === material) {
             return
         }
         lastMaterial = material

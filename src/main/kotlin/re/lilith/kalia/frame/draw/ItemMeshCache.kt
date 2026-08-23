@@ -14,7 +14,20 @@ import java.nio.ByteOrder
 import java.util.IdentityHashMap
 
 object ItemMeshCache {
-    private data class Key(val model: BakedModel, val color: Int)
+    private class Key(@JvmField var model: BakedModel?, @JvmField var color: Int) {
+        fun set(model: BakedModel, color: Int): Key {
+            this.model = model
+            this.color = color
+            return this
+        }
+
+        override fun equals(other: Any?): Boolean =
+            other is Key && color == other.color && model === other.model
+
+        override fun hashCode(): Int = System.identityHashCode(model) * 31 + color
+    }
+
+    private val lookupKey = Key(null, 0)
 
     private val meshes = Object2ObjectOpenHashMap<Key, PersistentMesh>()
     private val colorable = Reference2ObjectOpenHashMap<BakedModel, Boolean>()
@@ -30,16 +43,17 @@ object ItemMeshCache {
 
     fun getOrBuild(model: BakedModel, color: Int, build: () -> BufferBuilder): PersistentMesh? {
         val device = KaliaEngine.device ?: return null
-        return meshes.getOrPut(Key(model, color)) {
-            val builder = build()
-            builder.end()
-            val format = VertexFormatBridge.translate(builder.format)
-            val persisted = PersistentMesh(device, "kalia/item-mesh")
-            persisted.upload(builder.buffer, format, builder.vertexCount)
-            vertexData[persisted] = copyOf(builder.buffer, builder.vertexCount * format.format.stride)
-            builder.reset()
-            persisted
-        }
+        meshes[lookupKey.set(model, color)]?.let { return it }
+
+        val builder = build()
+        builder.end()
+        val format = VertexFormatBridge.translate(builder.format)
+        val persisted = PersistentMesh(device, "kalia/item-mesh")
+        persisted.upload(builder.buffer, format, builder.vertexCount)
+        vertexData[persisted] = copyOf(builder.buffer, builder.vertexCount * format.format.stride)
+        builder.reset()
+        meshes[Key(model, color)] = persisted
+        return persisted
     }
 
     private fun copyOf(source: ByteBuffer, byteCount: Int): ByteBuffer {
