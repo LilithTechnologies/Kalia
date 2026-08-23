@@ -73,6 +73,33 @@ object WorldFrameTimings {
 
     val frameMillis: Double get() = collectMillis + encodeMillis
 
+    private var wallMark = 0L
+    private var wallAverage = 0.0
+    private var insideMark = 0L
+    private var insideAverage = 0.0
+
+    val wallMillis: Double get() = wallAverage / NANOS_PER_MILLI
+
+    val insideMillis: Double get() = insideAverage / NANOS_PER_MILLI
+
+    val outsideMillis: Double get() = (wallMillis - insideMillis).coerceAtLeast(0.0)
+
+    fun markWall() {
+        val now = System.nanoTime()
+        if (wallMark != 0L) {
+            wallAverage += ((now - wallMark) - wallAverage) * SMOOTHING
+        }
+        wallMark = now
+        insideMark = now
+    }
+
+    fun markWallEnd() {
+        if (insideMark == 0L) {
+            return
+        }
+        insideAverage += ((System.nanoTime() - insideMark) - insideAverage) * SMOOTHING
+    }
+
     val collectShare: Double
         get() {
             val total = frameMillis

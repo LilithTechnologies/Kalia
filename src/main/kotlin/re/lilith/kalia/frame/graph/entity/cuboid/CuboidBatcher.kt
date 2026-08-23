@@ -1,16 +1,19 @@
 package re.lilith.kalia.frame.graph.entity.cuboid
 
+import re.lilith.kalia.frame.graph.entity.EntityStage
+import re.lilith.kalia.frame.graph.BatchStats
 import org.joml.Matrix4f
-import re.lilith.kalia.buffer.InstanceArena
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
-import re.lilith.kalia.frame.draw.BatchEnvironment
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.gl.MatrixState
 import re.lilith.kalia.gl.ShaderUniforms
-import re.lilith.kalia.renderer.device.RenderDevice
-import re.lilith.kalia.renderer.format.IndexFormat
+import re.lilith.kalia.gl.TextureUnits
+import re.lilith.kalia.gl.emulation.GlTexture
+import re.lilith.kalia.gl.emulation.TextureArrays
+import re.lilith.kalia.gl.tables.TextureTable
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.format.VertexFormat
 import re.lilith.kalia.renderer.format.VertexStepMode
@@ -21,20 +24,16 @@ import re.lilith.kalia.renderer.pipeline.DepthState
 import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.pipeline.PrimitiveTopology
 import re.lilith.kalia.renderer.pipeline.RasterState
-import re.lilith.kalia.renderer.resource.GpuPipeline
 import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.renderer.shader.ShaderProgram
-import re.lilith.kalia.shader.ShaderPrelude
-import re.lilith.kalia.gl.emulation.GlTexture
-import re.lilith.kalia.gl.emulation.TextureArrays
-import re.lilith.kalia.gl.TextureUnits
-import re.lilith.kalia.gl.tables.TextureTable
 import re.lilith.kalia.renderer.utility.MemoryAccess
-import kotlin.collections.iterator
 
 object CuboidBatcher {
-    private const val BYTES_PER_INSTANCE = 100
+    private const val TEXTURE_SLOT_OFFSET = 100
+    private const val BYTES_PER_INSTANCE = 108
+    private const val CUTOUT_OFFSET = 104
+
 
     val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instRow0", 2, VertexAttributeFormat.FLOAT4)
@@ -48,25 +47,17 @@ object CuboidBatcher {
         attribute("instBoxA", 10, VertexAttributeFormat.SHORT4)
         attribute("instBoxB", 11, VertexAttributeFormat.SHORT4)
         attribute("instInflate", 12, VertexAttributeFormat.FLOAT)
+        attribute("instTexture", 13, VertexAttributeFormat.UINT)
+        attribute("instAlphaCutout", 14, VertexAttributeFormat.FLOAT)
     }
 
-    internal data class GroupKey(
-        val description: GraphicsPipelineDescription,
-        val texture: GpuTexture,
-        val sampler: GpuSampler,
-        val lightmap: GpuTexture,
-        val lightmapSampler: GpuSampler,
-    )
+    private val gameState = CuboidBatchData()
+    private val renderState = CuboidBatchData()
 
-    private val threadState = ThreadLocal.withInitial { CuboidBatchData() }
+    private val state: CuboidBatchData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    private val state: CuboidBatchData get() = threadState.get()
 
-    internal fun bindContext(data: CuboidBatchData) {
-        threadState.set(data)
-    }
-
-    internal fun context(): CuboidBatchData = state
 
     var pendingInstances: Int
         get() = state.pendingInstances
@@ -75,21 +66,23 @@ object CuboidBatcher {
         }
 
     fun beginPart() {
+        BatchStats.parts++
         val active = state
         val encoder = GameFrame.current
         if (encoder == null) {
-            active.activeInstances = null
+            active.groups.activeInstances = null
             return
         }
         MatrixState.flush()
         GlState.topology = PrimitiveTopology.TRIANGLES
-        if (ShaderUniforms.environmentVersion != active.environmentVersion ||
+        if (ShaderUniforms.environmentVersionWithoutCutout != active.environmentVersion ||
             GlState.lineWidth != active.lineWidth ||
             GlState.effectiveDepthBiasConstant() != active.biasConstant ||
             GlState.effectiveDepthBiasSlope() != active.biasSlope
         ) {
+            BatchStats.partFlushes++
             flush()
-            active.environmentVersion = ShaderUniforms.environmentVersion
+            active.environmentVersion = ShaderUniforms.environmentVersionWithoutCutout
             active.biasConstant = GlState.effectiveDepthBiasConstant()
             active.biasSlope = GlState.effectiveDepthBiasSlope()
             active.lineWidth = GlState.lineWidth
@@ -104,6 +97,7 @@ object CuboidBatcher {
         val attachments = encoder.attachments
 
         if (active.memoValid &&
+            active.groups.activeInstances != null &&
             texId == active.memoTexId &&
             lightmapId == active.memoLightmapId &&
             raster === active.memoRaster &&
@@ -115,48 +109,39 @@ object CuboidBatcher {
             return
         }
 
+        BatchStats.partMisses++
         val resources = FrameResources.of(encoder.device)
-        active.environment.open(resources)
+        active.groups.environment.open(resources)
         val boundTexture = TextureTable.boundTexture(0)
         val boundLightmap = TextureTable.boundTexture(GlBridge.LIGHTMAP_UNIT)
-        val pooled = TextureArrays.resolve(boundTexture, encoder.device)
+        val plainTexture = textureFor(boundTexture, resources)
+        val plainSampler = samplerFor(boundTexture, resources)
+        val slot = encoder.device.textureIndex(plainTexture, plainSampler)
+
+        val pooled = if (slot >= 0) null else TextureArrays.resolve(boundTexture, encoder.device)
 
         val description = descriptionFor(
-            program = CuboidShaders.programFor(textureArray = pooled != null),
+            program = CuboidShaders.programFor(textureArray = pooled != null, bindless = slot >= 0),
             attachments = encoder.attachments,
             raster = GlState.rasterState(),
             depth = if (encoder.attachments.depthFormat != null) GlState.depthState() else DepthState.DISABLED,
             blend = GlState.blendState(),
             colorMask = GlState.colorMask(),
         )
-        val texture = pooled?.texture ?: textureFor(boundTexture, resources)
-        val sampler = pooled?.let { resources.sampler(it.sampler) } ?: samplerFor(boundTexture, resources)
+        val texture = if (slot >= 0) null else pooled?.texture ?: plainTexture
+        val sampler = if (slot >= 0) null else pooled?.let { resources.sampler(it.sampler) } ?: plainSampler
         val lightmap = textureFor(boundLightmap, resources)
         val lightmapSampler = samplerFor(boundLightmap, resources)
 
-        val instances: InstanceArena
-        val cached = active.lastInstances
-        if (cached != null &&
-            active.lastKeyDescription === description &&
-            active.lastKeyTexture === texture &&
-            active.lastKeySampler === sampler &&
-            active.lastKeyLightmap === lightmap &&
-            active.lastKeyLightmapSampler === lightmapSampler
-        ) {
-            instances = cached
-        } else {
-            val key = GroupKey(description, texture, sampler, lightmap, lightmapSampler)
-            instances = active.groups.getOrPut(key) { active.instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
-            active.lastKeyDescription = description
-            active.lastKeyTexture = texture
-            active.lastKeySampler = sampler
-            active.lastKeyLightmap = lightmap
-            active.lastKeyLightmapSampler = lightmapSampler
-            active.lastInstances = instances
-        }
-
-        active.activeInstances = instances
+        active.groups.activeInstances = active.groups.resolve(
+            description = description,
+            texture = texture,
+            sampler = sampler,
+            lightmap = lightmap,
+            lightmapSampler = lightmapSampler,
+        )
         active.activeLayer = pooled?.layer ?: 0
+        active.textureIndex = if (slot >= 0) slot else 0
 
         active.memoTexId = texId
         active.memoLightmapId = lightmapId
@@ -179,13 +164,19 @@ object CuboidBatcher {
         scale: Float,
     ) {
         val active = state
-        val instances = active.activeInstances ?: return
+        val instances = active.groups.activeInstances ?: return
+        val address = instances.reserve()
         writeInstance(
-            instances.reserve(),
+            address,
             modelView, centerX, centerY, centerZ,
             texU, texV, sizeX, sizeY, sizeZ, inflate, textureWidth, textureHeight, scale, mirror,
             layer = active.activeLayer,
         )
+        MemoryAccess.putInt(address + TEXTURE_SLOT_OFFSET, active.textureIndex)
+        MemoryAccess.putFloat(address + CUTOUT_OFFSET, ShaderUniforms.alphaCutout())
+        if (EntityStage.capturing) {
+            EntityStage.capture(address, modelView)
+        }
         pendingInstances++
     }
 
@@ -196,38 +187,16 @@ object CuboidBatcher {
         depth: DepthState,
         blend: BlendState,
         colorMask: ColorMask,
-    ): GraphicsPipelineDescription {
-        val active = state
-        val cached = active.lastDescription
-        if (cached != null &&
-            active.lastDescProgram === program &&
-            active.lastDescAttachments === attachments &&
-            active.lastDescRaster === raster &&
-            active.lastDescDepth === depth &&
-            active.lastDescBlend === blend &&
-            active.lastDescColorMask === colorMask
-        ) {
-            return cached
-        }
-        val created = GraphicsPipelineDescription(
-            program = program,
-            vertexFormat = CuboidMesh.VERTEX_FORMAT,
-            attachments = attachments,
-            raster = raster,
-            depth = depth,
-            blend = blend,
-            colorMask = colorMask,
-            instanceFormat = INSTANCE_FORMAT,
-        )
-        active.lastDescProgram = program
-        active.lastDescAttachments = attachments
-        active.lastDescRaster = raster
-        active.lastDescDepth = depth
-        active.lastDescBlend = blend
-        active.lastDescColorMask = colorMask
-        active.lastDescription = created
-        return created
-    }
+    ): GraphicsPipelineDescription = state.groups.describe(
+        program = program,
+        vertexFormat = CuboidMesh.VERTEX_FORMAT,
+        instanceFormat = INSTANCE_FORMAT,
+        attachments = attachments,
+        raster = raster,
+        depth = depth,
+        blend = blend,
+        colorMask = colorMask,
+    )
 
     private fun textureFor(bound: GlTexture?, resources: FrameResources): GpuTexture =
         bound?.texture ?: resources.whiteTexture
@@ -297,68 +266,36 @@ object CuboidBatcher {
 
     private fun unorm(value: Float): Byte = (value * 255f + 0.5f).toInt().coerceIn(0, 255).toByte()
 
+    fun replayStaged() {
+        beginPart()
+        val instances = state.groups.activeInstances ?: return
+        BatchStats.stagedEntities++
+        EntityStage.replayInto { source, modelView ->
+            BatchStats.stagedParts++
+            val address = instances.reserve()
+            MemoryAccess.copyMemory(source, address, BYTES_PER_INSTANCE.toLong())
+            writeRows(address, modelView)
+            pendingInstances++
+        }
+    }
+
+    private fun writeRows(address: Long, modelView: Matrix4f) {
+        MemoryAccess.putFloat(address, modelView.m00())
+        MemoryAccess.putFloat(address + 4, modelView.m10())
+        MemoryAccess.putFloat(address + 8, modelView.m20())
+        MemoryAccess.putFloat(address + 12, modelView.m30())
+        MemoryAccess.putFloat(address + 16, modelView.m01())
+        MemoryAccess.putFloat(address + 20, modelView.m11())
+        MemoryAccess.putFloat(address + 24, modelView.m21())
+        MemoryAccess.putFloat(address + 28, modelView.m31())
+        MemoryAccess.putFloat(address + 32, modelView.m02())
+        MemoryAccess.putFloat(address + 36, modelView.m12())
+        MemoryAccess.putFloat(address + 40, modelView.m22())
+        MemoryAccess.putFloat(address + 44, modelView.m32())
+    }
+
     fun flush() {
-        val active = state
-        if (active.groups.isEmpty()) {
-            return
-        }
-        val encoder = GameFrame.current
-        if (encoder == null) {
-            recycle()
-            return
-        }
-        val device = encoder.device
-        val resources = FrameResources.of(device)
-        if (active.pipelineDevice !== device) {
-            active.pipelines.clear()
-            active.pipelineDevice = device
-        }
-
-        val cubeVertices = CuboidMesh.vertices(device)
-        val cubeIndices = CuboidMesh.indices(device)
-
-        for ((key, instances) in active.groups) {
-            val pipeline = active.pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
-            encoder.bindPipeline(pipeline)
-            GlBridge.applyDepthBias()
-            encoder.lineWidth(GlState.lineWidth)
-            encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
-            encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
-            active.environment.apply(encoder)
-
-            val data = instances.finish()
-            val slice = resources.vertexArena.append(data, data.remaining())
-            encoder.bindVertexBuffer(0, cubeVertices)
-            encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
-            encoder.bindIndexBuffer(cubeIndices, IndexFormat.UINT32)
-            encoder.drawIndexed(CuboidMesh.INDEX_COUNT, instances.count, 0, 0, 0)
-        }
-        recycle()
+        state.groups.flush(CuboidGeometry)
     }
 
-    private fun recycle() {
-        val active = state
-        for (instances in active.groups.values) {
-            if (active.instancePool.size < POOL_CAPACITY) {
-                active.instancePool.addLast(instances)
-            } else {
-                instances.release()
-            }
-        }
-        active.groups.clear()
-        active.environment.close()
-        pendingInstances = 0
-        active.activeInstances = null
-        active.memoValid = false
-
-        active.lastKeyDescription = null
-        active.lastKeyTexture = null
-        active.lastKeySampler = null
-        active.lastKeyLightmap = null
-        active.lastKeyLightmapSampler = null
-        active.lastInstances = null
-    }
-
-    private const val INITIAL_INSTANCES = 256
-    private const val POOL_CAPACITY = 64
 }

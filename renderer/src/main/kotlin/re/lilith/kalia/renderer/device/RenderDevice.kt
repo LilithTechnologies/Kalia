@@ -152,6 +152,12 @@ interface RenderDevice : AutoCloseable {
      */
     fun render(graph: RenderGraph): Boolean
 
+    fun render(graph: RenderGraph, slot: Int): Boolean = render(graph)
+
+    fun endFrame() {}
+
+    fun textureIndex(texture: GpuTexture, sampler: GpuSampler): Int = -1
+
     /**
      * Copies the most recently presented frame back into host memory.
      *
@@ -166,6 +172,22 @@ interface RenderDevice : AutoCloseable {
      * @param extent The new surface dimensions.
      */
     fun resize(extent: Extent)
+
+    /**
+     * Number of occlusion queries the backend can track, or zero when it has none.
+     */
+    val occlusionQueryCapacity: Int get() = 0
+
+    /**
+     * Samples passed for [index] as of the most recent frame whose results were ready, or a
+     * negative value when nothing is known yet.
+     */
+    fun occlusionResult(index: Int): Long = -1L
+
+    /**
+     * Declares how many queries the next frame will issue, so the backend can reset them.
+     */
+    fun prepareOcclusionQueries(count: Int) {}
 
     /**
      * Blocks until all previously submitted GPU work has completed.

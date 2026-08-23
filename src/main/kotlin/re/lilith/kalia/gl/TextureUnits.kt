@@ -1,20 +1,19 @@
 package re.lilith.kalia.gl
 
 import org.lwjgl.opengl.GL13.GL_TEXTURE0
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.GlBridge.LIGHTMAP_UNIT
 
 object TextureUnits {
     const val COUNT: Int = 8
 
-    private val threadState = ThreadLocal.withInitial { TextureUnitsData() }
+    private val gameState = TextureUnitsData()
+    private val renderState = TextureUnitsData()
 
-    private val state: TextureUnitsData get() = threadState.get()
+    private val state: TextureUnitsData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    fun bindContext(data: TextureUnitsData) {
-        threadState.set(data)
-    }
 
-    fun context(): TextureUnitsData = state
 
     val activeUnit: Int get() = state.activeUnit
 

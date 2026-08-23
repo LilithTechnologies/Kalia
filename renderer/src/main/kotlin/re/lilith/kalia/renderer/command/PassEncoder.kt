@@ -194,6 +194,10 @@ interface PassEncoder {
      */
     fun lineWidth(width: Float)
 
+    fun beginOcclusionQuery(index: Int) {}
+
+    fun endOcclusionQuery(index: Int) {}
+
     /**
      * Clears one or more attachments within the current render target.
      *

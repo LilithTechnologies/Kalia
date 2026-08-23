@@ -1,13 +1,19 @@
 package re.lilith.kalia
 
-import net.fabricmc.loader.api.FabricLoader
-import org.embeddedt.embeddium.impl.gui.framework.TextComponent
-import org.taumc.celeritas.api.IHooks
 import re.lilith.kalia.frame.FrameAllocations
 import re.lilith.kalia.platform.GameInput
+import re.lilith.kalia.frame.GameFrameShape
+import re.lilith.kalia.frame.HostTimings
+import re.lilith.kalia.frame.graph.EntityPoseStats
+import re.lilith.kalia.frame.graph.entity.EntityStage
+import re.lilith.kalia.frame.graph.occlusion.EntityOcclusion
+import re.lilith.kalia.gl.FfpStats
+import re.lilith.kalia.frame.graph.entity.nametag.NametagStage
 import re.lilith.kalia.rendering.state.FrameState
 import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
 import re.lilith.kalia.rendering.ui.GuiWalk
+import re.lilith.kalia.rendering.ui.item.GuiItems
+import re.lilith.kalia.rendering.ui.UI
 import re.lilith.kalia.rendering.world.WorldFrame
 import re.lilith.kalia.rendering.world.WorldFrameTimings
 import re.lilith.kalia.utility.ScreenshotUtility
@@ -15,6 +21,13 @@ import re.lilith.kalia.utility.ScreenshotUtility
 object KaliaHooks  {
     @JvmStatic
     fun renderFrame() {
+        WorldFrameTimings.markWall()
+        HostTimings.beginFrame()
+        EntityPoseStats.beginFrame()
+        EntityStage.endFrame()
+        NametagStage.endFrame()
+        EntityOcclusion.endFrame()
+        FfpStats.beginFrame()
         FrameAllocations.begin()
         try {
             GameInput.update(FrameState.tickDelta)
@@ -22,13 +35,26 @@ object KaliaHooks  {
                 return
             }
             GuiBackgroundBlur.enabled = false
+            KaliaEngine.awaitExclusiveRender()
             WorldFrame.collect(FrameState.tickDelta)
+
+            KaliaEngine.awaitRender()
+            WorldFrameTimings.end(WorldFrameTimings.DEVICE_RENDER)
+
+            WorldFrame.collectTerrain()
+            if (KaliaEngine.lastFrameSkipped) {
+                GuiItems.retryPending()
+            }
             GuiWalk.collect(FrameState.tickDelta)
             WorldFrameTimings.end(WorldFrameTimings.GUI_WALK)
-            KaliaEngine.renderFrame()
-            WorldFrameTimings.end(WorldFrameTimings.DEVICE_RENDER)
+
+            WorldFrame.publish()
+            UI.publish()
+            GameFrameShape.capture()
             ScreenshotUtility.processScreenshots()
+            KaliaEngine.submitFrame()
         } finally {
+            WorldFrameTimings.markWallEnd()
             FrameAllocations.end()
         }
     }
@@ -49,7 +75,7 @@ object KaliaHooks  {
 
     @JvmStatic
     fun shutdown() {
-        KaliaEngine.shutdown()
+        KaliaEngine.terminate()
     }
 
     @JvmStatic

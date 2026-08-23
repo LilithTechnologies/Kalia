@@ -1,22 +1,21 @@
 package re.lilith.kalia.gl
 
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.pipeline.*
 
 object GlState {
-    private val threadState = ThreadLocal.withInitial { GlStateData() }
+    private val gameState = GlStateData()
+    private val renderState = GlStateData()
 
-    private val state: GlStateData get() = threadState.get()
+    private val state: GlStateData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
     private fun <T : Any> intern(table: Object2ObjectOpenHashMap<T, T>, value: T): T =
         table.putIfAbsent(value, value) ?: value
 
-    fun bindContext(data: GlStateData) {
-        threadState.set(data)
-    }
 
-    fun context(): GlStateData = state
 
     var depthTest: Boolean
         get() = state.depthTest
@@ -25,6 +24,7 @@ object GlState {
             if (active.depthTest != value) {
                 active.depthTest = value
                 active.depthDirty = true
+            FfpStats.stateChanges++
             }
         }
 
@@ -35,6 +35,7 @@ object GlState {
             if (active.depthWrite != value) {
                 active.depthWrite = value
                 active.depthDirty = true
+            FfpStats.stateChanges++
             }
         }
 
@@ -45,6 +46,7 @@ object GlState {
             if (active.depthFunction != value) {
                 active.depthFunction = value
                 active.depthDirty = true
+            FfpStats.stateChanges++
             }
         }
 
@@ -79,6 +81,7 @@ object GlState {
             if (active.blendEnabled != value) {
                 active.blendEnabled = value
                 active.blendDirty = true
+            FfpStats.stateChanges++
             }
         }
 
@@ -95,6 +98,7 @@ object GlState {
         if (enabled != active.logicOpEnabled) {
             active.logicOpEnabled = enabled
             active.blendDirty = true
+            FfpStats.stateChanges++
         }
     }
 
@@ -126,6 +130,7 @@ object GlState {
         if (newOp != active.blendOp) {
             active.blendOp = newOp
             active.blendDirty = true
+            FfpStats.stateChanges++
         }
     }
 
@@ -166,6 +171,7 @@ object GlState {
             if (active.cullEnabled != value) {
                 active.cullEnabled = value
                 active.rasterDirty = true
+            FfpStats.stateChanges++
             }
         }
 
@@ -176,6 +182,7 @@ object GlState {
             if (active.topology != value) {
                 active.topology = value
                 active.rasterDirty = true
+            FfpStats.stateChanges++
             }
         }
 
@@ -186,6 +193,7 @@ object GlState {
             if (active.polygonMode != value) {
                 active.polygonMode = value
                 active.rasterDirty = true
+            FfpStats.stateChanges++
             }
         }
 
@@ -196,6 +204,7 @@ object GlState {
             if (active.cullFace != value) {
                 active.cullFace = value
                 active.rasterDirty = true
+            FfpStats.stateChanges++
             }
         }
 

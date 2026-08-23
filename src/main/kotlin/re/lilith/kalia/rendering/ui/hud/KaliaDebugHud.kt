@@ -2,6 +2,13 @@ package re.lilith.kalia.rendering.ui.hud
 
 import re.lilith.kalia.KaliaEngine
 import re.lilith.kalia.frame.FrameAllocations
+import re.lilith.kalia.frame.HostTimings
+import org.taumc.celeritas.impl.debug.RenderMetrics
+import re.lilith.kalia.frame.graph.BatchStats
+import re.lilith.kalia.gl.FfpStats
+import re.lilith.kalia.frame.graph.occlusion.EntityOcclusion
+import re.lilith.kalia.frame.graph.EntityPoseStats
+import re.lilith.kalia.shader.PipelineCache
 import re.lilith.kalia.renderer.device.RenderStats
 import re.lilith.kalia.rendering.ui.GuiLayer
 import re.lilith.kalia.rendering.ui.GuiMaterial
@@ -31,8 +38,17 @@ object KaliaDebugHud {
     private fun buildDiagnostics(): List<String> {
         lines.clear()
 
-        lines += "Kalia ${KaliaEngine.device?.capabilities?.backend?.displayName ?: "inactive"}"
-        lines += "frame ${millis(WorldFrameTimings.frameMillis)}ms" +
+        val capabilities = KaliaEngine.device?.capabilities
+        lines += "Kalia ${capabilities?.backend?.displayName ?: "inactive"}" +
+            (if (capabilities?.supportsBindlessTextures == true) "  bindless" else "  bindless:no") +
+            (if (capabilities?.validation == true) "  VALIDATION ON (slow)" else "")
+        val wall = WorldFrameTimings.wallMillis
+        lines += "wall ${millis(wall)}ms (${if (wall > 0.0) (1000.0 / wall).toInt() else 0} fps)" +
+            "  inside ${millis(WorldFrameTimings.insideMillis)}" +
+            "  outside ${millis(WorldFrameTimings.outsideMillis)}" +
+            "  tick ${millis(HostTimings.tickMillis)}" +
+            "  display ${millis(HostTimings.displayMillis)}"
+        lines += "kalia ${millis(WorldFrameTimings.frameMillis)}ms" +
             "  collect ${millis(WorldFrameTimings.collectMillis)} (${percent(WorldFrameTimings.collectShare)})" +
             "  encode ${millis(WorldFrameTimings.encodeMillis)}"
         lines += "gpu wait ${millis(WorldFrameTimings.gpuWaitMillis)}ms" +
@@ -42,9 +58,36 @@ object KaliaDebugHud {
         appendMetrics(WorldFrameTimings.partCount, WorldFrameTimings::partName, WorldFrameTimings::partMillis)
 
         lines += "draws ${RenderStats.draws}" +
-            "  pipelines ${RenderStats.pipelineBinds}" +
+            "  pipelines ${RenderStats.pipelineBinds}/${PipelineCache.distinctPipelines}" +
             "  descriptors ${RenderStats.descriptorBinds} (+${RenderStats.descriptorAllocations})"
         lines += "batches ${RenderStats.batches} absorbing ${RenderStats.batchedDraws} draws"
+        // Yeah im not sure how else we can easily profile this
+        // TODO: write this to a CSV so we get graphs
+        lines += "parts ${BatchStats.parts}/${BatchStats.partFlushes}f" +
+            "  labels ${BatchStats.labels} segs ${BatchStats.labelSegments}/${BatchStats.labelFlushes}f" +
+            "  glyphs ${BatchStats.glyphs}" +
+            "  groupmiss ${BatchStats.groupMisses}"
+        lines += "entities ${EntityPoseStats.entitiesPerFrame}" +
+            "  pose-stable ${EntityPoseStats.stablePercent}%" +
+            "  staged ${BatchStats.stagedEntities}/${BatchStats.stagedParts}p"
+        val sampled = RenderMetrics.getSampledFrames().coerceAtLeast(1)
+        lines += "ents drawn ${RenderMetrics.getRenderedEntities() / sampled}" +
+            "  culled ${RenderMetrics.getCulledEntities() / sampled}" +
+            "  queries ${EntityOcclusion.queued}/${EntityOcclusion.capacity}"
+        lines += "submit ${millis(RenderStats.submitNanos / NANOS_PER_MILLI)}" +
+            "  upload ${millis(RenderStats.uploadNanos / NANOS_PER_MILLI)}" +
+            "  graph exec ${millis(RenderStats.graphNanos / NANOS_PER_MILLI)}"
+        lines += "passes ${RenderStats.passes}" +
+            "  pass setup ${millis(RenderStats.passSetupNanos / NANOS_PER_MILLI)}"
+        lines += "ffp matrix ${FfpStats.matrixPerFrame}" +
+            "  state ${FfpStats.statePerFrame}" +
+            "  uniform ${FfpStats.uniformPerFrame}"
+        val overlapped = KaliaEngine.overlappedFrames
+        val exclusive = KaliaEngine.exclusiveFrames
+        val total = overlapped + exclusive
+        lines += "overlap ${if (total == 0) 0 else overlapped * 100 / total}% of $total frames" +
+            "  serialised $exclusive" +
+            "  skipped ${KaliaEngine.skippedFrames}"
 
         return lines
     }
@@ -113,4 +156,6 @@ object KaliaDebugHud {
     private const val MARGIN = 2
     private const val BACKDROP = 0x90505050.toInt()
     private const val TEXT = 0xFFE0E0E0.toInt()
+
+    private const val NANOS_PER_MILLI = 1_000_000.0
 }

@@ -1,5 +1,6 @@
 package re.lilith.kalia.renderer.command.list
 
+import re.lilith.kalia.renderer.utility.MemoryAccess
 import re.lilith.kalia.renderer.resource.GpuBuffer
 import re.lilith.kalia.renderer.resource.GpuPipeline
 import re.lilith.kalia.renderer.resource.GpuResource
@@ -223,7 +224,9 @@ class CommandStream {
         val length = source.remaining()
         reserve(Int.SIZE_BYTES + length)
         data.putInt(length)
-        data.put(source.duplicate())
+        val position = source.position()
+        data.put(source)
+        source.position(position)
     }
 
     fun reset() {
@@ -247,23 +250,43 @@ class CommandStream {
 
     fun reader(): Reader = Reader(encoded())
 
-    class Reader(private val data: ByteBuffer) {
-        val hasNext: Boolean get() = data.remaining() >= Int.SIZE_BYTES
+    class Reader(data: ByteBuffer) {
+        private val base = MemoryAccess.addressOf(data)
+        private val end = base + data.limit()
+        private var cursor = base + data.position()
 
-        fun int(): Int = data.getInt()
+        private val blobView: ByteBuffer = data.duplicate().order(ByteOrder.LITTLE_ENDIAN)
 
-        fun long(): Long = data.getLong()
+        val hasNext: Boolean get() = cursor + Int.SIZE_BYTES <= end
 
-        fun float(): Float = data.getFloat()
+        fun int(): Int {
+            val value = MemoryAccess.getInt(cursor)
+            cursor += Int.SIZE_BYTES
+            return value
+        }
 
-        fun flag(): Boolean = data.getInt() != 0
+        fun long(): Long {
+            val value = MemoryAccess.getLong(cursor)
+            cursor += Long.SIZE_BYTES
+            return value
+        }
+
+        fun float(): Float {
+            val value = MemoryAccess.getFloat(cursor)
+            cursor += Float.SIZE_BYTES
+            return value
+        }
+
+        fun flag(): Boolean = int() != 0
 
         fun blob(): ByteBuffer {
-            val length = data.getInt()
-            val slice = data.slice().order(ByteOrder.LITTLE_ENDIAN)
-            slice.limit(length)
-            data.position(data.position() + length)
-            return slice
+            val length = int()
+            val start = (cursor - base).toInt()
+            blobView.clear()
+            blobView.position(start)
+            blobView.limit(start + length)
+            cursor += length
+            return blobView
         }
     }
 

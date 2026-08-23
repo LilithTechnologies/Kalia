@@ -64,6 +64,15 @@ data class DeviceCapabilities(
      * Whether the backend can run compute shaders at all
      */
     val supportsCompute: Boolean = false,
+
+    /**
+     * Whether the backend can sample from a runtime-sized texture array indexed per instance,
+     * which is what lets draws that differ only by texture merge into one.
+     *
+     * NB: Not sure how MVK handles this. Was told its fragile
+     *      If something breaks, I am not to be blamed :D
+     */
+    val supportsBindlessTextures: Boolean = false,
     /**
      * The number of fractional bits used to represent coordinates within a
      * single texture element (texel) during texture sampling.

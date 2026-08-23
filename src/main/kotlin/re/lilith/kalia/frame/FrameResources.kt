@@ -22,13 +22,17 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
     }
 
 
-    private val threadSlot = ThreadLocal.withInitial { 0 }
+    private var gameSlot = 0
+    private var renderSlot = 0
+
+    private val onRenderThread: Boolean get() = Thread.currentThread() === RenderThreadRef.thread
 
     fun bindSlot(slot: Int) {
-        threadSlot.set(Math.floorMod(slot, streams.size))
+        val bounded = Math.floorMod(slot, streams.size)
+        if (onRenderThread) renderSlot = bounded else gameSlot = bounded
     }
 
-    private val streamIndex: Int get() = threadSlot.get()
+    private val streamIndex: Int get() = if (onRenderThread) renderSlot else gameSlot
 
     val vertexArena: StreamArena get() = streams[streamIndex].vertexArena
 
@@ -60,10 +64,11 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
 
     private val samplerLock = Any()
     private val samplerCache = HashMap<SamplerDescription, GpuSampler>()
-    private val samplerMemo = ThreadLocal.withInitial { SamplerMemo() }
+    private val gameSamplerMemo = SamplerMemo()
+    private val renderSamplerMemo = SamplerMemo()
 
     fun sampler(description: SamplerDescription): GpuSampler {
-        val memo = samplerMemo.get()
+        val memo = if (onRenderThread) renderSamplerMemo else gameSamplerMemo
         val cached = memo.sampler
         if (cached != null && memo.description === description) {
             return cached

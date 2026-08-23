@@ -8,15 +8,13 @@ import re.lilith.kalia.renderer.geometry.Viewport
 import re.lilith.kalia.renderer.resource.GpuTexture
 
 object GameFrame {
-    private val threadState = ThreadLocal.withInitial { GameFrameData() }
+    private val gameState = GameFrameData()
+    private val renderState = GameFrameData()
 
-    private val state: GameFrameData get() = threadState.get()
+    private val state: GameFrameData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    fun bindContext(data: GameFrameData) {
-        threadState.set(data)
-    }
 
-    fun context(): GameFrameData = state
 
     val isRecording: Boolean get() = state.encoder != null
 

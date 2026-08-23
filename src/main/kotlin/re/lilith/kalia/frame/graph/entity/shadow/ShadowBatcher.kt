@@ -1,11 +1,12 @@
 package re.lilith.kalia.frame.graph.entity.shadow
 
+import re.lilith.kalia.renderer.pipeline.ColorMask
+import re.lilith.kalia.renderer.pipeline.AttachmentLayout
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.MatrixState
-import re.lilith.kalia.gl.ShaderUniforms
-import re.lilith.kalia.renderer.device.RenderDevice
-import re.lilith.kalia.renderer.format.IndexFormat
+import re.lilith.kalia.gl.emulation.GlTexture
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.format.VertexFormat
 import re.lilith.kalia.renderer.format.VertexStepMode
@@ -14,17 +15,11 @@ import re.lilith.kalia.renderer.pipeline.BlendState
 import re.lilith.kalia.renderer.pipeline.DepthState
 import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.pipeline.RasterState
-import re.lilith.kalia.renderer.resource.GpuPipeline
 import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
-import re.lilith.kalia.shader.ShaderPrelude
-import re.lilith.kalia.gl.emulation.GlTexture
 import re.lilith.kalia.renderer.utility.MemoryAccess
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 object ShadowBatcher {
-    private const val BYTES_PER_INSTANCE = 88
 
     private val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instOrigin", 2, VertexAttributeFormat.FLOAT3)
@@ -44,15 +39,13 @@ object ShadowBatcher {
         dstAlpha = BlendFactor.ONE_MINUS_SRC_ALPHA,
     )
 
-    private val threadState = ThreadLocal.withInitial { ShadowBatchData() }
+    private val gameState = ShadowBatchData()
+    private val renderState = ShadowBatchData()
 
-    private val state: ShadowBatchData get() = threadState.get()
+    private val state: ShadowBatchData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    internal fun bindContext(data: ShadowBatchData) {
-        threadState.set(data)
-    }
 
-    internal fun context(): ShadowBatchData = state
 
     @JvmStatic
     var texture: GlTexture?
@@ -68,17 +61,19 @@ object ShadowBatcher {
         alpha: Float,
     ) {
         val active = state
-        if (GameFrame.current == null) return
+        val encoder = GameFrame.current ?: return
+        val resources = FrameResources.of(encoder.device)
+        active.groups.environment.open(resources)
 
-        if (active.instances.remaining() < BYTES_PER_INSTANCE) {
-            val grown = ByteBuffer.allocateDirect(active.instances.capacity() * 2).order(ByteOrder.nativeOrder())
-            active.instances.flip()
-            grown.put(active.instances)
-            active.instances = grown
-            active.instanceAddress = MemoryAccess.addressOf(active.instances)
-        }
+        val bound = active.texture
+        val instances = active.groups.resolve(
+            description = descriptionFor(encoder.attachments),
+            texture = textureFor(bound, resources),
+            sampler = samplerFor(bound, resources),
+        )
+
         val m = MatrixState.modelView()
-        var p = active.instanceAddress + active.instances.position()
+        var p = instances.reserve()
         MemoryAccess.putFloat(p, originX); p += 4
         MemoryAccess.putFloat(p, originY); p += 4
         MemoryAccess.putFloat(p, originZ); p += 4
@@ -101,10 +96,19 @@ object ShadowBatcher {
         MemoryAccess.putFloat(p, uvT); p += 4
         MemoryAccess.putFloat(p, uvU); p += 4
         MemoryAccess.putFloat(p, alpha)
-
-        active.instances.position(active.instances.position() + BYTES_PER_INSTANCE)
-        active.count++
     }
+
+    private fun descriptionFor(attachments: AttachmentLayout): GraphicsPipelineDescription =
+        state.groups.describe(
+            program = ShadowShaders.program,
+            vertexFormat = ShadowMesh.VERTEX_FORMAT,
+            instanceFormat = INSTANCE_FORMAT,
+            attachments = attachments,
+            raster = RasterState.TWO_SIDED,
+            depth = if (attachments.depthFormat != null) DepthState.READ_ONLY else DepthState.DISABLED,
+            blend = BLEND,
+            colorMask = ColorMask.ALL,
+        )
 
     private fun textureFor(bound: GlTexture?, resources: FrameResources): GpuTexture =
         bound?.texture ?: resources.whiteTexture
@@ -113,58 +117,7 @@ object ShadowBatcher {
         bound?.let { resources.sampler(it.sampler) } ?: resources.defaultSampler
 
     fun flush() {
-        val active = state
-        if (active.count == 0) {
-            return
-        }
-        val encoder = GameFrame.current
-        if (encoder == null) {
-            active.count = 0
-            active.instances.clear()
-            return
-        }
-        val device = encoder.device
-        if (active.pipelineDevice !== device) {
-            active.pipeline?.close()
-            active.pipeline = null
-            active.pipelineDevice = device
-        }
-        val builtPipeline = active.pipeline ?: device.createPipeline(
-            GraphicsPipelineDescription(
-                program = ShadowShaders.program,
-                vertexFormat = ShadowMesh.VERTEX_FORMAT,
-                attachments = encoder.attachments,
-                raster = RasterState.TWO_SIDED,
-                depth = if (encoder.attachments.depthFormat != null) DepthState.READ_ONLY else DepthState.DISABLED,
-                blend = BLEND,
-                instanceFormat = INSTANCE_FORMAT,
-            ),
-        ).also { active.pipeline = it }
-
-        val resources = FrameResources.of(device)
-        val bound = texture
-
-        resources.sceneUniforms.sync()
-        encoder.bindPipeline(builtPipeline)
-        encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, textureFor(bound, resources), samplerFor(bound, resources))
-        encoder.bindUniformBuffer(
-            binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-            buffer = resources.sceneUniforms.uniformBuffer,
-            offsetBytes = resources.sceneUniforms.offsetBytes,
-            sizeBytes = resources.sceneUniforms.sizeBytes,
-        )
-        encoder.pushConstants(ShaderUniforms.pushConstants())
-
-        active.instances.flip()
-        val slice = resources.vertexArena.append(active.instances, active.instances.remaining())
-        encoder.bindVertexBuffer(0, ShadowMesh.vertices(device))
-        encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
-        encoder.bindIndexBuffer(ShadowMesh.indices(device), IndexFormat.UINT32)
-        encoder.drawIndexed(ShadowMesh.INDEX_COUNT, active.count, 0, 0, 0)
-
-        active.instances.clear()
-        active.count = 0
+        state.groups.flush(ShadowGeometry)
     }
 
-    internal const val INITIAL_CAPACITY = 256 * BYTES_PER_INSTANCE
 }

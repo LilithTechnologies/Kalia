@@ -18,6 +18,7 @@ import re.lilith.kalia.renderer.device.RenderDevice;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.render.block.entity.BlockEntityRenderDispatcher;
 import net.minecraft.entity.Entity;
+import org.taumc.celeritas.impl.render.entity.EntityCullingHook;
 import net.minecraft.world.World;
 
 import java.util.List;
@@ -121,7 +122,7 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
             return true;
         }
 
-        return this.isEntitySectionVisible(box);
+        return this.isEntitySectionVisible(box) && EntityCullingHook.isVisible(entity);
     }
 
     public boolean isEntitySectionVisible(net.minecraft.util.math.Box box) {
@@ -130,7 +131,9 @@ public class CeleritasWorldRenderer extends SimpleWorldRenderer<World, Primitive
 
     public void prepareEntityCulling(List<Entity> entities, Entity camera,
             double cameraX, double cameraY, double cameraZ) {
-        // TODO
+        if (Celeritas.CONFIG.entityCulling) {
+            EntityCullingHook.prepare(entities, cameraX, cameraY, cameraZ);
+        }
     }
 
     public boolean isParticleVisible(Particle particle) {

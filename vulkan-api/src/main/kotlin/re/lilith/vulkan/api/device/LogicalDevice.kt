@@ -1,5 +1,7 @@
 package re.lilith.vulkan.api.device
 
+import re.lilith.vulkan.api.query.QueryPool
+import re.lilith.vulkan.api.query.QueryPoolConfig
 import org.lwjgl.vulkan.VK10
 import org.lwjgl.vulkan.VkDevice
 import re.lilith.vulkan.api.command.CommandPool
@@ -47,6 +49,9 @@ class LogicalDevice internal constructor(
         queueFamilyIndex: Int,
         flags: CommandPoolFlags = CommandPoolFlags.ResetCommandBuffer,
     ): CommandPool = LogicalDeviceCommands.createCommandPool(this, queueFamilyIndex, flags)
+
+    fun createQueryPool(config: QueryPoolConfig): QueryPool =
+        LogicalDeviceQueries.createQueryPool(this, config)
 
     fun createFence(signaled: Boolean = false): Fence =
         LogicalDeviceSynchronization.createFence(this, signaled)

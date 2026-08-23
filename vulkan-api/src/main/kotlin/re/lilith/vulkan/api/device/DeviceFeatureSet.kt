@@ -19,6 +19,7 @@ data class DeviceFeatureSet(
     val descriptorBindingPartiallyBound: Boolean = false,
     val descriptorBindingVariableDescriptorCount: Boolean = false,
     val descriptorBindingUpdateUnusedWhilePending: Boolean = false,
+    val shaderSampledImageArrayNonUniformIndexing: Boolean = false,
     val runtimeDescriptorArray: Boolean = false,
     val bufferDeviceAddress: Boolean = false,
     val timelineSemaphore: Boolean = false,

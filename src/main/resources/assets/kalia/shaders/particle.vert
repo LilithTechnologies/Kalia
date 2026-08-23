@@ -6,12 +6,18 @@ layout(location = 3) in vec4 instUv;
 layout(location = 4) in vec4 instColor;
 layout(location = 5) in vec2 instLightUv;
 layout(location = 6) in float instAlphaCutout;
+#ifdef BINDLESS
+layout(location = 7) in uint instTexture;
+#endif
 
 layout(location = 0) out vec4 vColor;
 layout(location = 1) out vec2 vUv;
 layout(location = 2) out float vViewDistance;
 layout(location = 3) out float vAlphaCutout;
 layout(location = 4) out vec2 vLightUv;
+#ifdef BINDLESS
+layout(location = 5) flat out uint vTexture;
+#endif
 
 #include "kalia:prelude.glsl"
 
@@ -25,4 +31,7 @@ void main() {
     vColor = instColor;
     vAlphaCutout = instAlphaCutout;
     vLightUv = instLightUv;
+#ifdef BINDLESS
+    vTexture = instTexture;
+#endif
 }

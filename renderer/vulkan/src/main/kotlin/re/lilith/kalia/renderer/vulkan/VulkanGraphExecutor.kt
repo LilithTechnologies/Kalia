@@ -1,5 +1,6 @@
 package re.lilith.kalia.renderer.vulkan
 
+import re.lilith.kalia.renderer.device.RenderStats
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.geometry.Viewport
 import re.lilith.kalia.renderer.graph.*
@@ -159,6 +160,8 @@ internal class VulkanGraphExecutor(
         recorder: CommandRecorder,
         frame: VulkanFrameSlot,
     ) {
+        RenderStats.recordPass()
+        val setupStarted = System.nanoTime()
         val colorTargets = pass.colorAttachments.map { bound[it.target.id]!! }
         val depthTarget = pass.depthAttachment?.let { bound[it.target.id]!! }
         val extent = colorTargets.firstOrNull()?.extent
@@ -245,11 +248,15 @@ internal class VulkanGraphExecutor(
         encoder.viewport(Viewport.of(extent))
         encoder.scissor(null)
 
+        RenderStats.recordPassSetup(System.nanoTime() - setupStarted)
+
         try {
             pass.body(encoder)
         } finally {
+            val teardownStarted = System.nanoTime()
             encoder.finish()
             recorder.endDebugLabel()
+            RenderStats.recordPassSetup(System.nanoTime() - teardownStarted)
         }
     }
 

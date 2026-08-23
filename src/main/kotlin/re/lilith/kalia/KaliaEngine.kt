@@ -3,8 +3,11 @@ package re.lilith.kalia
 import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.util.crash.CrashException
 import net.minecraft.util.crash.CrashReport
+import re.lilith.kalia.frame.GameFrameShape
 import re.lilith.kalia.frame.FrameResources
-import re.lilith.kalia.frame.GameFrameGraph
+import re.lilith.kalia.frame.graph.entity.nametag.NametagStage
+import re.lilith.kalia.frame.graph.occlusion.EntityCuller
+import re.lilith.kalia.frame.RenderThread
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.platform.KaliaMod
 import re.lilith.kalia.platform.MinecraftSurface
@@ -12,8 +15,6 @@ import re.lilith.kalia.renderer.Kalia
 import re.lilith.kalia.renderer.device.BackendId
 import re.lilith.kalia.renderer.device.DeviceSettings
 import re.lilith.kalia.renderer.device.RenderDevice
-import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
-import re.lilith.kalia.rendering.ui.GuiBlur
 import re.lilith.kalia.rendering.ui.UI
 import re.lilith.kalia.rendering.ui.item.GuiItems
 import re.lilith.kalia.rendering.ui.pip.GuiEntityPreview
@@ -30,8 +31,7 @@ object KaliaEngine {
         get() = (state as? State.Running)?.device
 
     var settings: DeviceSettings = DeviceSettings(
-        validation = System.getProperty("kalia.validation")?.toBoolean()
-            ?: FabricLoader.getInstance().isDevelopmentEnvironment,
+        validation = false,
     )
         set(value) {
             field = value
@@ -111,6 +111,8 @@ object KaliaEngine {
         }
         val running = state as? State.Running ?: return false
 
+        NametagStage.enabled = running.device.capabilities.supportsBindlessTextures
+        EntityCuller.install()
         running.device.beginFrame()
         FrameResources.of(running.device).beginFrame(running.device.frameSlot)
         GlBridge.applyDepthBias()
@@ -118,23 +120,59 @@ object KaliaEngine {
         return true
     }
 
-    fun renderFrame(): Boolean {
-        val running = state as? State.Running ?: return false
+    private var renderThread: RenderThread? = null
 
-        val graph = GameFrameGraph.build(running.device)
-        WorldFrameTimings.end(WorldFrameTimings.GRAPH_BUILD)
+    private fun renderThread(device: RenderDevice): RenderThread =
+        renderThread ?: RenderThread(device).also { renderThread = it }
 
-        return runCatching {
-            running.device.render(graph)
-        }.getOrElse { failure ->
+    fun awaitRender() {
+        val worker = renderThread ?: return
+        runCatching { worker.awaitIdle() }.onFailure { failure ->
             KaliaMod.LOGGER.error("A Kalia frame has failed. The engine will be terminating shortly.", failure)
-            shutdown()
+            terminate()
             val report = CrashReport.create(failure, "A Kalia frame has failed, and the engine was terminated.")
             throw CrashException(report)
         }
     }
 
-    fun shutdown() {
+    private var pendingExclusive = false
+
+    fun submitFrame(): Boolean {
+        val running = state as? State.Running ?: return false
+
+        WorldFrameTimings.end(WorldFrameTimings.GRAPH_BUILD)
+        pendingExclusive = GameFrameShape.replaysVanilla
+        renderThread(running.device).submit(running.device.frameSlot)
+        running.device.endFrame()
+        return true
+    }
+
+    val lastFrameSkipped: Boolean get() = renderThread?.lastSkipped ?: false
+
+    val skippedFrames: Int get() = renderThread?.skippedFrames ?: 0
+
+    var exclusiveFrames: Int = 0
+        private set
+
+    var overlappedFrames: Int = 0
+        private set
+
+    fun awaitExclusiveRender() {
+        if (pendingExclusive) {
+            pendingExclusive = false
+            exclusiveFrames++
+            awaitRender()
+        } else {
+            overlappedFrames++
+        }
+    }
+
+    fun terminate() {
+        renderThread?.let { worker ->
+            runCatching { worker.awaitIdle() }
+            worker.close()
+            renderThread = null
+        }
         (state as? State.Running)?.let { running ->
             runCatching {
                 running.device.waitIdle()

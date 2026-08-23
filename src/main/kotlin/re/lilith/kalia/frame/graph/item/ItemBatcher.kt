@@ -2,35 +2,27 @@ package re.lilith.kalia.frame.graph.item
 
 import org.joml.Matrix4f
 import re.lilith.kalia.buffer.PersistentMesh
-import re.lilith.kalia.frame.draw.BatchEnvironment
-import re.lilith.kalia.frame.draw.KaliaDraw
-import re.lilith.kalia.buffer.InstanceArena
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
+import re.lilith.kalia.frame.RenderThreadRef
+import re.lilith.kalia.frame.draw.KaliaDraw
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.gl.ShaderUniforms
-import re.lilith.kalia.renderer.device.RenderDevice
-import re.lilith.kalia.renderer.format.IndexFormat
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.format.VertexFormat
 import re.lilith.kalia.renderer.format.VertexStepMode
 import re.lilith.kalia.renderer.pipeline.AttachmentLayout
-import re.lilith.kalia.renderer.pipeline.BlendState
-import re.lilith.kalia.renderer.pipeline.ColorMask
 import re.lilith.kalia.renderer.pipeline.DepthState
 import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.pipeline.RasterState
-import re.lilith.kalia.renderer.resource.GpuPipeline
-import re.lilith.kalia.renderer.resource.GpuSampler
-import re.lilith.kalia.renderer.resource.GpuTexture
-import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.renderer.utility.MemoryAccess
 import re.lilith.kalia.vertex.VertexLocations
-import kotlin.collections.iterator
 
 object ItemBatcher {
-    private const val BYTES_PER_INSTANCE = 68
+    private const val TEXTURE_SLOT_OFFSET = 68
+    private const val INSTANCE_TEXTURE_LOCATION = 12
+
 
     val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instRow0", VertexLocations.INSTANCE_ROW0, VertexAttributeFormat.FLOAT4)
@@ -38,26 +30,16 @@ object ItemBatcher {
         attribute("instRow2", VertexLocations.INSTANCE_ROW2, VertexAttributeFormat.FLOAT4)
         attribute("instTint", VertexLocations.INSTANCE_TINT, VertexAttributeFormat.UNORM8X4)
         attribute("instLight", VertexLocations.INSTANCE_LIGHT, VertexAttributeFormat.FLOAT4)
+        attribute("instTexture", INSTANCE_TEXTURE_LOCATION, VertexAttributeFormat.UINT)
     }
 
-    internal data class GroupKey(
-        val description: GraphicsPipelineDescription,
-        val mesh: PersistentMesh,
-        val texture: GpuTexture,
-        val sampler: GpuSampler,
-        val lightmap: GpuTexture,
-        val lightmapSampler: GpuSampler,
-    )
+    private val gameState = ItemBatchData()
+    private val renderState = ItemBatchData()
 
-    private val threadState = ThreadLocal.withInitial { ItemBatchData() }
+    private val state: ItemBatchData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    private val state: ItemBatchData get() = threadState.get()
 
-    internal fun bindContext(data: ItemBatchData) {
-        threadState.set(data)
-    }
-
-    internal fun context(): ItemBatchData = state
 
     fun record(mesh: PersistentMesh, modelView: Matrix4f) {
         val active = state
@@ -70,72 +52,39 @@ object ItemBatcher {
         }
 
         val resources = FrameResources.of(encoder.device)
-        active.environment.open(resources)
+        active.groups.environment.open(resources)
+
         val texture = KaliaDraw.textureForUnit(0, resources)
         val sampler = KaliaDraw.samplerForUnit(0, resources)
-        val lightmap = KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources)
-        val lightmapSampler = KaliaDraw.samplerForUnit(GlBridge.LIGHTMAP_UNIT, resources)
-        val description = descriptionFor(encoder.attachments, format.format)
+        val slot = encoder.device.textureIndex(texture, sampler)
 
-        val instances: InstanceArena
-        val cached = active.lastInstances
-        if (cached != null &&
-            active.lastKeyDescription === description && active.lastKeyMesh === mesh &&
-            active.lastKeyTexture === texture && active.lastKeySampler === sampler &&
-            active.lastKeyLightmap === lightmap && active.lastKeyLightmapSampler === lightmapSampler
-        ) {
-            instances = cached
-        } else {
-            val key = GroupKey(description, mesh, texture, sampler, lightmap, lightmapSampler)
-            instances = active.groups.getOrPut(key) { active.instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
-            active.lastKeyDescription = description
-            active.lastKeyMesh = mesh
-            active.lastKeyTexture = texture
-            active.lastKeySampler = sampler
-            active.lastKeyLightmap = lightmap
-            active.lastKeyLightmapSampler = lightmapSampler
-            active.lastInstances = instances
-        }
-        writeInstance(instances.reserve(), modelView)
-    }
-
-    private fun descriptionFor(attachments: AttachmentLayout, vertexFormat: VertexFormat): GraphicsPipelineDescription {
-        val active = state
-        val raster = RasterState.TWO_SIDED
-        val depth = if (attachments.depthFormat != null) GlState.depthState() else DepthState.DISABLED
-        val blend = GlState.blendState()
-        val colorMask = GlState.colorMask()
-
-        val cached = active.lastDescription
-        if (cached != null &&
-            active.lastDescAttachments === attachments &&
-            active.lastDescVertexFormat === vertexFormat &&
-            active.lastDescRaster === raster &&
-            active.lastDescDepth === depth &&
-            active.lastDescBlend === blend &&
-            active.lastDescColorMask === colorMask
-        ) {
-            return cached
-        }
-        val created = GraphicsPipelineDescription(
-            program = ItemShaders.program(),
-            vertexFormat = vertexFormat,
-            attachments = attachments,
-            raster = raster,
-            depth = depth,
-            blend = blend,
-            colorMask = colorMask,
-            instanceFormat = INSTANCE_FORMAT,
+        val instances = active.groups.resolve(
+            description = descriptionFor(encoder.attachments, format.format, slot >= 0),
+            mesh = mesh,
+            texture = if (slot >= 0) null else texture,
+            sampler = if (slot >= 0) null else sampler,
+            lightmap = KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources),
+            lightmapSampler = KaliaDraw.samplerForUnit(GlBridge.LIGHTMAP_UNIT, resources),
         )
-        active.lastDescAttachments = attachments
-        active.lastDescVertexFormat = vertexFormat
-        active.lastDescRaster = raster
-        active.lastDescDepth = depth
-        active.lastDescBlend = blend
-        active.lastDescColorMask = colorMask
-        active.lastDescription = created
-        return created
+        val address = instances.reserve()
+        writeInstance(address, modelView)
+        MemoryAccess.putInt(address + TEXTURE_SLOT_OFFSET, if (slot >= 0) slot else 0)
     }
+
+    private fun descriptionFor(
+        attachments: AttachmentLayout,
+        vertexFormat: VertexFormat,
+        bindless: Boolean,
+    ): GraphicsPipelineDescription = state.groups.describe(
+        program = ItemShaders.program(bindless),
+        vertexFormat = vertexFormat,
+        instanceFormat = INSTANCE_FORMAT,
+        attachments = attachments,
+        raster = RasterState.TWO_SIDED,
+        depth = if (attachments.depthFormat != null) GlState.depthState() else DepthState.DISABLED,
+        blend = GlState.blendState(),
+        colorMask = GlState.colorMask(),
+    )
 
     private fun writeInstance(address: Long, modelView: Matrix4f) {
         var p = address
@@ -170,65 +119,7 @@ object ItemBatcher {
     private fun unorm(value: Float): Byte = (value * 255f + 0.5f).toInt().coerceIn(0, 255).toByte()
 
     fun flush() {
-        val active = state
-        if (active.groups.isEmpty()) {
-            return
-        }
-        val encoder = GameFrame.current
-        if (encoder == null) {
-            recycle()
-            return
-        }
-        val device = encoder.device
-        val resources = FrameResources.of(device)
-        if (active.pipelineDevice !== device) {
-            active.pipelines.clear()
-            active.pipelineDevice = device
-        }
-
-        for ((key, instances) in active.groups) {
-            val vertexBuffer = key.mesh.vertexBuffer ?: continue
-            val quadCount = key.mesh.vertexCount / 4
-            if (quadCount <= 0) continue
-
-            val pipeline = active.pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
-            encoder.bindPipeline(pipeline)
-            GlBridge.applyDepthBias()
-            encoder.lineWidth(GlState.lineWidth)
-            encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
-            encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
-            active.environment.apply(encoder)
-
-            val data = instances.finish()
-            val slice = resources.vertexArena.append(data, data.remaining())
-            encoder.bindVertexBuffer(0, vertexBuffer)
-            encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
-            encoder.bindIndexBuffer(resources.indices.forQuads(quadCount), IndexFormat.UINT32)
-            encoder.drawIndexed(resources.indices.quadIndexCount(quadCount), instances.count, 0, 0, 0)
-        }
-        recycle()
+        state.groups.flush(ItemGeometry)
     }
 
-    private fun recycle() {
-        val active = state
-        for (instances in active.groups.values) {
-            if (active.instancePool.size < POOL_CAPACITY) {
-                active.instancePool.addLast(instances)
-            } else {
-                instances.release()
-            }
-        }
-        active.groups.clear()
-        active.environment.close()
-        active.lastKeyDescription = null
-        active.lastKeyMesh = null
-        active.lastKeyTexture = null
-        active.lastKeySampler = null
-        active.lastKeyLightmap = null
-        active.lastKeyLightmapSampler = null
-        active.lastInstances = null
-    }
-
-    private const val INITIAL_INSTANCES = 64
-    private const val POOL_CAPACITY = 32
 }

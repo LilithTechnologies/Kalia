@@ -36,8 +36,49 @@ object RenderStats {
     var gpuWaitNanos = 0L
         private set
 
+    var submitNanos = 0L
+        private set
+
+    var uploadNanos = 0L
+        private set
+
+    var graphNanos = 0L
+        private set
+
+    var passSetupNanos = 0L
+        private set
+
+    var passes = 0
+        private set
+
+    private var currentSubmitNanos = 0L
+    private var currentUploadNanos = 0L
+    private var currentGraphNanos = 0L
+    private var currentPassSetupNanos = 0L
+    private var currentPasses = 0
+
     fun recordGpuWait(nanos: Long) {
         currentGpuWaitNanos += nanos
+    }
+
+    fun recordSubmit(nanos: Long) {
+        currentSubmitNanos += nanos
+    }
+
+    fun recordUploadTime(nanos: Long) {
+        currentUploadNanos += nanos
+    }
+
+    fun recordGraph(nanos: Long) {
+        currentGraphNanos += nanos
+    }
+
+    fun recordPassSetup(nanos: Long) {
+        currentPassSetupNanos += nanos
+    }
+
+    fun recordPass() {
+        currentPasses++
     }
 
     fun recordDraw() {
@@ -84,6 +125,11 @@ object RenderStats {
         batches = currentBatches
         batchedDraws = currentBatchedDraws
         gpuWaitNanos = currentGpuWaitNanos
+        submitNanos = currentSubmitNanos
+        uploadNanos = currentUploadNanos
+        graphNanos = currentGraphNanos
+        passSetupNanos = currentPassSetupNanos
+        passes = currentPasses
 
         currentDraws = 0
         currentPipelineBinds = 0
@@ -95,6 +141,11 @@ object RenderStats {
         currentBatches = 0
         currentBatchedDraws = 0
         currentGpuWaitNanos = 0L
+        currentSubmitNanos = 0L
+        currentUploadNanos = 0L
+        currentGraphNanos = 0L
+        currentPassSetupNanos = 0L
+        currentPasses = 0
     }
 
     fun summary(): List<String> = listOf(

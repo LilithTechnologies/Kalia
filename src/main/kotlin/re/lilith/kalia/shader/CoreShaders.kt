@@ -1,6 +1,7 @@
 package re.lilith.kalia.shader
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.ShaderUniforms
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.shader.*
@@ -16,15 +17,13 @@ object CoreShaders {
     private val lock = Any()
     private val programs = Int2ObjectOpenHashMap<ShaderProgram>()
 
-    private val threadState = ThreadLocal.withInitial { CoreShadersData() }
+    private val gameState = CoreShadersData()
+    private val renderState = CoreShadersData()
 
-    private val state: CoreShadersData get() = threadState.get()
+    private val state: CoreShadersData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    internal fun bindContext(data: CoreShadersData) {
-        threadState.set(data)
-    }
 
-    internal fun context(): CoreShadersData = state
 
     fun programFor(format: TranslatedVertexFormat, texGen: Boolean = false): ShaderProgram {
         val active = state

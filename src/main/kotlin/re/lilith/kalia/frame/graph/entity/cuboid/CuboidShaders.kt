@@ -10,19 +10,30 @@ import re.lilith.kalia.shader.ShaderAssets
 import re.lilith.kalia.shader.ShaderPrelude
 
 object CuboidShaders {
-    private val programs = HashMap<Boolean, ShaderProgram>()
+    private val programs = HashMap<String, ShaderProgram>()
 
-    fun programFor(textureArray: Boolean): ShaderProgram = programs.getOrPut(textureArray) {
-        val defines = if (textureArray) listOf("TEXTURE_ARRAY") else emptyList()
-        val key = if (textureArray) "cuboid-array" else "cuboid"
+    private const val BINDLESS_KEY = "bindless"
+
+    fun programFor(textureArray: Boolean, bindless: Boolean = false): ShaderProgram =
+        programs.getOrPut(if (bindless) BINDLESS_KEY else textureArray.toString()) {
+        val defines = when {
+            bindless -> listOf("BINDLESS")
+            textureArray -> listOf("TEXTURE_ARRAY")
+            else -> emptyList()
+        }
+        val key = when {
+            bindless -> "cuboid-bindless"
+            textureArray -> "cuboid-array"
+            else -> "cuboid"
+        }
         ShaderProgram(
             label = "kalia/$key",
             stages = mapOf(
                 ShaderStage.VERTEX to ShaderSource.Glsl("$key.vert", ShaderAssets.assemble("kalia:cuboid.vert", defines)),
                 ShaderStage.FRAGMENT to ShaderSource.Glsl("$key.frag", ShaderAssets.assemble("kalia:cuboid.frag", defines)),
             ),
-            bindings = listOf(
-                ShaderBinding(
+            bindings = listOfNotNull(
+                if (bindless) null else ShaderBinding(
                     name = "kaliaBaseTexture",
                     binding = ShaderPrelude.Bindings.BASE_TEXTURE,
                     kind = BindingKind.TEXTURE,
@@ -43,7 +54,7 @@ object CuboidShaders {
             ),
             pushConstantBytes = ShaderUniforms.PUSH_CONSTANT_BYTES,
         ).apply {
-            stages.forEach { (stage, source) -> ShaderAssets.dump(source, stage.name.lowercase(), if (textureArray) 1 else 0) }
+            stages.forEach { (stage, source) -> ShaderAssets.dump(source, stage.name.lowercase(), if (bindless) 2 else if (textureArray) 1 else 0) }
         }
     }
 }

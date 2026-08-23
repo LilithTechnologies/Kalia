@@ -106,6 +106,14 @@ object GuiItems {
         atlas?.let { GuiBuiltinItems.render(pass, it) }
     }
 
+    fun recordBuiltins(device: RenderDevice) {
+        atlas?.let { GuiBuiltinItems.record(device, it) }
+    }
+
+    fun retryPending() {
+        atlas?.retryPending()
+    }
+
     fun invalidate() {
         atlas?.invalidate()
         oversized?.invalidate()

@@ -1,26 +1,14 @@
 package re.lilith.kalia.frame.graph.entity.cuboid
 
-import re.lilith.kalia.buffer.InstanceArena
-import re.lilith.kalia.frame.draw.BatchEnvironment
-import re.lilith.kalia.renderer.device.RenderDevice
+import re.lilith.kalia.frame.graph.instance.InstanceGroups
 import re.lilith.kalia.renderer.pipeline.AttachmentLayout
 import re.lilith.kalia.renderer.pipeline.BlendState
 import re.lilith.kalia.renderer.pipeline.ColorMask
 import re.lilith.kalia.renderer.pipeline.DepthState
-import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.pipeline.RasterState
-import re.lilith.kalia.renderer.resource.GpuPipeline
-import re.lilith.kalia.renderer.resource.GpuSampler
-import re.lilith.kalia.renderer.resource.GpuTexture
-import re.lilith.kalia.renderer.shader.ShaderProgram
 
 internal class CuboidBatchData {
-    val groups = LinkedHashMap<CuboidBatcher.GroupKey, InstanceArena>()
-    val instancePool = ArrayDeque<InstanceArena>()
-    val environment = BatchEnvironment()
-
-    val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
-    var pipelineDevice: RenderDevice? = null
+    val groups = InstanceGroups(BYTES_PER_INSTANCE, INITIAL_INSTANCES, POOL_CAPACITY)
 
     var environmentVersion = 0L
     var biasConstant = 0f
@@ -28,25 +16,8 @@ internal class CuboidBatchData {
     var lineWidth = 1f
 
     var pendingInstances: Int = 0
-
-
-    var lastDescProgram: ShaderProgram? = null
-    var lastDescAttachments: AttachmentLayout? = null
-    var lastDescRaster: RasterState? = null
-    var lastDescDepth: DepthState? = null
-    var lastDescBlend: BlendState? = null
-    var lastDescColorMask: ColorMask? = null
-    var lastDescription: GraphicsPipelineDescription? = null
-
-    var lastKeyDescription: GraphicsPipelineDescription? = null
-    var lastKeyTexture: GpuTexture? = null
-    var lastKeySampler: GpuSampler? = null
-    var lastKeyLightmap: GpuTexture? = null
-    var lastKeyLightmapSampler: GpuSampler? = null
-    var lastInstances: InstanceArena? = null
-
-    var activeInstances: InstanceArena? = null
     var activeLayer: Int = 0
+    var textureIndex: Int = 0
 
     var memoValid = false
     var memoTexId = 0
@@ -56,4 +27,10 @@ internal class CuboidBatchData {
     var memoBlend: BlendState? = null
     var memoColorMask: ColorMask? = null
     var memoAttachments: AttachmentLayout? = null
+
+    private companion object {
+        const val BYTES_PER_INSTANCE = 108
+        const val INITIAL_INSTANCES = 256
+        const val POOL_CAPACITY = 64
+    }
 }

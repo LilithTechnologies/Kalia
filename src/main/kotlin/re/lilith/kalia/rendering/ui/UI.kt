@@ -11,15 +11,23 @@ import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 
 object UI {
-    private val threadState = ThreadLocal.withInitial { GuiFrameData() }
+    private val payloads = Array(PAYLOADS) { GuiFrameData() }
+    private var producingIndex = 0
 
-    private val frame: GuiFrameData get() = threadState.get()
+    private var producing: GuiFrameData = payloads[0]
 
-    fun bindContext(data: GuiFrameData) {
-        threadState.set(data)
+    @Volatile
+    private var consuming: GuiFrameData = payloads[0]
+
+    private val frame: GuiFrameData get() = producing
+
+    fun context(): GuiFrameData = producing
+
+    fun publish() {
+        consuming = producing
+        producingIndex = (producingIndex + 1) % payloads.size
+        producing = payloads[producingIndex]
     }
-
-    fun context(): GuiFrameData = frame
 
     val state: GuiRenderState get() = frame.state
     val scissors: GuiScissorStack get() = frame.scissors
@@ -57,36 +65,40 @@ object UI {
     }
 
     fun prepare(device: RenderDevice) {
-        val active = state
-        if (frame.prepared) {
+        val published = consuming
+        if (published.prepared) {
             return
         }
-        frame.prepared = true
-        frame.isRecording = false
+        published.prepared = true
+        published.isRecording = false
 
-        frame.lastElements = active.size
-        frame.lastItemElements = active.countLayer(GuiLayer.ITEM)
+        published.lastElements = published.state.size
+        published.lastItemElements = published.state.countLayer(GuiLayer.ITEM)
 
-        rendererFor(device).prepare(state, width, height)
+        rendererFor(device).prepare(published.state, published.width, published.height)
     }
 
-    val lastElements: Int get() = frame.lastElements
+    val lastElements: Int get() = consuming.lastElements
 
-    val lastItemElements: Int get() = frame.lastItemElements
+    val lastItemElements: Int get() = consuming.lastItemElements
 
     fun draw(pass: PassContext, phase: GuiBlurPhase? = null) {
-        rendererFor(pass.device).execute(pass, scissors, textures, phase)
+        val published = consuming
+        rendererFor(pass.device).execute(pass, published.scissors, published.textures, phase)
     }
 
     fun drawGroup(pass: PassContext, phase: GuiBlurPhase, group: Int) {
-        rendererFor(pass.device).executeGroup(pass, scissors, textures, phase, group)
+        val published = consuming
+        rendererFor(pass.device).executeGroup(pass, published.scissors, published.textures, phase, group)
     }
 
     fun discard() {
-        frame.isRecording = false
-        state.reset()
-        scissors.reset()
-        textures.reset()
+        payloads.forEach { payload ->
+            payload.isRecording = false
+            payload.state.reset()
+            payload.scissors.reset()
+            payload.textures.reset()
+        }
     }
 
     private fun rendererFor(device: RenderDevice): GuiRenderer {
@@ -309,4 +321,6 @@ object UI {
     const val OPAQUE_WHITE = -1
 
     const val VANILLA_SHEET = 256f
+
+    private const val PAYLOADS = 2
 }

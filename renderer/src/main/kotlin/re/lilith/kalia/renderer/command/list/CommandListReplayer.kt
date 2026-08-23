@@ -95,15 +95,21 @@ object CommandListReplayer {
 
                 Opcode.CLEAR_ATTACHMENTS -> {
                     val hasColor = reader.flag()
-                    val color = Color(reader.float(), reader.float(), reader.float(), reader.float())
+                    val red = reader.float()
+                    val green = reader.float()
+                    val blue = reader.float()
+                    val alpha = reader.float()
                     val hasDepth = reader.flag()
                     val depth = reader.float()
                     val hasArea = reader.flag()
-                    val area = Rect(reader.int(), reader.int(), reader.int(), reader.int())
+                    val x = reader.int()
+                    val y = reader.int()
+                    val width = reader.int()
+                    val height = reader.int()
                     target.clearAttachments(
-                        color = if (hasColor) color else null,
+                        color = if (hasColor) Color(red, green, blue, alpha) else null,
                         depth = if (hasDepth) depth else null,
-                        area = if (hasArea) area else null,
+                        area = if (hasArea) Rect(x, y, width, height) else null,
                     )
                 }
 

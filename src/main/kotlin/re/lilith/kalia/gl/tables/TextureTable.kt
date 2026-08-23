@@ -1,14 +1,15 @@
 package re.lilith.kalia.gl.tables
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+import java.io.File
+import java.nio.ByteBuffer
 import org.lwjgl.opengl.GL11.GL_TEXTURE_HEIGHT
 import org.lwjgl.opengl.GL11.GL_TEXTURE_WIDTH
 import re.lilith.kalia.KaliaEngine
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.TextureUnits
 import re.lilith.kalia.gl.emulation.GlTexture
 import re.lilith.kalia.renderer.device.RenderDevice
-import java.io.File
-import java.nio.ByteBuffer
 
 object TextureTable {
     private val lock = Any()
@@ -18,15 +19,13 @@ object TextureTable {
     @Volatile
     private var epoch = 0
 
-    private val threadState = ThreadLocal.withInitial { TextureTableData() }
+    private val gameState = TextureTableData()
+    private val renderState = TextureTableData()
 
-    private val state: TextureTableData get() = threadState.get()
+    private val state: TextureTableData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    internal fun bindContext(data: TextureTableData) {
-        threadState.set(data)
-    }
 
-    internal fun context(): TextureTableData = state
 
     private fun current(): TextureTableData {
         val active = state

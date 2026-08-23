@@ -63,6 +63,7 @@ class ShaderUniformsData {
     var sceneVersion: Long = 1L
 
     var environmentVersion: Long = 1L
+    var environmentVersionWithoutCutout: Long = 1L
 
     private fun direct(bytes: Int): ByteBuffer =
         ByteBuffer.allocateDirect(bytes).order(ByteOrder.nativeOrder())

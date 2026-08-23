@@ -26,6 +26,8 @@ class GuiItemAtlas(
     slotSize: Int,
     atlasSize: Int = DEFAULT_ATLAS_SIZE,
 ) : AutoCloseable {
+    val size: Int = atlasSize
+
     private val slots = GuiItemSlots(slotSize = slotSize, atlasSize = atlasSize)
 
     val texture = device.createTexture(
@@ -87,6 +89,12 @@ class GuiItemAtlas(
         slots.acquire(key, frame, sourceVersion).also { slots.setAnimated(GuiItemSlots.slotOf(it), animated) }
 
     fun retry(slot: Int) = slots.forget(slot)
+
+    fun retryPending() {
+        for (fill in pending) {
+            slots.forget(fill.slot)
+        }
+    }
 
     fun slotRect(slot: Int) = Rect(slots.slotX(slot), slots.slotY(slot), slots.slotSize, slots.slotSize)
 

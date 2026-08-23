@@ -1,7 +1,10 @@
 package re.lilith.kalia.frame.graph.ui
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.frame.draw.EntityBatchers
 import re.lilith.kalia.frame.draw.KaliaDraw
 import re.lilith.kalia.gl.GlBridge
@@ -28,8 +31,6 @@ import re.lilith.kalia.shader.CoreShaders
 import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.vertex.TranslatedVertexFormat
 import re.lilith.kalia.vertex.VertexLocations
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 
 object GuiBatcher {
@@ -56,15 +57,13 @@ object GuiBatcher {
     private const val MAX_SOURCE_VERTICES = 4096
     private const val MAX_BATCH_VERTICES = 1 shl 16
 
-    private val threadState = ThreadLocal.withInitial { GuiBatchData() }
+    private val gameState = GuiBatchData()
+    private val renderState = GuiBatchData()
 
-    private val state: GuiBatchData get() = threadState.get()
+    private val state: GuiBatchData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    internal fun bindContext(data: GuiBatchData) {
-        threadState.set(data)
-    }
 
-    internal fun context(): GuiBatchData = state
 
     val isEmpty: Boolean get() = state.vertexCount == 0
 

@@ -9,8 +9,10 @@ import org.spongepowered.asm.mixin.Overwrite;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import re.lilith.kalia.frame.draw.EntityBatchers;
+import re.lilith.kalia.frame.graph.entity.EntityStage;
 import re.lilith.kalia.frame.graph.entity.cuboid.CuboidBatcher;
 import re.lilith.kalia.frame.GameFrame;
+import re.lilith.kalia.entity.ModelTraversal;
 import re.lilith.kalia.gl.MatrixState;
 import re.lilith.kalia.entity.ModelBoxCuboidData;
 
@@ -96,7 +98,19 @@ public class MixinModelPart {
         }
 
         boolean batching = kalia$batching();
-        if (!batching && !this.compiledList) {
+        if (batching && EntityStage.INSTANCE.onModelRoot(MatrixState.INSTANCE.modelView())) {
+            if (EntityStage.INSTANCE.takeReplay()) {
+                CuboidBatcher.INSTANCE.replayStaged();
+            }
+            return;
+        }
+        if (batching) {
+            CuboidBatcher.INSTANCE.beginPart();
+            ModelTraversal.render((ModelPart) (Object) this, scale, MatrixState.INSTANCE.modelView());
+            return;
+        }
+
+        if (!this.compiledList) {
             this.compileList(scale);
         }
 
@@ -135,7 +149,13 @@ public class MixinModelPart {
         }
 
         boolean batching = kalia$batching();
-        if (!batching && !this.compiledList) {
+        if (batching) {
+            CuboidBatcher.INSTANCE.beginPart();
+            ModelTraversal.renderRotated((ModelPart) (Object) this, scale, MatrixState.INSTANCE.modelView());
+            return;
+        }
+
+        if (!this.compiledList) {
             this.compileList(scale);
         }
 

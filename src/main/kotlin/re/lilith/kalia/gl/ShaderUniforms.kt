@@ -1,9 +1,10 @@
 package re.lilith.kalia.gl
 
-import org.joml.Matrix4f
-import org.joml.Vector4f
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import org.joml.Matrix4f
+import org.joml.Vector4f
+import re.lilith.kalia.frame.RenderThreadRef
 
 object ShaderUniforms {
     const val PUSH_CONSTANT_BYTES: Int = 128
@@ -12,22 +13,23 @@ object ShaderUniforms {
     private const val LIGHTING_ENABLED_BIT = 1
     private const val LIGHTMAP_ENABLED_BIT = 2
 
-    private val threadState = ThreadLocal.withInitial { ShaderUniformsData() }
+    private val gameState = ShaderUniformsData()
+    private val renderState = ShaderUniformsData()
 
-    private val state: ShaderUniformsData get() = threadState.get()
+    private val state: ShaderUniformsData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    fun bindContext(data: ShaderUniformsData) {
-        threadState.set(data)
-    }
 
-    fun context(): ShaderUniformsData = state
 
     val sceneVersion: Long get() = state.sceneVersion
 
     val environmentVersion: Long get() = state.environmentVersion
 
+    val environmentVersionWithoutCutout: Long get() = state.environmentVersionWithoutCutout
+
     private fun markEnvironmentDirty() {
         state.environmentVersion++
+        state.environmentVersionWithoutCutout++
     }
 
     fun setModelView(matrix: Matrix4f) {
@@ -35,6 +37,7 @@ object ShaderUniforms {
         if (sameAs(active.modelView, matrix)) return
         active.modelView.set(matrix)
         active.pushDirty = true
+        FfpStats.uniformWrites++
     }
 
     fun setProjection(matrix: Matrix4f) {
@@ -104,6 +107,7 @@ object ShaderUniforms {
         active.shaderBlue = blue
         active.shaderAlpha = alpha
         active.pushDirty = true
+        FfpStats.uniformWrites++
     }
 
     fun setModelOffset(x: Float, y: Float, z: Float) {
@@ -113,6 +117,7 @@ object ShaderUniforms {
         active.offsetY = y
         active.offsetZ = z
         active.pushDirty = true
+        FfpStats.uniformWrites++
     }
 
     fun setAlphaCutout(value: Float) {
@@ -120,7 +125,8 @@ object ShaderUniforms {
         if (active.alphaCutout == value) return
         active.alphaCutout = value
         active.pushDirty = true
-        markEnvironmentDirty()
+        FfpStats.uniformWrites++
+        active.environmentVersion++
     }
 
     fun alphaCutout(): Float = state.alphaCutout
@@ -133,6 +139,7 @@ object ShaderUniforms {
         active.fogBlueInternal = blue
         active.fogAlphaInternal = alpha
         active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
@@ -142,6 +149,7 @@ object ShaderUniforms {
         active.fogStartInternal = start
         active.fogEndInternal = end
         active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
@@ -150,6 +158,7 @@ object ShaderUniforms {
         if (active.fogDensityInternal == value) return
         active.fogDensityInternal = value
         active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
@@ -158,6 +167,7 @@ object ShaderUniforms {
         if (active.fogEnabledInternal == value) return
         active.fogEnabledInternal = value
         active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
@@ -166,6 +176,7 @@ object ShaderUniforms {
         if (active.fogModeInternal == value) return
         active.fogModeInternal = value
         active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
@@ -357,6 +368,7 @@ object ShaderUniforms {
         active.texGenPlanes.forEach { it.zero() }
         active.texGenSources.fill(0f)
         active.pushDirty = true
+        FfpStats.uniformWrites++
         markSceneDirty()
         markEnvironmentDirty()
     }

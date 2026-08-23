@@ -57,6 +57,8 @@ object GuiWalk {
             runCatching { screen.render(mouseX, mouseY, tickDelta) }
                 .onFailure { failure -> logFailure("A GUI screen", failure) }
         }
+
+        GuiItems.recordBuiltins(device)
     }
 
     private const val GUI_NEAR = 1000.0

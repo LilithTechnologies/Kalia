@@ -1,13 +1,14 @@
 package re.lilith.kalia.shader
 
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.LongAdder
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.VertexFormat
 import re.lilith.kalia.renderer.pipeline.*
 import re.lilith.kalia.renderer.resource.GpuPipeline
 import re.lilith.kalia.renderer.shader.ShaderProgram
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.LongAdder
 
 object PipelineCache {
     private val lock = Any()
@@ -20,17 +21,17 @@ object PipelineCache {
     @Volatile
     private var epoch = 0
 
-    private val threadState = ThreadLocal.withInitial { PipelineCacheData() }
+    private val gameState = PipelineCacheData()
+    private val renderState = PipelineCacheData()
 
-    private val state: PipelineCacheData get() = threadState.get()
+    private val state: PipelineCacheData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    internal fun bindContext(data: PipelineCacheData) {
-        threadState.set(data)
-    }
 
-    internal fun context(): PipelineCacheData = state
 
     val missCount: Long get() = misses.sum()
+
+    val distinctPipelines: Int get() = cache.size
 
     fun pipelineFor(
         device: RenderDevice,

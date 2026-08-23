@@ -2,20 +2,19 @@ package re.lilith.kalia.gl
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
 import it.unimi.dsi.fastutil.objects.ObjectArrayList
-import org.joml.Matrix4f
 import java.nio.FloatBuffer
 import kotlin.math.sqrt
+import org.joml.Matrix4f
+import re.lilith.kalia.frame.RenderThreadRef
 
 object MatrixState {
-    private val threadState = ThreadLocal.withInitial { MatrixStateData() }
+    private val gameState = MatrixStateData()
+    private val renderState = MatrixStateData()
 
-    private val state: MatrixStateData get() = threadState.get()
+    private val state: MatrixStateData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    fun bindContext(data: MatrixStateData) {
-        threadState.set(data)
-    }
 
-    fun context(): MatrixStateData = state
 
     var activeTextureUnit: Int
         get() = state.activeTextureUnit
@@ -39,7 +38,10 @@ object MatrixState {
 
     fun matrixMode(): Int = state.mode
 
-    fun current(): Matrix4f = state.cached ?: stackFor(state.mode).last().also { state.cached = it }
+    fun current(): Matrix4f = currentOf(state)
+
+    private fun currentOf(active: MatrixStateData): Matrix4f =
+        active.cached ?: stackFor(active.mode).last().also { active.cached = it }
 
     fun modelView(): Matrix4f = state.modelViewStack.last()
 
@@ -48,21 +50,23 @@ object MatrixState {
     fun texture(): Matrix4f = textureStack(activeTextureUnit).last()
 
     fun pushMatrix() {
+        FfpStats.matrixOps++
         val active = state
         active.cached = null
         val stack = stackFor(active.mode)
         stack.addLast(borrow(stack.last()))
-        markDirty()
+        markDirty(active)
     }
 
     fun popMatrix() {
+        FfpStats.matrixOps++
         val active = state
         active.cached = null
         val stack = stackFor(active.mode)
         if (stack.size > 1) {
             release(stack.removeLast())
         }
-        markDirty()
+        markDirty(active)
     }
 
     fun pushTextureMatrix() {
@@ -87,13 +91,17 @@ object MatrixState {
     }
 
     fun translate(x: Float, y: Float, z: Float) {
-        current().translate(x, y, z)
-        markDirty()
+        FfpStats.matrixOps++
+        val active = state
+        currentOf(active).translate(x, y, z)
+        markDirty(active)
     }
 
     fun rotate(degrees: Float, axisX: Float, axisY: Float, axisZ: Float) {
+        val active = state
+        FfpStats.matrixOps++
         val radians = Math.toRadians(degrees.toDouble()).toFloat()
-        val matrix = current()
+        val matrix = currentOf(active)
 
         val length = sqrt(axisX * axisX + axisY * axisY + axisZ * axisZ)
         if (length == 0f) return
@@ -122,12 +130,14 @@ object MatrixState {
         } else {
             matrix.rotate(radians, x, y, z)
         }
-        markDirty()
+        markDirty(active)
     }
 
     fun scale(x: Float, y: Float, z: Float) {
-        current().scale(x, y, z)
-        markDirty()
+        val active = state
+        FfpStats.matrixOps++
+        currentOf(active).scale(x, y, z)
+        markDirty(active)
     }
 
     fun ortho(left: Double, right: Double, bottom: Double, top: Double, near: Double, far: Double) {
@@ -152,13 +162,16 @@ object MatrixState {
     }
 
     fun multiply(matrix: FloatBuffer) {
-        current().mul(state.scratch.set(matrix))
-        markDirty()
+        val active = state
+        FfpStats.matrixOps++
+        currentOf(active).mul(active.scratch.set(matrix))
+        markDirty(active)
     }
 
     fun multiply(matrix: Matrix4f) {
-        current().mul(matrix)
-        markDirty()
+        val active = state
+        currentOf(active).mul(matrix)
+        markDirty(active)
     }
 
     fun write(glMatrixName: Int, out: FloatBuffer) {
@@ -186,7 +199,10 @@ object MatrixState {
     }
 
     private fun markDirty() {
-        val active = state
+        markDirty(state)
+    }
+
+    private fun markDirty(active: MatrixStateData) {
         when (active.mode) {
             GlEnums.GL_PROJECTION -> active.dirtyProjection = true
             GlEnums.GL_TEXTURE -> markTextureDirty()
