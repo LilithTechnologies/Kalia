@@ -10,6 +10,7 @@ object RenderStats {
     private var currentComputeDispatches = 0
     private var currentBatches = 0
     private var currentBatchedDraws = 0
+    private var currentGpuWaitNanos = 0L
 
     var draws = 0
         private set
@@ -31,6 +32,13 @@ object RenderStats {
         private set
     var batchedDraws = 0
         private set
+
+    var gpuWaitNanos = 0L
+        private set
+
+    fun recordGpuWait(nanos: Long) {
+        currentGpuWaitNanos += nanos
+    }
 
     fun recordDraw() {
         currentDraws++
@@ -75,6 +83,7 @@ object RenderStats {
         computeDispatches = currentComputeDispatches
         batches = currentBatches
         batchedDraws = currentBatchedDraws
+        gpuWaitNanos = currentGpuWaitNanos
 
         currentDraws = 0
         currentPipelineBinds = 0
@@ -85,6 +94,7 @@ object RenderStats {
         currentComputeDispatches = 0
         currentBatches = 0
         currentBatchedDraws = 0
+        currentGpuWaitNanos = 0L
     }
 
     fun summary(): List<String> = listOf(

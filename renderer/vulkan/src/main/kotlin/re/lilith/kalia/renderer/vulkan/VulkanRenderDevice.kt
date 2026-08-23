@@ -486,7 +486,11 @@ internal class VulkanRenderDevice(
         submittedComputeValue = 0L
         flushUploads()
 
-        acquiredOrNull = swapchain.acquire(frame.imageAvailable) ?: run {
+        val acquireStarted = System.nanoTime()
+        val acquiredImage = swapchain.acquire(frame.imageAvailable)
+        RenderStats.recordGpuWait(System.nanoTime() - acquireStarted)
+
+        acquiredOrNull = acquiredImage ?: run {
             insideFrame = false
             if (!rebuildSwapchain(target)) {
                 pendingResize = target
@@ -638,11 +642,13 @@ internal class VulkanRenderDevice(
             }
         }
 
+        val presentStarted = System.nanoTime()
         val presented = runCatching {
             context.withQueueLock {
                 context.presentQueue.present(swapchain.swapchain, acquired.index, renderFinished)
             }
         }
+        RenderStats.recordGpuWait(System.nanoTime() - presentStarted)
         presented.exceptionOrNull()?.let { failure ->
             if (failure is VulkanResultException && failure.isSwapchainStale) {
                 pendingResize = target
