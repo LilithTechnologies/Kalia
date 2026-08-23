@@ -35,6 +35,24 @@ class RenderGraph internal constructor(
         compileLivePasses()
     }
 
+    private val texturesById: Array<GraphTexture?> by lazy(LazyThreadSafetyMode.NONE) {
+        val slots = arrayOfNulls<GraphTexture>(textureIdCount)
+        for (texture in textures) {
+            slots[texture.handle.id] = texture
+        }
+        slots
+    }
+
+    val textureIdCount: Int by lazy(LazyThreadSafetyMode.NONE) {
+        var highest = TextureHandle.BACK_BUFFER.id
+        for (texture in textures) {
+            if (texture.handle.id > highest) {
+                highest = texture.handle.id
+            }
+        }
+        highest + 1
+    }
+
     /**
      * Resolves a texture handle to its corresponding graph texture.
      *
@@ -44,14 +62,14 @@ class RenderGraph internal constructor(
      * @throws IllegalStateException If the handle does not belong to this graph.
      */
     fun texture(handle: TextureHandle): GraphTexture =
-        textures.firstOrNull { it.handle == handle }
+        texturesById.getOrNull(handle.id)
             ?: error("Handle ${handle.id} does not belong to graph '$name'.")
 
     /**
-     * Lifetime ranges for textures referenced by live passes.
+     * Index of the last live pass that touches each texture handle, or -1 when unused.
      */
-    val textureLifetimes: Map<Int, IntRange> by lazy(LazyThreadSafetyMode.NONE) {
-        computeLifetimes()
+    val textureLastUse: IntArray by lazy(LazyThreadSafetyMode.NONE) {
+        computeLastUse()
     }
 
     /**
@@ -59,46 +77,40 @@ class RenderGraph internal constructor(
      */
     private fun compileLivePasses(): List<GraphPass> {
         val enabled = passes.filter { it.enabled() }
-        val required = HashSet<Int>()
+        val required = BooleanArray(textureIdCount)
         val live = BooleanArray(enabled.size)
 
         // Walk backwards so a pass is kept as soon as something later needs its output
         for (index in enabled.indices.reversed()) {
             val pass = enabled[index]
-            val producesRequired = pass.writes.any { it.id in required }
+            val producesRequired = pass.writes.any { it.id < required.size && required[it.id] }
             val producesBackbuffer = pass.writes.any { it == TextureHandle.BACK_BUFFER }
             if (!pass.hasSideEffects && !producesRequired && !producesBackbuffer) {
                 continue
             }
             live[index] = true
-            pass.sampledInputs.forEach { required += it.id }
-            pass.colorAttachments.filter { it.loadOp == LoadOp.LOAD }.forEach { required += it.target.id }
-            pass.depthAttachment?.takeIf { it.loadOp == LoadOp.LOAD }?.let { required += it.target.id }
+            pass.sampledInputs.forEach { required[it.id] = true }
+            pass.colorAttachments.forEach { if (it.loadOp == LoadOp.LOAD) required[it.target.id] = true }
+            pass.depthAttachment?.takeIf { it.loadOp == LoadOp.LOAD }?.let { required[it.target.id] = true }
         }
 
-        return enabled.filterIndexed { index, _ -> live[index] }
-    }
-
-    /**
-     * Computes texture lifetime ranges for all live graph resources.
-     *
-     * @return A map of texture handle identifiers to inclusive pass ranges.
-     */
-    private fun computeLifetimes(): Map<Int, IntRange> {
-        val first = HashMap<Int, Int>()
-        val last = HashMap<Int, Int>()
-
-        livePasses.forEachIndexed { index, pass ->
-            val touched =
-                pass.writes.map(TextureHandle::id) +
-                        pass.sampledInputs.map(TextureHandle::id)
-
-            for (id in touched) {
-                first.putIfAbsent(id, index)
-                last[id] = index
+        val result = ArrayList<GraphPass>(enabled.size)
+        for (index in enabled.indices) {
+            if (live[index]) {
+                result += enabled[index]
             }
         }
+        return result
+    }
 
-        return first.mapValues { (id, start) -> start..last.getValue(id) }
+    private fun computeLastUse(): IntArray {
+        val last = IntArray(textureIdCount) { -1 }
+
+        livePasses.forEachIndexed { index, pass ->
+            pass.writes.forEach { last[it.id] = index }
+            pass.sampledInputs.forEach { last[it.id] = index }
+        }
+
+        return last
     }
 }
