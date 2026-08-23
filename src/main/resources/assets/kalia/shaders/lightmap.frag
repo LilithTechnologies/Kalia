@@ -14,7 +14,15 @@ layout(push_constant) uniform LightMap {
 };
 
 float brightness(int level) {
-    return brightnessTable[level >> 2][level & 3];
+    vec4 row = level < 8
+        ? (level < 4 ? brightnessTable[0] : brightnessTable[1])
+        : (level < 12 ? brightnessTable[2] : brightnessTable[3]);
+
+    int component = level & 3;
+    return component == 0 ? row.x
+         : component == 1 ? row.y
+         : component == 2 ? row.z
+         : row.w;
 }
 
 void main() {

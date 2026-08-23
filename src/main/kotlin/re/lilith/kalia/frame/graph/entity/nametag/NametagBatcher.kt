@@ -3,6 +3,7 @@ package re.lilith.kalia.frame.graph.entity.nametag
 import org.joml.Matrix4f
 import re.lilith.kalia.frame.draw.BatchEnvironment
 import re.lilith.kalia.frame.draw.KaliaDraw
+import re.lilith.kalia.buffer.InstanceArena
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.gl.GlBridge
@@ -24,8 +25,6 @@ import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.renderer.utility.MemoryAccess
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 // TODO: create a generalised "batching" abstratcion
 object NametagBatcher {
@@ -49,8 +48,8 @@ object NametagBatcher {
         val sampler: GpuSampler,
     )
 
-    private val groups = LinkedHashMap<GroupKey, Instances>()
-    private val instancePool = ArrayDeque<Instances>()
+    private val groups = LinkedHashMap<GroupKey, InstanceArena>()
+    private val instancePool = ArrayDeque<InstanceArena>()
     private val environment = BatchEnvironment()
 
     private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
@@ -71,8 +70,8 @@ object NametagBatcher {
     private var lastKeyDescription: GraphicsPipelineDescription? = null
     private var lastKeyTexture: GpuTexture? = null
     private var lastKeySampler: GpuSampler? = null
-    private var lastInstances: Instances? = null
-    private var activeInstances: Instances? = null
+    private var lastInstances: InstanceArena? = null
+    private var activeInstances: InstanceArena? = null
 
     fun beginLabel() {
         if (GameFrame.current == null) return
@@ -155,7 +154,7 @@ object NametagBatcher {
         return FrameResources.of(encoder.device).also(environment::open)
     }
 
-    private fun instancesFor(texture: GpuTexture, sampler: GpuSampler): Instances? {
+    private fun instancesFor(texture: GpuTexture, sampler: GpuSampler): InstanceArena? {
         val encoder = GameFrame.current ?: return null
         val description = descriptionFor(encoder.attachments)
 
@@ -164,7 +163,7 @@ object NametagBatcher {
             return cached
         }
         val key = GroupKey(description, texture, sampler)
-        val instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: Instances() }
+        val instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
         lastKeyDescription = description
         lastKeyTexture = texture
         lastKeySampler = sampler
@@ -287,6 +286,8 @@ object NametagBatcher {
         for (instances in groups.values) {
             if (instancePool.size < POOL_CAPACITY) {
                 instancePool.addLast(instances)
+            } else {
+                instances.release()
             }
         }
         groups.clear()
@@ -298,48 +299,6 @@ object NametagBatcher {
         activeInstances = null
     }
 
-    private class Instances {
-        private var data = ByteBuffer.allocateDirect(INITIAL_CAPACITY).order(ByteOrder.nativeOrder())
-        private var baseAddress = MemoryAccess.addressOf(data)
-
-        var count: Int = 0
-            private set
-
-        fun reserve(): Long = reserve(1)
-
-        fun reserve(instances: Int): Long {
-            val needed = instances * BYTES_PER_INSTANCE
-            if (data.remaining() < needed) {
-                var capacity = data.capacity()
-                do {
-                    capacity *= 2
-                } while (capacity - data.position() < needed)
-                val grown = ByteBuffer.allocateDirect(capacity).order(ByteOrder.nativeOrder())
-                data.flip()
-                grown.put(data)
-                data = grown
-                baseAddress = MemoryAccess.addressOf(data)
-            }
-            val address = baseAddress + data.position()
-            data.position(data.position() + needed)
-            count += instances
-            return address
-        }
-
-        fun finish(): ByteBuffer {
-            data.flip()
-            return data
-        }
-
-        fun reset() {
-            data.clear()
-            count = 0
-        }
-
-        private companion object {
-            const val INITIAL_CAPACITY = 256 * BYTES_PER_INSTANCE
-        }
-    }
-
+    private const val INITIAL_INSTANCES = 256
     private const val POOL_CAPACITY = 64
 }

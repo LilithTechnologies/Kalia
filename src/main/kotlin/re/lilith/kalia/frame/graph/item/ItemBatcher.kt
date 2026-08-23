@@ -4,6 +4,7 @@ import org.joml.Matrix4f
 import re.lilith.kalia.buffer.PersistentMesh
 import re.lilith.kalia.frame.draw.BatchEnvironment
 import re.lilith.kalia.frame.draw.KaliaDraw
+import re.lilith.kalia.buffer.InstanceArena
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.gl.GlBridge
@@ -26,8 +27,6 @@ import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.renderer.utility.MemoryAccess
 import re.lilith.kalia.vertex.VertexLocations
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 import kotlin.collections.iterator
 
 object ItemBatcher {
@@ -52,8 +51,8 @@ object ItemBatcher {
         val lightmapSampler: GpuSampler,
     )
 
-    private val groups = LinkedHashMap<GroupKey, Instances>()
-    private val instancePool = ArrayDeque<Instances>()
+    private val groups = LinkedHashMap<GroupKey, InstanceArena>()
+    private val instancePool = ArrayDeque<InstanceArena>()
 
     private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
     private var pipelineDevice: RenderDevice? = null
@@ -72,7 +71,7 @@ object ItemBatcher {
     private var lastKeySampler: GpuSampler? = null
     private var lastKeyLightmap: GpuTexture? = null
     private var lastKeyLightmapSampler: GpuSampler? = null
-    private var lastInstances: Instances? = null
+    private var lastInstances: InstanceArena? = null
 
     private var environmentVersion = 0L
 
@@ -93,7 +92,7 @@ object ItemBatcher {
         val lightmapSampler = KaliaDraw.samplerForUnit(GlBridge.LIGHTMAP_UNIT, resources)
         val description = descriptionFor(encoder.attachments, format.format)
 
-        val instances: Instances
+        val instances: InstanceArena
         val cached = lastInstances
         if (cached != null &&
             lastKeyDescription === description && lastKeyMesh === mesh &&
@@ -103,7 +102,7 @@ object ItemBatcher {
             instances = cached
         } else {
             val key = GroupKey(description, mesh, texture, sampler, lightmap, lightmapSampler)
-            instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: Instances() }
+            instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: InstanceArena(BYTES_PER_INSTANCE, INITIAL_INSTANCES) }
             lastKeyDescription = description
             lastKeyMesh = mesh
             lastKeyTexture = texture
@@ -227,6 +226,8 @@ object ItemBatcher {
         for (instances in groups.values) {
             if (instancePool.size < POOL_CAPACITY) {
                 instancePool.addLast(instances)
+            } else {
+                instances.release()
             }
         }
         groups.clear()
@@ -240,41 +241,6 @@ object ItemBatcher {
         lastInstances = null
     }
 
-    private class Instances {
-        private var data = ByteBuffer.allocateDirect(INITIAL_CAPACITY).order(ByteOrder.nativeOrder())
-        private var baseAddress = MemoryAccess.addressOf(data)
-
-        var count: Int = 0
-            private set
-
-        fun reserve(): Long {
-            if (data.remaining() < BYTES_PER_INSTANCE) {
-                val grown = ByteBuffer.allocateDirect(data.capacity() * 2).order(ByteOrder.nativeOrder())
-                data.flip()
-                grown.put(data)
-                data = grown
-                baseAddress = MemoryAccess.addressOf(data)
-            }
-            val address = baseAddress + data.position()
-            data.position(data.position() + BYTES_PER_INSTANCE)
-            count++
-            return address
-        }
-
-        fun finish(): ByteBuffer {
-            data.flip()
-            return data
-        }
-
-        fun reset() {
-            data.clear()
-            count = 0
-        }
-
-        private companion object {
-            const val INITIAL_CAPACITY = 64 * BYTES_PER_INSTANCE
-        }
-    }
-
+    private const val INITIAL_INSTANCES = 64
     private const val POOL_CAPACITY = 32
 }

@@ -69,4 +69,9 @@ data class DeviceCapabilities(
      * single texture element (texel) during texture sampling.
      */
     val subTexelPrecisionBits: Int = 8,
+    /**
+     * Whether backend validation is active. This is false when validation was
+     * requested but the backend could not provide it.
+     */
+    val validation: Boolean = false,
 )

@@ -10,7 +10,8 @@
     "gl.MixinGLContext",
     "gl.MixinProject",
     "lwjgl.MixinDisplay",
-    "lwjgl.MixinSDLDisplay"
+    "lwjgl.MixinSDLDisplay",
+    "netty.MixinPlatformDependent0"
   ],
   "client": [
     "access.BufferBuilderAccess",

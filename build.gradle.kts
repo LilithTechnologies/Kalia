@@ -11,6 +11,13 @@ ploceus {
     setIntermediaryGeneration(2)
 }
 
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(25))
+    }
+}
+
+
 repositories {
     maven(url = "https://maven.legacyfabric.net/") { name = "Legacy Fabric" }
     maven(url = "https://maven.axolotlclient.com/releases") { name = "Axolotl Client" }

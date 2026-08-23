@@ -1,5 +1,6 @@
 package re.lilith.kalia
 
+import net.fabricmc.loader.api.FabricLoader
 import net.minecraft.util.crash.CrashException
 import net.minecraft.util.crash.CrashReport
 import re.lilith.kalia.frame.FrameResources
@@ -29,7 +30,8 @@ object KaliaEngine {
         get() = (state as? State.Running)?.device
 
     var settings: DeviceSettings = DeviceSettings(
-        validation = System.getProperty("kalia.validation").toBoolean(),
+        validation = System.getProperty("kalia.validation")?.toBoolean()
+            ?: FabricLoader.getInstance().isDevelopmentEnvironment,
     )
         set(value) {
             field = value
@@ -69,6 +71,13 @@ object KaliaEngine {
                     created.capabilities.adapterName,
                     created.capabilities.apiVersion,
                 )
+                if (created.capabilities.validation) {
+                    KaliaMod.LOGGER.info("Backend validation is active. Expect reduced performance.")
+                } else if (settings.validation) {
+                    KaliaMod.LOGGER.warn(
+                        "Backend validation was requested but is unavailable. Install the Vulkan SDK to enable it.",
+                    )
+                }
                 val reported = surface.framebufferExtent
                 if (reported != created.surfaceExtent) {
                     KaliaMod.LOGGER.warn(

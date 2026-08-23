@@ -9,6 +9,7 @@ import re.lilith.vulkan.api.command.CommandPool
 import re.lilith.vulkan.api.core.Version
 import re.lilith.vulkan.api.descriptor.PUSH_DESCRIPTOR_EXTENSION_NAME
 import re.lilith.vulkan.api.device.*
+import re.lilith.vulkan.api.instance.InstanceConfigBuilder
 import re.lilith.vulkan.api.instance.VulkanInstance
 import re.lilith.vulkan.api.memory.MemoryAllocator
 import re.lilith.vulkan.api.pipeline.PipelineCache
@@ -99,6 +100,7 @@ internal class VulkanContext private constructor(
         dedicatedTransferQueue = transferQueue != null,
         asyncCompute = computeQueue != null,
         subTexelPrecisionBits = physicalDevice.properties.subTexelPrecisionBits,
+        validation = InstanceConfigBuilder.VALIDATION_LAYER_NAME in instance.enabledLayers,
     )
 
     private fun getVendorName(vendorId: Int): String {
