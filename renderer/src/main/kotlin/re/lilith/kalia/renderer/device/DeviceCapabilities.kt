@@ -68,9 +68,6 @@ data class DeviceCapabilities(
     /**
      * Whether the backend can sample from a runtime-sized texture array indexed per instance,
      * which is what lets draws that differ only by texture merge into one.
-     *
-     * NB: Not sure how MVK handles this. Was told its fragile
-     *      If something breaks, I am not to be blamed :D
      */
     val supportsBindlessTextures: Boolean = false,
     /**
