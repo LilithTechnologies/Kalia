@@ -283,6 +283,3 @@ class PhysicalDevice internal constructor(
         )
     }
 }
-
-
-

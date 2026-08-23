@@ -14,8 +14,6 @@ object MatrixState {
     private val state: MatrixStateData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     var activeTextureUnit: Int
         get() = state.activeTextureUnit
         set(value) {

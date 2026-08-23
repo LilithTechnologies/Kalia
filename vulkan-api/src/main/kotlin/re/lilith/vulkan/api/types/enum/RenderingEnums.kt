@@ -66,5 +66,3 @@ enum class PhysicalDeviceType {
     VirtualGpu,
     Cpu,
 }
-
-

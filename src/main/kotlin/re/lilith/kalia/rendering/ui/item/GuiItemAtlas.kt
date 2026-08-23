@@ -233,7 +233,6 @@ class GuiItemAtlas(
         }
     }
 
-
     interface Request {
         var lit: Boolean
         var animated: Boolean

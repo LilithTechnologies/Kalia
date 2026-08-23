@@ -21,7 +21,6 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
         )
     }
 
-
     private var gameSlot = 0
     private var renderSlot = 0
 

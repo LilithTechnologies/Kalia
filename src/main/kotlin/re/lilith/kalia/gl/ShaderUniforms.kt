@@ -19,8 +19,6 @@ object ShaderUniforms {
     private val state: ShaderUniformsData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     val sceneVersion: Long get() = state.sceneVersion
 
     val environmentVersion: Long get() = state.environmentVersion
@@ -97,7 +95,6 @@ object ShaderUniforms {
     fun lightmapT(): Float = state.lightmapT
 
     fun isLightmapEnabled(): Boolean = state.lightmapEnabled
-
 
     fun setShaderColor(red: Float, green: Float, blue: Float, alpha: Float) {
         val active = state

@@ -25,8 +25,6 @@ object TextureTable {
     private val state: TextureTableData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     private fun current(): TextureTableData {
         val active = state
         val currentEpoch = epoch

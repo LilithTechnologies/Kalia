@@ -66,5 +66,3 @@ value class DependencyFlags internal constructor(internal val vkBits: Int) {
         val DeviceGroup = DependencyFlags(VulkanConstants.DependencyFlags.deviceGroup)
     }
 }
-
-

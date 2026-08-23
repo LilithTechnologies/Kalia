@@ -34,7 +34,6 @@ object CuboidBatcher {
     private const val BYTES_PER_INSTANCE = 108
     private const val CUTOUT_OFFSET = 104
 
-
     val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instRow0", 2, VertexAttributeFormat.FLOAT4)
         attribute("instRow1", 3, VertexAttributeFormat.FLOAT4)
@@ -56,8 +55,6 @@ object CuboidBatcher {
 
     private val state: CuboidBatchData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
-
-
 
     var pendingInstances: Int
         get() = state.pendingInstances

@@ -23,7 +23,6 @@ object ItemBatcher {
     private const val TEXTURE_SLOT_OFFSET = 68
     private const val INSTANCE_TEXTURE_LOCATION = 12
 
-
     val INSTANCE_FORMAT = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instRow0", VertexLocations.INSTANCE_ROW0, VertexAttributeFormat.FLOAT4)
         attribute("instRow1", VertexLocations.INSTANCE_ROW1, VertexAttributeFormat.FLOAT4)
@@ -38,8 +37,6 @@ object ItemBatcher {
 
     private val state: ItemBatchData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
-
-
 
     fun record(mesh: PersistentMesh, modelView: Matrix4f) {
         val active = state

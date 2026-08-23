@@ -107,7 +107,6 @@ internal class VulkanPassEncoder(private val backend: VulkanRenderDevice) : Pass
     private val dynamicOffsetBySlot = IntArray(MAX_BINDINGS)
     private var dynamicSlotMask = 0
 
-
     // What is actually attached right now, which [retarget] moves away from the pass defaults
     internal var colorTargets: List<VulkanTexture> = emptyList()
         private set

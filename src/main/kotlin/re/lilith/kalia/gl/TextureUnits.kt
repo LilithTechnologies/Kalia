@@ -13,8 +13,6 @@ object TextureUnits {
     private val state: TextureUnitsData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     val activeUnit: Int get() = state.activeUnit
 
     @JvmStatic

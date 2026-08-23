@@ -14,8 +14,6 @@ object GameFrame {
     private val state: GameFrameData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     val isRecording: Boolean get() = state.encoder != null
 
     val current: PassContext? get() = state.encoder

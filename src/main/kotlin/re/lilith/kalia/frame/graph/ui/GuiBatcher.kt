@@ -32,7 +32,6 @@ import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.vertex.TranslatedVertexFormat
 import re.lilith.kalia.vertex.VertexLocations
 
-
 object GuiBatcher {
     val FORMAT = VertexFormat.of {
         attribute("inPosition", VertexLocations.POSITION, VertexAttributeFormat.FLOAT3)
@@ -62,8 +61,6 @@ object GuiBatcher {
 
     private val state: GuiBatchData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
-
-
 
     val isEmpty: Boolean get() = state.vertexCount == 0
 

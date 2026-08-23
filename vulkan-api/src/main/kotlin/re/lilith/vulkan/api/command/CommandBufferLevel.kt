@@ -18,6 +18,3 @@ enum class CommandBufferLevel(internal val vkValue: Int) {
      */
     SECONDARY(VK_COMMAND_BUFFER_LEVEL_SECONDARY),
 }
-
-
-

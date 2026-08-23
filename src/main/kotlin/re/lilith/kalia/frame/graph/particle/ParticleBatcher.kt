@@ -36,8 +36,6 @@ object ParticleBatcher {
     private val state: ParticleBatchData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     fun record(
         eyeX: Float, eyeY: Float, eyeZ: Float,
         half: Float,

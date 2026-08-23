@@ -27,8 +27,6 @@ object PipelineCache {
     private val state: PipelineCacheData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     val missCount: Long get() = misses.sum()
 
     val distinctPipelines: Int get() = cache.size

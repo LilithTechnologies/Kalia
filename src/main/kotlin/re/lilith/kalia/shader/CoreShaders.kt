@@ -23,8 +23,6 @@ object CoreShaders {
     private val state: CoreShadersData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     fun programFor(format: TranslatedVertexFormat, texGen: Boolean = false): ShaderProgram {
         val active = state
         val memo = active.lastProgram

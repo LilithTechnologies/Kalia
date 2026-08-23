@@ -120,7 +120,6 @@ internal class HeadlessGraphExecutor(
         }
     }
 
-
     private fun executePasses(graph: RenderGraph) {
         for (pass in graph.livePasses) {
             val context = HeadlessPassContext(

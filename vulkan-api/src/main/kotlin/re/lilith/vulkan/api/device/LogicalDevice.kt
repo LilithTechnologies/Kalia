@@ -148,11 +148,3 @@ class LogicalDevice internal constructor(
             LogicalDeviceFactory.create(physicalDevice, config)
     }
 }
-
-
-
-
-
-
-
-

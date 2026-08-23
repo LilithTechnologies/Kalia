@@ -45,8 +45,6 @@ object ShadowBatcher {
     private val state: ShadowBatchData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-
-
     @JvmStatic
     var texture: GlTexture?
         get() = state.texture

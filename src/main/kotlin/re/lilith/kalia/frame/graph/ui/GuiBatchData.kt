@@ -31,7 +31,6 @@ import re.lilith.kalia.vertex.VertexLocations
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
-
 internal class GuiBatchData {
     var absorbedDraws = 0
 

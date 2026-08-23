@@ -2,7 +2,6 @@ package re.lilith.vulkan.api.instance
 
 import re.lilith.vulkan.api.core.Version
 
-
 data class InstanceConfig(
     val applicationInfo: ApplicationInfo = ApplicationInfo(),
     val enabledLayers: Set<String> = emptySet(),

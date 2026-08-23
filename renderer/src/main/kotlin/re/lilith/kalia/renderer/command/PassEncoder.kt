@@ -59,7 +59,6 @@ interface PassEncoder {
      */
     fun bindTexture(binding: Int, texture: GpuTexture, sampler: GpuSampler)
 
-
     /**
      * Binds a uniform buffer range to a shader binding slot.
      *

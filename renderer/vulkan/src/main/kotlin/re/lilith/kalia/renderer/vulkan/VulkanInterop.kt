@@ -84,7 +84,6 @@ object VulkanInterop {
         else -> VK10.VK_FORMAT_UNDEFINED
     }
 
-
     @JvmStatic
     fun swapchainColorView(device: RenderDevice): Long = currentMainColorImageHandle(device)
 
@@ -118,7 +117,6 @@ object VulkanInterop {
     fun markExternallyWritten(texture: GpuTexture) {
         (texture as? VulkanTexture)?.layout = ImageLayout.ColorAttachmentOptimal
     }
-
 
     @JvmStatic
     fun markExternallySampled(texture: GpuTexture) {

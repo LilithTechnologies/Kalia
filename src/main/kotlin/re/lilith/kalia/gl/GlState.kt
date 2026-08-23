@@ -15,8 +15,6 @@ object GlState {
     private fun <T : Any> intern(table: Object2ObjectOpenHashMap<T, T>, value: T): T =
         table.putIfAbsent(value, value) ?: value
 
-
-
     var depthTest: Boolean
         get() = state.depthTest
         set(value) {

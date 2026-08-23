@@ -50,7 +50,6 @@ object KaliaEngine {
             return false
         }
 
-
         val preferredBackend = preferredBackend()
 
         KaliaMod.LOGGER.info("Preferred backend: {}", preferredBackend)

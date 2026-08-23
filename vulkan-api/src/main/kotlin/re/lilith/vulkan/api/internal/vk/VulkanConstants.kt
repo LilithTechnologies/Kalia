@@ -246,6 +246,3 @@ internal object VulkanConstants {
         const val external: Int = VK10.VK_SUBPASS_EXTERNAL
     }
 }
-
-
-

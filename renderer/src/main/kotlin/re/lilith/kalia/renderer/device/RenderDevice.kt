@@ -75,7 +75,6 @@ interface RenderDevice : AutoCloseable {
      */
     fun createTexture(description: TextureDescription): GpuTexture
 
-
     /**
      * Creates a GPU sampler.
      *

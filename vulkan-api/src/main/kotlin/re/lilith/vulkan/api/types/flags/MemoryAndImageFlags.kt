@@ -66,5 +66,3 @@ value class ImageAspect internal constructor(internal val vkBits: Int) {
         val Metadata = ImageAspect(VulkanConstants.ImageAspects.metadata)
     }
 }
-
-

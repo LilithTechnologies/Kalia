@@ -40,14 +40,11 @@ object NametagBatcher {
         attribute("instTexture", 8, VertexAttributeFormat.UINT)
     }
 
-
     private val gameState = NametagBatchData()
     private val renderState = NametagBatchData()
 
     private val state: NametagBatchData
         get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
-
-
 
     fun beginLabel() {
         BatchStats.labels++
