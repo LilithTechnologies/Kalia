@@ -179,7 +179,7 @@ internal class VulkanPassEncoder(
         colorTargets = color
         depthTarget = depth
         extent = area
-        attachments = AttachmentLayout(color.map(VulkanTexture::format), depth?.format)
+        attachments = AttachmentLayout.of(color.map(VulkanTexture::format), depth?.format)
         invalidateBoundState()
         rendering = true
     }

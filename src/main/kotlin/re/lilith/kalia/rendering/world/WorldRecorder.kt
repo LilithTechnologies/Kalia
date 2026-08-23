@@ -71,7 +71,7 @@ object WorldRecorder {
         if (cached != null && attachmentsDevice === device) {
             return cached
         }
-        val created = AttachmentLayout(
+        val created = AttachmentLayout.of(
             colorFormats = listOf(GameFrameGraph.sceneFormat),
             depthFormat = GameFrameGraph.sceneDepthFormat(device),
         )

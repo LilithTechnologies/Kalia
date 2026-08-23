@@ -3,6 +3,7 @@ package re.lilith.kalia.renderer.vulkan
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.geometry.Viewport
 import re.lilith.kalia.renderer.graph.*
+import re.lilith.kalia.renderer.pipeline.AttachmentLayout
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.kalia.renderer.vulkan.utils.TransientTexturePool
 import re.lilith.vulkan.api.command.CommandRecorder
@@ -259,8 +260,8 @@ internal class VulkanGraphExecutor(
         colorTargets: List<VulkanTexture>,
         depthTarget: VulkanTexture?,
         pass: GraphPass,
-    ): re.lilith.kalia.renderer.pipeline.AttachmentLayout =
-        re.lilith.kalia.renderer.pipeline.AttachmentLayout(
+    ): AttachmentLayout =
+        AttachmentLayout.of(
             colorFormats = colorTargets.map(VulkanTexture::format),
             depthFormat = depthTarget?.format.takeIf { pass.depthAttachment != null },
         )

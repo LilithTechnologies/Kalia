@@ -154,7 +154,7 @@ internal class HeadlessGraphExecutor(
                 graph.texture(it.target).format
             }
 
-        return AttachmentLayout(
+        return AttachmentLayout.of(
             colorFormats = colorFormats,
             depthFormat = depthFormat,
         )
