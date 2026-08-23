@@ -12,11 +12,11 @@ object GlState {
     private fun <T : Any> intern(table: Object2ObjectOpenHashMap<T, T>, value: T): T =
         table.putIfAbsent(value, value) ?: value
 
-    fun bind(data: GlStateData) {
+    fun bindContext(data: GlStateData) {
         threadState.set(data)
     }
 
-    fun current(): GlStateData = state
+    fun context(): GlStateData = state
 
     var depthTest: Boolean
         get() = state.depthTest

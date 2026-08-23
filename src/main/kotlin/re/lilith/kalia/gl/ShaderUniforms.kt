@@ -16,11 +16,11 @@ object ShaderUniforms {
 
     private val state: ShaderUniformsData get() = threadState.get()
 
-    fun bind(data: ShaderUniformsData) {
+    fun bindContext(data: ShaderUniformsData) {
         threadState.set(data)
     }
 
-    fun current(): ShaderUniformsData = state
+    fun context(): ShaderUniformsData = state
 
     val sceneVersion: Long get() = state.sceneVersion
 

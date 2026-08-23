@@ -7,56 +7,55 @@ import java.nio.FloatBuffer
 import kotlin.math.sqrt
 
 object MatrixState {
-    private val modelViewStack = ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) }
-    private val projectionStack = ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) }
-    private val textureStacks = Int2ObjectOpenHashMap<ObjectArrayList<Matrix4f>>()
+    private val threadState = ThreadLocal.withInitial { MatrixStateData() }
 
-    private val pool = ArrayDeque<Matrix4f>()
+    private val state: MatrixStateData get() = threadState.get()
 
-    private var mode = GlEnums.GL_MODELVIEW
-    private var dirtyModelView = true
-    private var dirtyProjection = true
-    private var dirtyTexture = true
+    fun bindContext(data: MatrixStateData) {
+        threadState.set(data)
+    }
 
-    var activeTextureUnit: Int = 0
+    fun context(): MatrixStateData = state
+
+    var activeTextureUnit: Int
+        get() = state.activeTextureUnit
         set(value) {
-            if (field != value) {
-                field = value
-                if (mode == GlEnums.GL_TEXTURE) {
-                    cached = null
+            val active = state
+            if (active.activeTextureUnit != value) {
+                active.activeTextureUnit = value
+                if (active.mode == GlEnums.GL_TEXTURE) {
+                    active.cached = null
                 }
             }
         }
 
-    private var cached: Matrix4f? = null
-
     fun matrixMode(glMode: Int) {
-        if (mode != glMode) {
-            mode = glMode
-            cached = null
+        if (state.mode != glMode) {
+            state.mode = glMode
+            state.cached = null
         }
     }
 
-    fun matrixMode(): Int = mode
+    fun matrixMode(): Int = state.mode
 
-    fun current(): Matrix4f = cached ?: stackFor(mode).last().also { cached = it }
+    fun current(): Matrix4f = state.cached ?: stackFor(state.mode).last().also { state.cached = it }
 
-    fun modelView(): Matrix4f = modelViewStack.last()
+    fun modelView(): Matrix4f = state.modelViewStack.last()
 
-    fun projection(): Matrix4f = projectionStack.last()
+    fun projection(): Matrix4f = state.projectionStack.last()
 
     fun texture(): Matrix4f = textureStack(activeTextureUnit).last()
 
     fun pushMatrix() {
-        cached = null
-        val stack = stackFor(mode)
+        state.cached = null
+        val stack = stackFor(state.mode)
         stack.addLast(borrow(stack.last()))
         markDirty()
     }
 
     fun popMatrix() {
-        cached = null
-        val stack = stackFor(mode)
+        state.cached = null
+        val stack = stackFor(state.mode)
         if (stack.size > 1) {
             release(stack.removeLast())
         }
@@ -64,14 +63,14 @@ object MatrixState {
     }
 
     fun pushTextureMatrix() {
-        cached = null
+        state.cached = null
         val stack = textureStack(activeTextureUnit)
         stack.addLast(borrow(stack.last()))
         markTextureDirty()
     }
 
     fun popTextureMatrix() {
-        cached = null
+        state.cached = null
         val stack = textureStack(activeTextureUnit)
         if (stack.size > 1) {
             release(stack.removeLast())
@@ -150,7 +149,7 @@ object MatrixState {
     }
 
     fun multiply(matrix: FloatBuffer) {
-        current().mul(scratch.set(matrix))
+        current().mul(state.scratch.set(matrix))
         markDirty()
     }
 
@@ -168,68 +167,66 @@ object MatrixState {
     }
 
     fun flush() {
-        if (dirtyModelView) {
-            dirtyModelView = false
+        if (state.dirtyModelView) {
+            state.dirtyModelView = false
             ShaderUniforms.setModelView(modelView())
         }
-        if (dirtyProjection) {
-            dirtyProjection = false
+        if (state.dirtyProjection) {
+            state.dirtyProjection = false
             ShaderUniforms.setProjection(projection())
         }
-        if (dirtyTexture) {
-            dirtyTexture = false
+        if (state.dirtyTexture) {
+            state.dirtyTexture = false
             ShaderUniforms.setTexture(textureStack(0).last())
         }
     }
 
     private fun markDirty() {
-        when (mode) {
-            GlEnums.GL_PROJECTION -> dirtyProjection = true
+        when (state.mode) {
+            GlEnums.GL_PROJECTION -> state.dirtyProjection = true
             GlEnums.GL_TEXTURE -> markTextureDirty()
-            else -> dirtyModelView = true
+            else -> state.dirtyModelView = true
         }
     }
 
     private fun markTextureDirty() {
         if (activeTextureUnit == 0) {
-            dirtyTexture = true
+            state.dirtyTexture = true
         }
     }
 
     fun reset() {
-        cached = null
-        while (modelViewStack.size > 1) release(modelViewStack.removeLast())
-        while (projectionStack.size > 1) release(projectionStack.removeLast())
-        textureStacks.values.forEach { stack ->
+        state.cached = null
+        while (state.modelViewStack.size > 1) release(state.modelViewStack.removeLast())
+        while (state.projectionStack.size > 1) release(state.projectionStack.removeLast())
+        state.textureStacks.values.forEach { stack ->
             while (stack.size > 1) release(stack.removeLast())
             stack.last().identity()
         }
-        modelViewStack.last().identity()
-        projectionStack.last().identity()
-        mode = GlEnums.GL_MODELVIEW
-        dirtyModelView = true
-        dirtyProjection = true
-        dirtyTexture = true
+        state.modelViewStack.last().identity()
+        state.projectionStack.last().identity()
+        state.mode = GlEnums.GL_MODELVIEW
+        state.dirtyModelView = true
+        state.dirtyProjection = true
+        state.dirtyTexture = true
     }
 
     private fun stackFor(glMode: Int) = when (glMode) {
-        GlEnums.GL_PROJECTION -> projectionStack
+        GlEnums.GL_PROJECTION -> state.projectionStack
         GlEnums.GL_TEXTURE -> textureStack(activeTextureUnit)
-        else -> modelViewStack
+        else -> state.modelViewStack
     }
 
     private fun textureStack(unit: Int) =
-        textureStacks.getOrPut(unit) { ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) } }
+        state.textureStacks.getOrPut(unit) { ObjectArrayList<Matrix4f>().apply { addLast(Matrix4f()) } }
 
-    private fun borrow(source: Matrix4f): Matrix4f = (pool.removeLastOrNull() ?: Matrix4f()).set(source)
+    private fun borrow(source: Matrix4f): Matrix4f = (state.pool.removeLastOrNull() ?: Matrix4f()).set(source)
 
     private fun release(matrix: Matrix4f) {
-        if (pool.size < POOL_CAPACITY) {
-            pool.addLast(matrix)
+        if (state.pool.size < POOL_CAPACITY) {
+            state.pool.addLast(matrix)
         }
     }
-
-    private val scratch = Matrix4f()
 
     private const val POOL_CAPACITY = 64
 }
