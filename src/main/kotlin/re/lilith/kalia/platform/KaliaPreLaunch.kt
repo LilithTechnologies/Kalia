@@ -1,10 +1,10 @@
 package re.lilith.kalia.platform
 
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint
+import pl.tomgirl.lumen.window.DisplaySdl
 
 class KaliaPreLaunch : PreLaunchEntrypoint {
     override fun onPreLaunch() {
-        // GLFW is unsupported
-        System.setProperty("legacy_lwjgl3.use_sdl", "true")
+        DisplaySdl.instance().setSurface(KaliaGpuSurface())
     }
 }

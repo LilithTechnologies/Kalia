@@ -9,8 +9,6 @@
     "gl.MixinGL20",
     "gl.MixinGLContext",
     "gl.MixinProject",
-    "lwjgl.MixinDisplay",
-    "lwjgl.MixinSDLDisplay",
     "netty.MixinPlatformDependent0"
   ],
   "client": [

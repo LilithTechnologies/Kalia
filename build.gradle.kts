@@ -19,9 +19,9 @@ java {
 
 
 repositories {
-    maven(url = "https://maven.legacyfabric.net/") { name = "Legacy Fabric" }
-    maven(url = "https://maven.axolotlclient.com/releases") { name = "Axolotl Client" }
-    maven(url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1") { name = "DevAuth" }
+    maven(url = "https://maven.legacyfabric.net/")
+    maven(url = "https://maven.cloverclient.com/releases")
+    maven(url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1")
     mavenCentral()
     exclusiveContent {
         forRepository { mavenCentral() }
@@ -37,7 +37,7 @@ dependencies {
     minecraft(libs.minecraft)
     mappings(variantOf(libs.legacy.yarn) { classifier("v2") })
 
-    modApi(libs.legacy.lwjgl3)
+    modApi(libs.lumen)
     modImplementation(libs.fabric.loader)
     modImplementation(libs.devauth.fabric)
     modImplementation(libs.fabric.language.kotlin)
@@ -61,20 +61,17 @@ dependencies {
     testImplementation(project(":renderer:headless")) // the headless renderer is not shipped
 
     bundledApi(libs.joml)
-    bundled(libs.lwjgl.asProvider())
     bundled(libs.lwjgl.vulkan)
     bundled(libs.lwjgl.vma)
     bundled(libs.lwjgl.shaderc)
 
-    implementation(libs.lwjgl.opengl)
-    implementation(libs.lwjgl.openal)
+    api(libs.lwjgl.asProvider())
+    api(libs.lwjgl.opengl)
+    api(libs.lwjgl.openal)
+    api(libs.lwjgl.sdl)
 
-    lwjglDesktopNatives("lwjgl")
     lwjglDesktopNatives("lwjgl-vma")
     lwjglDesktopNatives("lwjgl-shaderc")
-
-    lwjglDesktopNativesNoShade("lwjgl-opengl")
-    lwjglDesktopNativesNoShade("lwjgl-openal")
 
     lwjglNative("lwjgl-vulkan", "natives-macos")
     lwjglNative("lwjgl-vulkan", "natives-macos-arm64")
@@ -101,19 +98,6 @@ fun DependencyHandlerScope.lwjglDesktopNatives(module: String) {
     lwjglNative(module, "natives-linux")
     lwjglNative(module, "natives-macos")
     lwjglNative(module, "natives-macos-arm64")
-}
-
-fun DependencyHandlerScope.lwjglNativeNoShade(module: String, classifier: String) {
-    val notation = "org.lwjgl:$module:${libs.versions.lwjgl.get()}:$classifier"
-    add("runtimeOnly", notation)
-    add("include", notation)
-}
-
-fun DependencyHandlerScope.lwjglDesktopNativesNoShade(module: String) {
-    lwjglNativeNoShade(module, "natives-windows")
-    lwjglNativeNoShade(module, "natives-linux")
-    lwjglNativeNoShade(module, "natives-macos")
-    lwjglNativeNoShade(module, "natives-macos-arm64")
 }
 
 kotlin {

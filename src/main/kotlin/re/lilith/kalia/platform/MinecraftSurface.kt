@@ -1,6 +1,7 @@
 package re.lilith.kalia.platform
 
 import org.lwjgl.opengl.Display
+import pl.tomgirl.lumen.window.DisplaySdl
 import re.lilith.kalia.renderer.device.PlatformSurface
 import re.lilith.kalia.renderer.device.WindowSystem
 import re.lilith.kalia.renderer.geometry.Extent
@@ -23,12 +24,7 @@ class MinecraftSurface private constructor(override val nativeHandle: Long) : Pl
                 return null
             }
 
-            val handle = runCatching {
-                Display::class.java.getMethod("getHandle").invoke(null) as Long
-            }.getOrElse { failure ->
-                unavailableReason = "the display handle is not available (${failure.message})"
-                return null
-            }
+            val handle = DisplaySdl.instance().handle
 
             if (handle == 0L || handle == -1L) {
                 unavailableReason = "the window handle is not valid yet"
