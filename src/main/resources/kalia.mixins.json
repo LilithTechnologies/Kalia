@@ -21,6 +21,8 @@
     "access.PlayerListHudAccess",
     "access.SpriteAccess",
     "access.WorldRendererAccess",
+    "entity.MixinBlockEntity",
+    "entity.MixinBlockEntityRenderDispatcher",
     "entity.MixinDataTracker",
     "entity.MixinEntity",
     "entity.MixinSignBlockEntityRenderer",
