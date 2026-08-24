@@ -1,5 +1,7 @@
 package re.lilith.kalia.renderer.vulkan
 
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
+import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import re.lilith.vulkan.api.command.CommandBuffer
 import re.lilith.vulkan.api.command.CommandPool
 import re.lilith.vulkan.api.descriptor.*
@@ -20,14 +22,14 @@ internal class VulkanFrameSlot(
     private val transferPool: CommandPool?,
     private val computePool: CommandPool?,
 ) : AutoCloseable {
-    private val transferCommandBuffers = mutableListOf<CommandBuffer>()
+    private val transferCommandBuffers = ObjectArrayList<CommandBuffer>()
     private var nextTransferBuffer = 0
 
-    private val computeCommandBuffers = mutableListOf<CommandBuffer>()
+    private val computeCommandBuffers = ObjectArrayList<CommandBuffer>()
     private var nextComputeBuffer = 0
-    private val retired = mutableListOf<AutoCloseable>()
+    private val retired = ObjectArrayList<AutoCloseable>()
 
-    private val descriptorSets = HashMap<BindingKey, DescriptorSet>()
+    private val descriptorSets = Object2ObjectOpenHashMap<BindingKey, DescriptorSet>()
     private var descriptorEpoch = -1
 
     var indirectScratch: VulkanBuffer? = null

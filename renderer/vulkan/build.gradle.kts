@@ -15,6 +15,7 @@ dependencies {
     implementation(libs.lwjgl.sdl)
     implementation(libs.lwjgl.vulkan)
     implementation(libs.lwjgl.vma)
+    implementation(libs.fastutil)
 
     compileOnly(libs.lwjgl.shaderc)
     runtimeOnly(libs.lwjgl.shaderc)
