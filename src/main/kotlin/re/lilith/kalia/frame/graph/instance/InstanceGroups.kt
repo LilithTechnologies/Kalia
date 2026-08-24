@@ -1,24 +1,21 @@
 package re.lilith.kalia.frame.graph.instance
 
+import it.unimi.dsi.fastutil.objects.Object2ObjectLinkedOpenHashMap
+import it.unimi.dsi.fastutil.objects.Object2ObjectOpenHashMap
 import re.lilith.kalia.buffer.InstanceArena
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
 import re.lilith.kalia.frame.draw.BatchEnvironment
 import re.lilith.kalia.frame.graph.BatchStats
-import re.lilith.kalia.frame.graph.entity.shadow.ShadowBatcher
-import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher
 import re.lilith.kalia.frame.graph.entity.cuboid.CuboidBatcher
+import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher
+import re.lilith.kalia.frame.graph.entity.shadow.ShadowBatcher
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.IndexFormat
 import re.lilith.kalia.renderer.format.VertexFormat
-import re.lilith.kalia.renderer.pipeline.AttachmentLayout
-import re.lilith.kalia.renderer.pipeline.BlendState
-import re.lilith.kalia.renderer.pipeline.ColorMask
-import re.lilith.kalia.renderer.pipeline.DepthState
-import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
-import re.lilith.kalia.renderer.pipeline.RasterState
+import re.lilith.kalia.renderer.pipeline.*
 import re.lilith.kalia.renderer.resource.GpuPipeline
 import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
@@ -39,12 +36,12 @@ internal class InstanceGroups(
 ) {
     val environment = BatchEnvironment()
 
-    private val groups = LinkedHashMap<InstanceKey, InstanceArena>()
+    private val groups = Object2ObjectLinkedOpenHashMap<InstanceKey, InstanceArena>()
     private val pool = ArrayDeque<InstanceArena>()
     private val probe = InstanceKey()
     private val pending = InstanceDraw()
 
-    private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
+    private val pipelines = Object2ObjectOpenHashMap<GraphicsPipelineDescription, GpuPipeline>()
     private var pipelineDevice: RenderDevice? = null
 
     private val descProgram = arrayOfNulls<ShaderProgram>(MEMO_SLOTS)
