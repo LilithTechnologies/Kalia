@@ -162,8 +162,10 @@ public class MixinEntityRenderer<T extends Entity> {
         double p = y - e;
         double q = z - h;
 
+        BlockPos.Mutable scratchDown = new BlockPos.Mutable();
         for (BlockPos blockPos : BlockPos.mutableIterate(new BlockPos(i, k, m), new BlockPos(j, l, n))) {
-            Block block = world.getBlockState(blockPos.down()).getBlock();
+            scratchDown.setPosition(blockPos.getX(), blockPos.getY() - 1, blockPos.getZ());
+            Block block = world.getBlockState(scratchDown).getBlock();
             if (block.getBlockType() != -1 && world.getLightLevelWithNeighbours(blockPos) > 3) {
                 kalia$recordShadowQuad(world, block, x, y, z, blockPos, f, g, o, p, q);
             }

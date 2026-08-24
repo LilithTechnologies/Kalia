@@ -238,16 +238,18 @@ object NametagBatcher {
             count.toLong() * BYTES_PER_INSTANCE,
         )
 
-        MemoryAccess.putFloat(target, modelView.m00()); MemoryAccess.putFloat(target + 4, modelView.m10())
-        MemoryAccess.putFloat(target + 8, modelView.m20()); MemoryAccess.putFloat(target + 12, modelView.m30())
-        MemoryAccess.putFloat(target + 16, modelView.m01()); MemoryAccess.putFloat(target + 20, modelView.m11())
-        MemoryAccess.putFloat(target + 24, modelView.m21()); MemoryAccess.putFloat(target + 28, modelView.m31())
-        MemoryAccess.putFloat(target + 32, modelView.m02()); MemoryAccess.putFloat(target + 36, modelView.m12())
-        MemoryAccess.putFloat(target + 40, modelView.m22()); MemoryAccess.putFloat(target + 44, modelView.m32())
+        val m00 = modelView.m00(); val m10 = modelView.m10(); val m20 = modelView.m20(); val m30 = modelView.m30()
+        val m01 = modelView.m01(); val m11 = modelView.m11(); val m21 = modelView.m21(); val m31 = modelView.m31()
+        val m02 = modelView.m02(); val m12 = modelView.m12(); val m22 = modelView.m22(); val m32 = modelView.m32()
 
-        var p = target + BYTES_PER_INSTANCE
-        repeat(count - 1) {
-            MemoryAccess.copyMemory(target, p, TRANSFORM_BYTES)
+        var p = target
+        repeat(count) {
+            MemoryAccess.putFloat(p, m00); MemoryAccess.putFloat(p + 4, m10)
+            MemoryAccess.putFloat(p + 8, m20); MemoryAccess.putFloat(p + 12, m30)
+            MemoryAccess.putFloat(p + 16, m01); MemoryAccess.putFloat(p + 20, m11)
+            MemoryAccess.putFloat(p + 24, m21); MemoryAccess.putFloat(p + 28, m31)
+            MemoryAccess.putFloat(p + 32, m02); MemoryAccess.putFloat(p + 36, m12)
+            MemoryAccess.putFloat(p + 40, m22); MemoryAccess.putFloat(p + 44, m32)
             p += BYTES_PER_INSTANCE
         }
         BatchStats.glyphs += count
