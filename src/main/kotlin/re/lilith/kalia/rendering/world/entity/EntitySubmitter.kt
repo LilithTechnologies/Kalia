@@ -30,6 +30,7 @@ object EntitySubmitter {
         val worldRenderer = client.worldRenderer ?: return
 
         applyWorldState(state)
+        cameraView.bind(state)
         cameraView.setPos(state.cameraX, state.cameraY, state.cameraZ)
 
         WorldRecorder.record(

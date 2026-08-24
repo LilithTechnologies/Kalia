@@ -1,7 +1,10 @@
 package re.lilith.kalia.frame.graph.ui
 
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.frame.draw.EntityBatchers
 import re.lilith.kalia.frame.draw.KaliaDraw
 import re.lilith.kalia.gl.GlBridge
@@ -28,9 +31,6 @@ import re.lilith.kalia.shader.CoreShaders
 import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.vertex.TranslatedVertexFormat
 import re.lilith.kalia.vertex.VertexLocations
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-
 
 object GuiBatcher {
     val FORMAT = VertexFormat.of {
@@ -56,49 +56,13 @@ object GuiBatcher {
     private const val MAX_SOURCE_VERTICES = 4096
     private const val MAX_BATCH_VERTICES = 1 shl 16
 
-    private var absorbedDraws = 0
+    private val gameState = GuiBatchData()
+    private val renderState = GuiBatchData()
 
-    private var vertices = ByteBuffer.allocateDirect(INITIAL_CAPACITY).order(ByteOrder.nativeOrder())
-    private var verticesAddress = MemoryAccess.addressOf(vertices)
-    private var vertexCount = 0
+    private val state: GuiBatchData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    private val pushConstants = ByteBuffer.allocateDirect(ShaderUniforms.PUSH_CONSTANT_BYTES)
-        .order(ByteOrder.nativeOrder())
-
-    private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
-    private var pipelineDevice: RenderDevice? = null
-
-    private var memoAttachments: AttachmentLayout? = null
-    private var memoRaster: RasterState? = null
-    private var memoDepth: DepthState? = null
-    private var memoBlend: BlendState? = null
-    private var memoColorMask: ColorMask? = null
-    private var memoPipeline: GpuPipeline? = null
-
-    private val slotTextures = arrayOfNulls<GpuTexture>(ShaderPrelude.Bindings.TEXTURE_SLOT_COUNT)
-    private val slotSamplers = arrayOfNulls<GpuSampler>(ShaderPrelude.Bindings.TEXTURE_SLOT_COUNT)
-    private var slotCount = 0
-
-    private var keyLightmap: GpuTexture? = null
-    private var keyLightmapSampler: GpuSampler? = null
-    private var keyRaster: RasterState? = null
-    private var keyDepth: DepthState? = null
-    private var keyBlend: BlendState? = null
-    private var keyColorMask: ColorMask? = null
-    private var keyAttachments: AttachmentLayout? = null
-    private var keyAlphaCutout = 0f
-    private var keySceneVersion = -1L
-    private var keyEnvironmentVersion = -1L
-    private var keyLineWidth = 0f
-    private var keyDepthBiasConstant = 0f
-    private var keyDepthBiasSlope = 0f
-    private var keyIndexed = false
-
-    private var sceneBuffer: GpuBuffer? = null
-    private var sceneOffset = 0L
-    private var sceneSize = 0L
-
-    val isEmpty: Boolean get() = vertexCount == 0
+    val isEmpty: Boolean get() = state.vertexCount == 0
 
     fun tryRecord(
         source: ByteBuffer,
@@ -106,6 +70,7 @@ object GuiBatcher {
         glMode: Int,
         sourceVertexCount: Int,
     ): Boolean {
+        val active = state
         if (sourceVertexCount !in 1..MAX_SOURCE_VERTICES) {
             return false
         }
@@ -141,18 +106,18 @@ object GuiBatcher {
         val depthBiasConstant = GlState.effectiveDepthBiasConstant()
         val depthBiasSlope = GlState.effectiveDepthBiasSlope()
 
-        val matches = vertexCount > 0 &&
-            keyLightmap === lightmap && keyLightmapSampler === lightmapSampler &&
-            keyRaster === raster && keyDepth === depth &&
-            keyBlend === blend && keyColorMask === colorMask &&
-            keyAttachments == encoder.attachments &&
-            keyIndexed == indexed &&
-            keyAlphaCutout == alphaCutout &&
-            keySceneVersion == ShaderUniforms.sceneVersion &&
-            keyEnvironmentVersion == ShaderUniforms.environmentVersion &&
-            keyLineWidth == lineWidth &&
-            keyDepthBiasConstant == depthBiasConstant &&
-            keyDepthBiasSlope == depthBiasSlope
+        val matches = active.vertexCount > 0 &&
+            active.keyLightmap === lightmap && active.keyLightmapSampler === lightmapSampler &&
+            active.keyRaster === raster && active.keyDepth === depth &&
+            active.keyBlend === blend && active.keyColorMask === colorMask &&
+            active.keyAttachments == encoder.attachments &&
+            active.keyIndexed == indexed &&
+            active.keyAlphaCutout == alphaCutout &&
+            active.keySceneVersion == ShaderUniforms.sceneVersion &&
+            active.keyEnvironmentVersion == ShaderUniforms.environmentVersion &&
+            active.keyLineWidth == lineWidth &&
+            active.keyDepthBiasConstant == depthBiasConstant &&
+            active.keyDepthBiasSlope == depthBiasSlope
 
         val slot = if (matches) slotFor(texture, sampler) else -1
         if (!matches || slot < 0) {
@@ -161,27 +126,27 @@ object GuiBatcher {
             EntityBatchers.flushEntities()
 
             resources.sceneUniforms.sync()
-            sceneBuffer = resources.sceneUniforms.uniformBuffer
-            sceneOffset = resources.sceneUniforms.offsetBytes
-            sceneSize = resources.sceneUniforms.sizeBytes
+            active.sceneBuffer = resources.sceneUniforms.uniformBuffer
+            active.sceneOffset = resources.sceneUniforms.offsetBytes
+            active.sceneSize = resources.sceneUniforms.sizeBytes
 
-            slotCount = 0
-            slotTextures.fill(null)
-            slotSamplers.fill(null)
-            keyLightmap = lightmap
-            keyLightmapSampler = lightmapSampler
-            keyRaster = raster
-            keyDepth = depth
-            keyBlend = blend
-            keyColorMask = colorMask
-            keyAttachments = encoder.attachments
-            keyIndexed = indexed
-            keyAlphaCutout = alphaCutout
-            keySceneVersion = ShaderUniforms.sceneVersion
-            keyEnvironmentVersion = ShaderUniforms.environmentVersion
-            keyLineWidth = lineWidth
-            keyDepthBiasConstant = depthBiasConstant
-            keyDepthBiasSlope = depthBiasSlope
+            active.slotCount = 0
+            active.slotTextures.fill(null)
+            active.slotSamplers.fill(null)
+            active.keyLightmap = lightmap
+            active.keyLightmapSampler = lightmapSampler
+            active.keyRaster = raster
+            active.keyDepth = depth
+            active.keyBlend = blend
+            active.keyColorMask = colorMask
+            active.keyAttachments = encoder.attachments
+            active.keyIndexed = indexed
+            active.keyAlphaCutout = alphaCutout
+            active.keySceneVersion = ShaderUniforms.sceneVersion
+            active.keyEnvironmentVersion = ShaderUniforms.environmentVersion
+            active.keyLineWidth = lineWidth
+            active.keyDepthBiasConstant = depthBiasConstant
+            active.keyDepthBiasSlope = depthBiasSlope
 
             writePushConstants(alphaCutout)
         }
@@ -205,70 +170,73 @@ object GuiBatcher {
             source = MemoryAccess.addressOf(source) + source.position(),
             layout = layout,
             vertexCount = sourceVertexCount,
-            target = verticesAddress + vertexCount.toLong() * GuiVertexWriter.VERTEX_BYTES,
+            target = active.verticesAddress + active.vertexCount.toLong() * GuiVertexWriter.VERTEX_BYTES,
         )
-        vertexCount += sourceVertexCount
-        absorbedDraws++
+        active.vertexCount += sourceVertexCount
+        active.absorbedDraws++
 
-        if (vertexCount >= MAX_BATCH_VERTICES) {
+        if (active.vertexCount >= MAX_BATCH_VERTICES) {
             flush()
         }
         return true
     }
 
     private fun slotFor(texture: GpuTexture, sampler: GpuSampler): Int {
-        for (index in 0 until slotCount) {
-            if (slotTextures[index] === texture && slotSamplers[index] === sampler) {
+        val active = state
+        for (index in 0 until active.slotCount) {
+            if (active.slotTextures[index] === texture && active.slotSamplers[index] === sampler) {
                 return index
             }
         }
-        if (slotCount == slotTextures.size) {
+        if (active.slotCount == active.slotTextures.size) {
             return -1
         }
-        slotTextures[slotCount] = texture
-        slotSamplers[slotCount] = sampler
-        return slotCount++
+        active.slotTextures[active.slotCount] = texture
+        active.slotSamplers[active.slotCount] = sampler
+        return active.slotCount++
     }
 
     fun discard() {
-        vertexCount = 0
-        absorbedDraws = 0
-        slotCount = 0
+        val active = state
+        active.vertexCount = 0
+        active.absorbedDraws = 0
+        active.slotCount = 0
     }
 
     fun flush() {
-        if (vertexCount == 0) {
+        val active = state
+        if (active.vertexCount == 0) {
             return
         }
-        val pending = vertexCount
-        val absorbed = absorbedDraws
-        vertexCount = 0
-        absorbedDraws = 0
-        slotCount = 0
+        val pending = active.vertexCount
+        val absorbed = active.absorbedDraws
+        active.vertexCount = 0
+        active.absorbedDraws = 0
+        active.slotCount = 0
         re.lilith.kalia.renderer.device.RenderStats.recordBatch(absorbed)
 
         val encoder = GameFrame.current ?: return
         val device = encoder.device
         val resources = FrameResources.of(device)
-        if (pipelineDevice !== device) {
-            pipelines.clear()
-            memoPipeline = null
-            pipelineDevice = device
+        if (active.pipelineDevice !== device) {
+            active.pipelines.clear()
+            active.memoPipeline = null
+            active.pipelineDevice = device
         }
 
-        val attachments = keyAttachments ?: encoder.attachments
-        val raster = keyRaster ?: GlState.rasterState()
-        val depth = keyDepth ?: DepthState.DISABLED
-        val blend = keyBlend ?: GlState.blendState()
-        val colorMask = keyColorMask ?: ColorMask.ALL
+        val attachments = active.keyAttachments ?: encoder.attachments
+        val raster = active.keyRaster ?: GlState.rasterState()
+        val depth = active.keyDepth ?: DepthState.DISABLED
+        val blend = active.keyBlend ?: GlState.blendState()
+        val colorMask = active.keyColorMask ?: ColorMask.ALL
 
-        var pipeline = memoPipeline
+        var pipeline = active.memoPipeline
         if (pipeline == null ||
-            memoAttachments != attachments ||
-            memoRaster !== raster ||
-            memoDepth !== depth ||
-            memoBlend !== blend ||
-            memoColorMask !== colorMask
+            active.memoAttachments != attachments ||
+            active.memoRaster !== raster ||
+            active.memoDepth !== depth ||
+            active.memoBlend !== blend ||
+            active.memoColorMask !== colorMask
         ) {
             val description = GraphicsPipelineDescription(
                 program = CoreShaders.slottedProgramFor(TRANSLATED),
@@ -279,44 +247,44 @@ object GuiBatcher {
                 blend = blend,
                 colorMask = colorMask,
             )
-            pipeline = pipelines.getOrPut(description) { device.createPipeline(description) }
-            memoAttachments = attachments
-            memoRaster = raster
-            memoDepth = depth
-            memoBlend = blend
-            memoColorMask = colorMask
-            memoPipeline = pipeline
+            pipeline = active.pipelines.getOrPut(description) { device.createPipeline(description) }
+            active.memoAttachments = attachments
+            active.memoRaster = raster
+            active.memoDepth = depth
+            active.memoBlend = blend
+            active.memoColorMask = colorMask
+            active.memoPipeline = pipeline
         }
         encoder.bindPipeline(pipeline)
-        encoder.depthBias(keyDepthBiasConstant, keyDepthBiasSlope)
-        encoder.lineWidth(keyLineWidth)
+        encoder.depthBias(active.keyDepthBiasConstant, active.keyDepthBiasSlope)
+        encoder.lineWidth(active.keyLineWidth)
 
-        val fallbackTexture = slotTextures[0] ?: resources.whiteTexture
-        val fallbackSampler = slotSamplers[0] ?: resources.defaultSampler
+        val fallbackTexture = active.slotTextures[0] ?: resources.whiteTexture
+        val fallbackSampler = active.slotSamplers[0] ?: resources.defaultSampler
         encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, fallbackTexture, fallbackSampler)
         for (slot in 1 until ShaderPrelude.Bindings.TEXTURE_SLOT_COUNT) {
             encoder.bindTexture(
                 binding = ShaderPrelude.Bindings.TEXTURE_SLOT_BASE + slot - 1,
-                texture = slotTextures[slot] ?: fallbackTexture,
-                sampler = slotSamplers[slot] ?: fallbackSampler,
+                texture = active.slotTextures[slot] ?: fallbackTexture,
+                sampler = active.slotSamplers[slot] ?: fallbackSampler,
             )
         }
-        encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, keyLightmap!!, keyLightmapSampler!!)
+        encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, active.keyLightmap!!, active.keyLightmapSampler!!)
         encoder.bindUniformBuffer(
             binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
-            buffer = sceneBuffer ?: resources.sceneUniforms.uniformBuffer,
-            offsetBytes = sceneOffset,
-            sizeBytes = sceneSize,
+            buffer = active.sceneBuffer ?: resources.sceneUniforms.uniformBuffer,
+            offsetBytes = active.sceneOffset,
+            sizeBytes = active.sceneSize,
         )
-        encoder.pushConstants(pushConstants.position(0).limit(ShaderUniforms.PUSH_CONSTANT_BYTES) as ByteBuffer)
+        encoder.pushConstants(active.pushConstants.position(0).limit(ShaderUniforms.PUSH_CONSTANT_BYTES) as ByteBuffer)
 
         val byteCount = pending * GuiVertexWriter.VERTEX_BYTES
-        vertices.position(0).limit(byteCount)
-        val slice = resources.vertexArena.append(vertices, byteCount)
-        vertices.clear()
+        active.vertices.position(0).limit(byteCount)
+        val slice = resources.vertexArena.append(active.vertices, byteCount)
+        active.vertices.clear()
         encoder.bindVertexBuffer(0, slice.buffer, slice.offsetBytes)
 
-        if (keyIndexed) {
+        if (active.keyIndexed) {
             val quadCount = pending / VERTICES_PER_QUAD
             encoder.bindIndexBuffer(resources.indices.forQuads(quadCount), IndexFormat.UINT32)
             encoder.drawIndexed(resources.indices.quadIndexCount(quadCount), 1, 0, 0, 0)
@@ -326,7 +294,7 @@ object GuiBatcher {
     }
 
     private fun writePushConstants(alphaCutout: Float) {
-        val buffer = pushConstants
+        val buffer = state.pushConstants
         buffer.clear()
         for (index in 0 until 16) {
             buffer.putFloat(if (index % 5 == 0) 1f else 0f)
@@ -345,24 +313,25 @@ object GuiBatcher {
     }
 
     private fun reserve(additionalVertices: Int) {
-        val required = (vertexCount + additionalVertices).toLong() * GuiVertexWriter.VERTEX_BYTES
-        if (required <= vertices.capacity()) {
+        val active = state
+        val required = (active.vertexCount + additionalVertices).toLong() * GuiVertexWriter.VERTEX_BYTES
+        if (required <= active.vertices.capacity()) {
             return
         }
-        var capacity = vertices.capacity().toLong()
+        var capacity = active.vertices.capacity().toLong()
         while (capacity < required) {
             capacity = capacity shl 1
         }
         val grown = ByteBuffer.allocateDirect(capacity.toInt()).order(ByteOrder.nativeOrder())
         MemoryAccess.copyMemory(
-            verticesAddress,
+            active.verticesAddress,
             MemoryAccess.addressOf(grown),
-            vertexCount.toLong() * GuiVertexWriter.VERTEX_BYTES,
+            active.vertexCount.toLong() * GuiVertexWriter.VERTEX_BYTES,
         )
-        vertices = grown
-        verticesAddress = MemoryAccess.addressOf(grown)
+        active.vertices = grown
+        active.verticesAddress = MemoryAccess.addressOf(grown)
     }
 
     private const val VERTICES_PER_QUAD = 4
-    private const val INITIAL_CAPACITY = 4096 * GuiVertexWriter.VERTEX_BYTES
+    internal const val INITIAL_CAPACITY = 4096 * GuiVertexWriter.VERTEX_BYTES
 }

@@ -1,5 +1,6 @@
 package re.lilith.kalia.renderer.vulkan
 
+import org.lwjgl.system.MemoryUtil
 import re.lilith.kalia.renderer.resource.BufferUsage
 import re.lilith.kalia.renderer.resource.GpuBuffer
 import java.nio.ByteBuffer
@@ -35,10 +36,15 @@ internal class VulkanBuffer(
             return
         }
 
-        if (buffer.isMapped) {
-            buffer.mappedByteBuffer(offsetBytes, length).put(source.duplicate())
-        } else {
+        if (!buffer.isMapped) {
             owner.uploads.stageBufferWrite(buffer, offsetBytes, source)
+            return
+        }
+
+        if (source.isDirect) {
+            MemoryUtil.memCopy(MemoryUtil.memAddress(source), buffer.mappedAddress + offsetBytes, length)
+        } else {
+            buffer.mappedByteBuffer(offsetBytes, length).put(source.duplicate())
         }
     }
 

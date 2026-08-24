@@ -21,8 +21,17 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
         )
     }
 
+    private var gameSlot = 0
+    private var renderSlot = 0
 
-    private val streamIndex: Int get() = device.frameSlot % streams.size
+    private val onRenderThread: Boolean get() = Thread.currentThread() === RenderThreadRef.thread
+
+    fun bindSlot(slot: Int) {
+        val bounded = Math.floorMod(slot, streams.size)
+        if (onRenderThread) renderSlot = bounded else gameSlot = bounded
+    }
+
+    private val streamIndex: Int get() = if (onRenderThread) renderSlot else gameSlot
 
     val vertexArena: StreamArena get() = streams[streamIndex].vertexArena
 
@@ -52,23 +61,27 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
 
     val defaultSampler: GpuSampler = device.createSampler(SamplerDescription.NEAREST_CLAMP)
 
+    private val samplerLock = Any()
     private val samplerCache = HashMap<SamplerDescription, GpuSampler>()
-
-    private var memoDescription: SamplerDescription? = null
-    private var memoSampler: GpuSampler? = null
+    private val gameSamplerMemo = SamplerMemo()
+    private val renderSamplerMemo = SamplerMemo()
 
     fun sampler(description: SamplerDescription): GpuSampler {
-        val cached = memoSampler
-        if (cached != null && memoDescription === description) {
+        val memo = if (onRenderThread) renderSamplerMemo else gameSamplerMemo
+        val cached = memo.sampler
+        if (cached != null && memo.description === description) {
             return cached
         }
-        val resolved = samplerCache.getOrPut(description) { device.createSampler(description) }
-        memoDescription = description
-        memoSampler = resolved
+        val resolved = synchronized(samplerLock) {
+            samplerCache.getOrPut(description) { device.createSampler(description) }
+        }
+        memo.description = description
+        memo.sampler = resolved
         return resolved
     }
 
-    fun beginFrame() {
+    fun beginFrame(slot: Int) {
+        bindSlot(slot)
         RenderStats.beginFrame()
         vertexArena.reset()
         sceneUniforms.beginFrame()
@@ -81,12 +94,16 @@ class FrameResources private constructor(val device: RenderDevice) : AutoCloseab
         }
         indices.close()
         whiteTexture.close()
-        samplerCache.values.forEach { it.close() }
+        synchronized(samplerLock) {
+            samplerCache.values.forEach { it.close() }
+            samplerCache.clear()
+        }
     }
 
     private class Streams(val vertexArena: StreamArena, val sceneUniforms: SceneUniformRing)
 
     companion object {
+        @Volatile
         private var current: FrameResources? = null
 
         fun of(device: RenderDevice): FrameResources {

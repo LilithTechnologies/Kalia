@@ -6,18 +6,13 @@ import java.lang.reflect.Field
 import java.nio.Buffer
 
 object MemoryAccess {
-    private val UNSAFE: Unsafe
-    private val BUFFER_ADDRESS_OFFSET: Long
+    private val UNSAFE: Unsafe = UnsafeHolder.UNSAFE
+    private val BUFFER_ADDRESS_OFFSET: Long = UNSAFE.objectFieldOffset(Buffer::class.java.getDeclaredField("address"))
 
     @JvmField
     val ARRAY_INT_BASE_OFFSET = Unsafe.ARRAY_INT_BASE_OFFSET
 
     private val BITS32 = Pointer.BITS32
-
-    init {
-        UNSAFE = UnsafeHolder.UNSAFE
-        BUFFER_ADDRESS_OFFSET = UNSAFE.objectFieldOffset(Buffer::class.java.getDeclaredField("address"))
-    }
 
     @JvmStatic
     fun addressOf(buffer: Buffer): Long = UNSAFE.getLong(buffer, BUFFER_ADDRESS_OFFSET)

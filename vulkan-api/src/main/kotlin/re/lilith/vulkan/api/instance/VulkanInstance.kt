@@ -16,6 +16,7 @@ class VulkanInstance internal constructor(
     val config: InstanceConfig,
     val availableLayers: Set<String>,
     val availableExtensions: Set<String>,
+    val enabledLayers: Set<String>,
 ) : VulkanResource() {
     fun enumeratePhysicalDevices(): List<PhysicalDevice> = pushStack { stack ->
         val count = stack.ints(0)
@@ -57,13 +58,15 @@ class VulkanInstance internal constructor(
 
             val enabledLayers = buildSet {
                 addAll(config.enabledLayers)
-                if (config.validation.enableValidationLayer) {
+                if (config.validation.enableValidationLayer &&
+                    InstanceConfigBuilder.VALIDATION_LAYER_NAME in supportedLayers
+                ) {
                     add(InstanceConfigBuilder.VALIDATION_LAYER_NAME)
                 }
             }
 
             val syncValidationAvailable =
-                config.validation.enableValidationLayer &&
+                InstanceConfigBuilder.VALIDATION_LAYER_NAME in enabledLayers &&
                         "VK_EXT_validation_features" in supportedExtensions
 
             val requestedExtensions = buildSet {
@@ -132,6 +135,7 @@ class VulkanInstance internal constructor(
                 config = config,
                 availableLayers = supportedLayers,
                 availableExtensions = supportedExtensions,
+                enabledLayers = enabledLayers,
             )
         }
 

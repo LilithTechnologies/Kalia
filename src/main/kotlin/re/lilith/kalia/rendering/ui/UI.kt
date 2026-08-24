@@ -11,81 +11,94 @@ import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 
 object UI {
-    val state = GuiRenderState()
-    val scissors = GuiScissorStack()
-    val textures = GuiTextureRegistry()
+    private val payloads = Array(PAYLOADS) { GuiFrameData() }
+    private var producingIndex = 0
+
+    private var producing: GuiFrameData = payloads[0]
+
+    @Volatile
+    private var consuming: GuiFrameData = payloads[0]
+
+    private val frame: GuiFrameData get() = producing
+
+    fun context(): GuiFrameData = producing
+
+    fun publish() {
+        consuming = producing
+        producingIndex = (producingIndex + 1) % payloads.size
+        producing = payloads[producingIndex]
+    }
+
+    val state: GuiRenderState get() = frame.state
+    val scissors: GuiScissorStack get() = frame.scissors
+    val textures: GuiTextureRegistry get() = frame.textures
 
     private var renderer: GuiRenderer? = null
     private var rendererDevice: RenderDevice? = null
 
-    var width = 1f
-        private set
+    val width: Float get() = frame.width
 
-    var height = 1f
-        private set
+    val height: Float get() = frame.height
 
-    var layer = GuiLayer.SCREEN
-
-    var phase = GuiBlurPhase.AFTER_BLUR
-
-    var material
-        get() = pinnedMaterial ?: GuiMaterial.current()
+    var layer: GuiLayer
+        get() = frame.layer
         set(value) {
-            pinnedMaterial = value
+            frame.layer = value
         }
 
-    private var pinnedMaterial: GuiMaterial? = null
+    var phase: GuiBlurPhase
+        get() = frame.phase
+        set(value) {
+            frame.phase = value
+        }
 
-    var isRecording = false
-        private set
+    var material
+        get() = frame.pinnedMaterial ?: GuiMaterial.current()
+        set(value) {
+            frame.pinnedMaterial = value
+        }
+
+    val isRecording: Boolean get() = frame.isRecording
 
     fun begin(guiWidth: Float, guiHeight: Float) {
-        state.reset()
-        scissors.reset()
-        textures.reset()
-        width = guiWidth
-        height = guiHeight
-        layer = GuiLayer.SCREEN
-        phase = GuiBlurPhase.AFTER_BLUR
-        pinnedMaterial = null
-        isRecording = true
-        prepared = false
+        frame.reset(guiWidth, guiHeight)
     }
 
     fun prepare(device: RenderDevice) {
-        if (prepared) {
+        val published = consuming
+        if (published.prepared) {
             return
         }
-        prepared = true
-        isRecording = false
+        published.prepared = true
+        published.isRecording = false
 
-        lastElements = state.size
-        lastItemElements = state.countLayer(GuiLayer.ITEM)
+        published.lastElements = published.state.size
+        published.lastItemElements = published.state.countLayer(GuiLayer.ITEM)
 
-        rendererFor(device).prepare(state, width, height)
+        rendererFor(device).prepare(published.state, published.width, published.height)
     }
 
-    var lastElements = 0
-        private set
+    val lastElements: Int get() = consuming.lastElements
 
-    var lastItemElements = 0
-        private set
-
-    private var prepared = false
+    val lastItemElements: Int get() = consuming.lastItemElements
 
     fun draw(pass: PassContext, phase: GuiBlurPhase? = null) {
-        rendererFor(pass.device).execute(pass, scissors, textures, phase)
+        val published = consuming
+        rendererFor(pass.device).execute(pass, published.scissors, published.textures, phase)
     }
 
     fun drawGroup(pass: PassContext, phase: GuiBlurPhase, group: Int) {
-        rendererFor(pass.device).executeGroup(pass, scissors, textures, phase, group)
+        val published = consuming
+        rendererFor(pass.device).executeGroup(pass, published.scissors, published.textures, phase, group)
     }
 
     fun discard() {
-        isRecording = false
-        state.reset()
-        scissors.reset()
-        textures.reset()
+        payloads.forEach { payload ->
+            payload.isRecording = false
+            payload.state.reset()
+            payload.scissors.reset()
+            payload.textures.reset()
+        }
     }
 
     private fun rendererFor(device: RenderDevice): GuiRenderer {
@@ -157,12 +170,13 @@ object UI {
         tintTop: Int,
         tintBottom: Int,
     ) {
+        val active = state
         val m = MatrixState.modelView()
         val m00 = m.m00(); val m10 = m.m10(); val m30 = m.m30()
         val m01 = m.m01(); val m11 = m.m11(); val m31 = m.m31()
 
         if (m01 == 0f && m10 == 0f) {
-            state.submitQuad(
+            active.submitQuad(
                 layer = layer,
                 phase = phase,
                 textureId = textureId,
@@ -177,7 +191,7 @@ object UI {
             return
         }
 
-        state.submitCorners(
+        active.submitCorners(
             layer = layer,
             phase = phase,
             textureId = textureId,
@@ -291,11 +305,11 @@ object UI {
     }
 
     fun pinMaterial(target: GuiMaterial) {
-        pinnedMaterial = target
+        frame.pinnedMaterial = target
     }
 
     fun releaseMaterial() {
-        pinnedMaterial = null
+        frame.pinnedMaterial = null
     }
 
     var group: Int
@@ -307,4 +321,6 @@ object UI {
     const val OPAQUE_WHITE = -1
 
     const val VANILLA_SHEET = 256f
+
+    private const val PAYLOADS = 2
 }

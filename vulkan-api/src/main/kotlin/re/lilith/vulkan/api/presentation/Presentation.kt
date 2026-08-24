@@ -206,5 +206,3 @@ fun Queue.present(
 }
 
 fun Swapchain.renderArea(): Rect2D = Rect2D(Offset2D(), extent)
-
-

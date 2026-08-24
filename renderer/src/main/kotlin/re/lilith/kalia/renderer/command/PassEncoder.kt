@@ -59,7 +59,6 @@ interface PassEncoder {
      */
     fun bindTexture(binding: Int, texture: GpuTexture, sampler: GpuSampler)
 
-
     /**
      * Binds a uniform buffer range to a shader binding slot.
      *
@@ -193,6 +192,10 @@ interface PassEncoder {
      * @param width Line width in pixels.
      */
     fun lineWidth(width: Float)
+
+    fun beginOcclusionQuery(index: Int) {}
+
+    fun endOcclusionQuery(index: Int) {}
 
     /**
      * Clears one or more attachments within the current render target.

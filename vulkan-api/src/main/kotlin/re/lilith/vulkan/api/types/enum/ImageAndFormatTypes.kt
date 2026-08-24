@@ -61,5 +61,3 @@ enum class ImageLayout(internal val vkValue: Int) {
     Preinitialized(VulkanConstants.ImageLayouts.preinitialized),
     PresentSource(VulkanConstants.ImageLayouts.presentSource),
 }
-
-

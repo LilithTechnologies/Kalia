@@ -44,8 +44,6 @@ object KaliaDraw {
         record(format, glMode, vertexCount, slice.buffer, slice.offsetBytes)
     }
 
-    private class BoundTexture(val texture: GpuTexture, val sampler: GpuSampler)
-
     fun drawResident(
         buffer: GpuBuffer,
         format: TranslatedVertexFormat,
@@ -59,7 +57,7 @@ object KaliaDraw {
             return
         }
         EntityBatchers.flush()
-        record(format, glMode, vertexCount, buffer, offsetBytes, boundTexture(texture, sampler))
+        record(format, glMode, vertexCount, buffer, offsetBytes, texture, sampler)
     }
 
     fun drawStaged(
@@ -79,14 +77,7 @@ object KaliaDraw {
         EntityBatchers.flush()
         val byteCount = vertexCount * format.format.stride
         val slice = resources.vertexArena.append(source, byteCount)
-        record(format, glMode, vertexCount, slice.buffer, slice.offsetBytes, boundTexture(texture, sampler))
-    }
-
-    private fun boundTexture(texture: GpuTexture?, sampler: GpuSampler?): BoundTexture? {
-        if (texture == null || sampler == null) {
-            return null
-        }
-        return BoundTexture(texture, sampler)
+        record(format, glMode, vertexCount, slice.buffer, slice.offsetBytes, texture, sampler)
     }
 
     fun drawResident(
@@ -114,7 +105,8 @@ object KaliaDraw {
         vertexCount: Int,
         vertexBuffer: GpuBuffer,
         vertexOffset: Long,
-        textureOverride: BoundTexture? = null,
+        textureOverride: GpuTexture? = null,
+        samplerOverride: GpuSampler? = null,
     ) {
         val encoder = GameFrame.current ?: return
         val resources = FrameResources.of(encoder.device)
@@ -139,8 +131,8 @@ object KaliaDraw {
         if (format.hasTexture || texGen) {
             encoder.bindTexture(
                 binding = ShaderPrelude.Bindings.BASE_TEXTURE,
-                texture = textureOverride?.texture ?: textureForUnit(0, resources),
-                sampler = textureOverride?.sampler ?: samplerForUnit(0, resources),
+                texture = textureOverride ?: textureForUnit(0, resources),
+                sampler = samplerOverride ?: samplerForUnit(0, resources),
             )
         }
         encoder.bindTexture(

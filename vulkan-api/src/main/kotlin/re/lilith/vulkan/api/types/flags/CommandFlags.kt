@@ -25,5 +25,3 @@ value class CommandBufferUsage internal constructor(internal val vkBits: Int) {
         val SimultaneousUse = CommandBufferUsage(VulkanConstants.CommandBufferUsages.simultaneousUse)
     }
 }
-
-

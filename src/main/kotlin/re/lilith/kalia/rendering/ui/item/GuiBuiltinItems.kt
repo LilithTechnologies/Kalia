@@ -1,5 +1,12 @@
 package re.lilith.kalia.rendering.ui.item
 
+import re.lilith.kalia.rendering.world.RecordingPassContext
+import re.lilith.kalia.renderer.pipeline.AttachmentLayout
+import re.lilith.kalia.renderer.geometry.Extent
+import re.lilith.kalia.renderer.device.RenderDevice
+import re.lilith.kalia.renderer.command.list.CommandStream
+import re.lilith.kalia.renderer.command.list.CommandListReplayer
+import re.lilith.kalia.renderer.command.list.CommandListRecorder
 import net.minecraft.client.MinecraftClient
 import net.minecraft.client.render.DiffuseLighting
 import net.minecraft.client.render.block.entity.BlockEntityItemStackRenderHelper
@@ -59,20 +66,36 @@ object GuiBuiltinItems {
 
     internal fun borrow() = pool.removeLastOrNull() ?: Entry()
 
-    fun render(pass: PassContext, atlas: GuiItemAtlas) {
+    private var stream: CommandStream? = null
+    private var recorded = false
+
+    fun record(device: RenderDevice, atlas: GuiItemAtlas) {
+        recorded = false
         if (pending.isEmpty()) {
             return
         }
+        val target = stream ?: CommandStream().also { stream = it }
+        target.reset()
 
-        GameFrame.record(pass) {
+        val recorder = CommandListRecorder(
+            extent = Extent(atlas.size, atlas.size),
+            attachments = AttachmentLayout.of(
+                colorFormats = listOf(atlas.texture.format),
+                depthFormat = atlas.depth.format,
+            ),
+            stream = target,
+        )
+        val context = RecordingPassContext(recorder, device)
+
+        GameFrame.record(context) {
             isReplaying = true
             try {
                 GuiBatcher.discard()
                 for (entry in pending) {
                     val area = atlas.slotRect(entry.slot)
-                    pass.viewport(Viewport(area.x, area.y, area.width, area.height))
-                    pass.scissor(area)
-                    pass.clearAttachments(color = Color.TRANSPARENT, depth = 1f, area = area)
+                    context.viewport(Viewport(area.x, area.y, area.width, area.height))
+                    context.scissor(area)
+                    context.clearAttachments(color = Color.TRANSPARENT, depth = 1f, area = area)
 
                     replay(entry)
 
@@ -84,8 +107,20 @@ object GuiBuiltinItems {
                 }
             } finally {
                 isReplaying = false
-                pass.scissor(null)
+                context.scissor(null)
             }
+        }
+        recorded = target.commandCount > 0
+    }
+
+    fun render(pass: PassContext, atlas: GuiItemAtlas) {
+        val target = stream ?: return
+        if (!recorded) {
+            return
+        }
+        runCatching { CommandListReplayer.replay(target, pass) }.onFailure { failure ->
+            recorded = false
+            KaliaMod.LOGGER.error("A recorded builtin item pass could not be replayed.", failure)
         }
     }
 

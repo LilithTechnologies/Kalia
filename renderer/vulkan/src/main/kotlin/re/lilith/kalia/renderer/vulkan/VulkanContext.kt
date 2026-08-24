@@ -9,6 +9,7 @@ import re.lilith.vulkan.api.command.CommandPool
 import re.lilith.vulkan.api.core.Version
 import re.lilith.vulkan.api.descriptor.PUSH_DESCRIPTOR_EXTENSION_NAME
 import re.lilith.vulkan.api.device.*
+import re.lilith.vulkan.api.instance.InstanceConfigBuilder
 import re.lilith.vulkan.api.instance.VulkanInstance
 import re.lilith.vulkan.api.memory.MemoryAllocator
 import re.lilith.vulkan.api.pipeline.PipelineCache
@@ -99,6 +100,12 @@ internal class VulkanContext private constructor(
         dedicatedTransferQueue = transferQueue != null,
         asyncCompute = computeQueue != null,
         subTexelPrecisionBits = physicalDevice.properties.subTexelPrecisionBits,
+        supportsBindlessTextures = device.config.features.descriptorIndexing &&
+                device.config.features.descriptorBindingPartiallyBound &&
+                device.config.features.descriptorBindingVariableDescriptorCount &&
+                device.config.features.shaderSampledImageArrayNonUniformIndexing &&
+                device.config.features.runtimeDescriptorArray,
+        validation = InstanceConfigBuilder.VALIDATION_LAYER_NAME in instance.enabledLayers,
     )
 
     private fun getVendorName(vendorId: Int): String {
@@ -258,7 +265,19 @@ internal class VulkanContext private constructor(
                     if (physicalDevice.features.multiDraw) {
                         enableExtension(EXTMultiDraw.VK_EXT_MULTI_DRAW_EXTENSION_NAME)
                     }
+                    val bindless = physicalDevice.features.descriptorIndexing &&
+                            physicalDevice.features.descriptorBindingPartiallyBound &&
+                            physicalDevice.features.descriptorBindingVariableDescriptorCount &&
+                            physicalDevice.features.descriptorBindingUpdateUnusedWhilePending &&
+                            physicalDevice.features.shaderSampledImageArrayNonUniformIndexing &&
+                            physicalDevice.features.runtimeDescriptorArray
                     features = DeviceFeatureSet(
+                        descriptorIndexing = bindless,
+                        descriptorBindingPartiallyBound = bindless,
+                        descriptorBindingVariableDescriptorCount = bindless,
+                        descriptorBindingUpdateUnusedWhilePending = bindless,
+                        shaderSampledImageArrayNonUniformIndexing = bindless,
+                        runtimeDescriptorArray = bindless,
                         samplerAnisotropy = physicalDevice.features.samplerAnisotropy,
                         fillModeNonSolid = physicalDevice.features.fillModeNonSolid,
                         wideLines = physicalDevice.features.wideLines,

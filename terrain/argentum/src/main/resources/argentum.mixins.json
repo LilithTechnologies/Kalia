@@ -13,6 +13,7 @@
     "core.render.MixinGameRenderer",
     "core.render.MixinGlStateManager",
     "core.render.MixinWorldRenderer",
+    "core.world.MixinEntity",
     "core.world.MixinServerChunkProvider",
     "core.world.MixinWorld",
     "features.terrain.MixinChunkRenderList",

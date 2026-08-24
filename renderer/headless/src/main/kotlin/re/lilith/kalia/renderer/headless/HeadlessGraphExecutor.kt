@@ -120,7 +120,6 @@ internal class HeadlessGraphExecutor(
         }
     }
 
-
     private fun executePasses(graph: RenderGraph) {
         for (pass in graph.livePasses) {
             val context = HeadlessPassContext(
@@ -154,7 +153,7 @@ internal class HeadlessGraphExecutor(
                 graph.texture(it.target).format
             }
 
-        return AttachmentLayout(
+        return AttachmentLayout.of(
             colorFormats = colorFormats,
             depthFormat = depthFormat,
         )

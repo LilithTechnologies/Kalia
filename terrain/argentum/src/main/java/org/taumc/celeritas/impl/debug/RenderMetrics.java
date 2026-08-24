@@ -72,6 +72,18 @@ public final class RenderMetrics {
         culledEntities++;
     }
 
+    public static long getRenderedEntities() {
+        return renderedEntities;
+    }
+
+    public static long getCulledEntities() {
+        return culledEntities;
+    }
+
+    public static int getSampledFrames() {
+        return sampledFrames;
+    }
+
     public static void recordRenderedBlockEntity() {
         renderedBlockEntities++;
     }

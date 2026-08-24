@@ -48,5 +48,3 @@ internal object LogicalDeviceSynchronization {
         registrar.register(TimelineSemaphore(device, pointer[0]))
     }
 }
-
-

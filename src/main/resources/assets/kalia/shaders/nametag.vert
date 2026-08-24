@@ -7,11 +7,17 @@ layout(location = 4) in vec4 instQuad;
 layout(location = 5) in vec4 instUv;
 layout(location = 6) in vec4 instColor;
 layout(location = 7) in float instAlphaCutout;
+#ifdef BINDLESS
+layout(location = 8) in uint instTexture;
+#endif
 
 layout(location = 0) out vec4 vColor;
 layout(location = 1) out vec2 vUv;
 layout(location = 2) out float vViewDistance;
 layout(location = 3) out float vAlphaCutout;
+#ifdef BINDLESS
+layout(location = 4) flat out uint vTexture;
+#endif
 
 #include "kalia:prelude.glsl"
 
@@ -25,4 +31,7 @@ void main() {
     vUv = mix(instUv.xy, instUv.zw, aPosition);
     vColor = instColor;
     vAlphaCutout = instAlphaCutout;
+#ifdef BINDLESS
+    vTexture = instTexture;
+#endif
 }

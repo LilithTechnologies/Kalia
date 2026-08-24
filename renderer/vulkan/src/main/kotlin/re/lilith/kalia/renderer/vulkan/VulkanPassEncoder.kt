@@ -44,25 +44,22 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import re.lilith.vulkan.api.types.geometry.Viewport as VkViewport
 
-internal class VulkanPassEncoder(
-    private val backend: VulkanRenderDevice,
-    private val recorder: CommandRecorder,
-    private val frame: VulkanFrameSlot,
-    private val defaultColor: List<VulkanTexture>,
-    private val defaultDepth: VulkanTexture?,
-    private val defaultRendering: RenderingInfo,
-    private val defaultLayout: AttachmentLayout,
-    private val resolvable: Map<Int, VulkanTexture>,
-) : PassContext {
+internal class VulkanPassEncoder(private val backend: VulkanRenderDevice) : PassContext {
+
+    private lateinit var recorder: CommandRecorder
+    private lateinit var frame: VulkanFrameSlot
+    private var defaultColor: List<VulkanTexture> = emptyList()
+    private var defaultDepth: VulkanTexture? = null
+    private lateinit var defaultRendering: RenderingInfo
+    private var defaultLayout: AttachmentLayout = EMPTY_LAYOUT
+    private var resolvable: Map<Int, VulkanTexture> = emptyMap()
 
     override val device: RenderDevice get() = backend
 
-    override var extent: Extent = defaultColor.firstOrNull()?.extent
-        ?: defaultDepth?.extent
-        ?: Extent(1, 1)
+    override var extent: Extent = FALLBACK_EXTENT
         private set
 
-    override var attachments: AttachmentLayout = defaultLayout
+    override var attachments: AttachmentLayout = EMPTY_LAYOUT
         private set
 
     private var pipeline: VulkanPipeline? = null
@@ -70,6 +67,7 @@ internal class VulkanPassEncoder(
     private val boundSamplers = arrayOfNulls<VulkanSampler>(MAX_BINDINGS)
     private val boundBuffers = Array(MAX_BINDINGS) { BufferBinding() }
     private var bindingsDirty = false
+    private var dynamicOffsetsDirty = false
     private var rendering = false
 
     private var boundDescriptorSet: DescriptorSet? = null
@@ -87,24 +85,68 @@ internal class VulkanPassEncoder(
     private var depthBiasConstant = Float.NaN
     private var depthBiasSlope = Float.NaN
     private var boundLineWidth = Float.NaN
+
+    private var viewportX = Float.NaN
+    private var viewportY = Float.NaN
+    private var viewportWidth = Float.NaN
+    private var viewportHeight = Float.NaN
+    private var viewportMinDepth = Float.NaN
+    private var viewportMaxDepth = Float.NaN
+
+    private var scissorX = Int.MIN_VALUE
+    private var scissorY = Int.MIN_VALUE
+    private var scissorWidth = Int.MIN_VALUE
+    private var scissorHeight = Int.MIN_VALUE
     private var pushedLayout: Any? = null
     private var pushedBytes = -1
     private val pushedData = backend.pushConstantScratch
-    private val dynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
-    private val boundDynamicOffsets = ArrayList<Int>(MAX_BINDINGS)
+    private val dynamicOffsets = IntArray(MAX_BINDINGS)
+    private var dynamicOffsetCount = 0
+    private val boundDynamicOffsets = IntArray(MAX_BINDINGS)
+    private var boundDynamicOffsetCount = 0
     private val dynamicOffsetBySlot = IntArray(MAX_BINDINGS)
     private var dynamicSlotMask = 0
 
-
     // What is actually attached right now, which [retarget] moves away from the pass defaults
-    internal var colorTargets: List<VulkanTexture> = defaultColor
+    internal var colorTargets: List<VulkanTexture> = emptyList()
         private set
 
-    internal var depthTarget: VulkanTexture? = defaultDepth
+    internal var depthTarget: VulkanTexture? = null
         private set
 
     // The command buffer this pass records into, for renderers that record their own commands
     internal val commandBuffer get() = recorder.commandBuffer.handle
+
+    fun begin(
+        recorder: CommandRecorder,
+        frame: VulkanFrameSlot,
+        defaultColor: List<VulkanTexture>,
+        defaultDepth: VulkanTexture?,
+        defaultRendering: RenderingInfo,
+        defaultLayout: AttachmentLayout,
+        resolvable: Map<Int, VulkanTexture>,
+    ) {
+        this.recorder = recorder
+        this.frame = frame
+        this.defaultColor = defaultColor
+        this.defaultDepth = defaultDepth
+        this.defaultRendering = defaultRendering
+        this.defaultLayout = defaultLayout
+        this.resolvable = resolvable
+
+        extent = defaultColor.firstOrNull()?.extent ?: defaultDepth?.extent ?: FALLBACK_EXTENT
+        attachments = defaultLayout
+        colorTargets = defaultColor
+        depthTarget = defaultDepth
+        rendering = false
+
+        boundTextures.fill(null)
+        boundSamplers.fill(null)
+        for (slot in boundBuffers) {
+            slot.reset()
+        }
+        invalidateBoundState()
+    }
 
     fun open() {
         check(!rendering) { "Rendering is already open!" }
@@ -137,6 +179,16 @@ internal class VulkanPassEncoder(
 
     override fun retarget(color: GpuTexture?, depth: GpuTexture?) {
         close()
+        viewportX = Float.NaN
+        viewportY = Float.NaN
+        viewportWidth = Float.NaN
+        viewportHeight = Float.NaN
+        viewportMinDepth = Float.NaN
+        viewportMaxDepth = Float.NaN
+        scissorX = Int.MIN_VALUE
+        scissorY = Int.MIN_VALUE
+        scissorWidth = Int.MIN_VALUE
+        scissorHeight = Int.MIN_VALUE
         if (color == null) {
             beginLoading(defaultColor, defaultDepth)
             return
@@ -177,7 +229,7 @@ internal class VulkanPassEncoder(
         colorTargets = color
         depthTarget = depth
         extent = area
-        attachments = AttachmentLayout(color.map(VulkanTexture::format), depth?.format)
+        attachments = AttachmentLayout.of(color.map(VulkanTexture::format), depth?.format)
         invalidateBoundState()
         rendering = true
     }
@@ -197,8 +249,9 @@ internal class VulkanPassEncoder(
     private fun invalidateBoundState() {
         pipeline = null
         bindingsDirty = true
+        dynamicOffsetsDirty = false
         boundDescriptorSet = null
-        boundDynamicOffsets.clear()
+        boundDynamicOffsetCount = 0
         boundVertexBuffers.fill(null)
         boundIndexBuffer = null
         boundIndexType = null
@@ -207,15 +260,40 @@ internal class VulkanPassEncoder(
         depthBiasConstant = Float.NaN
         depthBiasSlope = Float.NaN
         boundLineWidth = Float.NaN
+        viewportX = Float.NaN
+        viewportY = Float.NaN
+        viewportWidth = Float.NaN
+        viewportHeight = Float.NaN
+        viewportMinDepth = Float.NaN
+        viewportMaxDepth = Float.NaN
+        scissorX = Int.MIN_VALUE
+        scissorY = Int.MIN_VALUE
+        scissorWidth = Int.MIN_VALUE
+        scissorHeight = Int.MIN_VALUE
     }
 
     override fun viewport(viewport: Viewport) {
+        val x = viewport.x.toFloat()
+        val y = (viewport.y + viewport.height).toFloat()
+        val width = viewport.width.toFloat()
+        val height = -viewport.height.toFloat()
+        if (x == viewportX && y == viewportY && width == viewportWidth && height == viewportHeight &&
+            viewport.minDepth == viewportMinDepth && viewport.maxDepth == viewportMaxDepth
+        ) {
+            return
+        }
+        viewportX = x
+        viewportY = y
+        viewportWidth = width
+        viewportHeight = height
+        viewportMinDepth = viewport.minDepth
+        viewportMaxDepth = viewport.maxDepth
         recorder.setViewport(
             VkViewport(
-                x = viewport.x.toFloat(),
-                y = (viewport.y + viewport.height).toFloat(),
-                width = viewport.width.toFloat(),
-                height = -viewport.height.toFloat(),
+                x = x,
+                y = y,
+                width = width,
+                height = height,
                 minDepth = viewport.minDepth,
                 maxDepth = viewport.maxDepth,
             ),
@@ -224,10 +302,21 @@ internal class VulkanPassEncoder(
 
     override fun scissor(rect: Rect?) {
         val target = rect ?: Rect.of(extent)
+        val x = target.x.coerceAtLeast(0)
+        val y = target.y.coerceAtLeast(0)
+        val width = target.width.coerceAtLeast(0)
+        val height = target.height.coerceAtLeast(0)
+        if (x == scissorX && y == scissorY && width == scissorWidth && height == scissorHeight) {
+            return
+        }
+        scissorX = x
+        scissorY = y
+        scissorWidth = width
+        scissorHeight = height
         recorder.setScissor(
             Rect2D(
-                offset = Offset2D(target.x.coerceAtLeast(0), target.y.coerceAtLeast(0)),
-                extent = Extent2D(target.width.coerceAtLeast(0), target.height.coerceAtLeast(0)),
+                offset = Offset2D(x, y),
+                extent = Extent2D(width, height),
             ),
         )
     }
@@ -244,11 +333,21 @@ internal class VulkanPassEncoder(
         this.pipeline = vulkanPipeline
         recorder.bindGraphicsPipeline(vulkanPipeline.pipeline)
         RenderStats.recordPipelineBind()
+        bindGlobalTextures(vulkanPipeline)
 
         // A new layout invalidates whatever set was bound, even if the contents are the same.
         bindingsDirty = true
+        dynamicOffsetsDirty = false
         boundDescriptorSet = null
-        boundDynamicOffsets.clear()
+        boundDynamicOffsetCount = 0
+    }
+
+    override fun beginOcclusionQuery(index: Int) {
+        backend.occlusionQueries.begin(recorder, index)
+    }
+
+    override fun endOcclusionQuery(index: Int) {
+        backend.occlusionQueries.end(recorder, index)
     }
 
     override fun bindTexture(binding: Int, texture: GpuTexture, sampler: GpuSampler) {
@@ -272,13 +371,24 @@ internal class VulkanPassEncoder(
         require(binding in 0 until MAX_BINDINGS) { "Buffer binding $binding is out of range." }
         val vulkanBuffer = buffer as VulkanBuffer
         val slot = boundBuffers[binding]
-        if (slot.buffer !== vulkanBuffer || slot.offset != offset || slot.size != size || slot.kind != kind) {
-            slot.buffer = vulkanBuffer
+        if (slot.buffer === vulkanBuffer && slot.size == size && slot.kind == kind) {
+            if (slot.offset == offset) {
+                return
+            }
             slot.offset = offset
-            slot.size = size
-            slot.kind = kind
-            bindingsDirty = true
+            if (kind == BindingKind.UNIFORM_BUFFER_DYNAMIC) {
+                dynamicOffsetBySlot[binding] = offset.toInt()
+                dynamicOffsetsDirty = true
+            } else {
+                bindingsDirty = true
+            }
+            return
         }
+        slot.buffer = vulkanBuffer
+        slot.offset = offset
+        slot.size = size
+        slot.kind = kind
+        bindingsDirty = true
     }
 
     override fun pushConstants(data: ByteBuffer) {
@@ -293,7 +403,9 @@ internal class VulkanPassEncoder(
         recorder.pushConstants(active.layout, ShaderStageFlags.AllGraphics, 0, data)
         if (size <= pushedData.capacity()) {
             pushedData.clear()
-            pushedData.put(data.duplicate())
+            val position = data.position()
+            pushedData.put(data)
+            data.position(position)
             pushedLayout = active.layout
             pushedBytes = size
         } else {
@@ -545,10 +657,27 @@ internal class VulkanPassEncoder(
                 "Handle ${handle.id} is not available in this pass. Declare it or use it as an attachment first.",
             )
 
+    private fun bindGlobalTextures(active: VulkanPipeline) {
+        val bindless = backend.bindlessTextures ?: return
+        if (active.layout.config.descriptorSetLayouts.size <= BINDLESS_SET) {
+            return
+        }
+        recorder.bindDescriptorSets(
+            pipelineLayout = active.layout,
+            descriptorSets = bindlessSets,
+            firstSet = BINDLESS_SET,
+        )
+    }
+
+    private val bindlessSets = backend.bindlessTextures?.let { listOf(it.set) } ?: emptyList()
+
     private fun flushBindings() {
         val active = requirePipeline()
         val layout = active.descriptorSetLayout ?: return
         if (!bindingsDirty) {
+            if (dynamicOffsetsDirty) {
+                rebindDynamicOffsets(active)
+            }
             return
         }
 
@@ -580,20 +709,20 @@ internal class VulkanPassEncoder(
 
         // Vulkan consumes dynamic offsets in ascending binding order, which is not necessarily the
         // order the program happens to declare them in
-        dynamicOffsets.clear()
+        dynamicOffsetCount = 0
         if (dynamicSlotMask != 0) {
             for (slot in 0 until MAX_BINDINGS) {
                 if (dynamicSlotMask and (1 shl slot) != 0) {
-                    dynamicOffsets += dynamicOffsetBySlot[slot]
+                    dynamicOffsets[dynamicOffsetCount++] = dynamicOffsetBySlot[slot]
                 }
             }
         }
 
         val set = frame.descriptorSet(bindingProbe, layout) { target -> writeDescriptors(active, target) }
-        if (set !== boundDescriptorSet || dynamicOffsets != boundDynamicOffsets) {
+        if (set !== boundDescriptorSet || dynamicOffsetsChanged()) {
 
             MemoryAccess.putLong(setHandleScratch, RawHandles.descriptorSet(set))
-            val offsetCount = dynamicOffsets.size
+            val offsetCount = dynamicOffsetCount
             for (index in 0 until offsetCount) {
                 MemoryAccess.putInt(dynamicOffsetScratch + index * Int.SIZE_BYTES, dynamicOffsets[index])
             }
@@ -609,10 +738,60 @@ internal class VulkanPassEncoder(
             )
             RenderStats.recordDescriptorBind()
             boundDescriptorSet = set
-            boundDynamicOffsets.clear()
-            boundDynamicOffsets.addAll(dynamicOffsets)
+            System.arraycopy(dynamicOffsets, 0, boundDynamicOffsets, 0, offsetCount)
+            boundDynamicOffsetCount = offsetCount
         }
         bindingsDirty = false
+        dynamicOffsetsDirty = false
+    }
+
+    private fun rebindDynamicOffsets(active: VulkanPipeline) {
+        val set = boundDescriptorSet ?: run {
+            bindingsDirty = true
+            return
+        }
+        dynamicOffsetCount = 0
+        if (dynamicSlotMask != 0) {
+            for (slot in 0 until MAX_BINDINGS) {
+                if (dynamicSlotMask and (1 shl slot) != 0) {
+                    dynamicOffsets[dynamicOffsetCount++] = dynamicOffsetBySlot[slot]
+                }
+            }
+        }
+        dynamicOffsetsDirty = false
+        if (!dynamicOffsetsChanged()) {
+            return
+        }
+        MemoryAccess.putLong(setHandleScratch, RawHandles.descriptorSet(set))
+        val offsetCount = dynamicOffsetCount
+        for (index in 0 until offsetCount) {
+            MemoryAccess.putInt(dynamicOffsetScratch + index * Int.SIZE_BYTES, dynamicOffsets[index])
+        }
+        VK10.nvkCmdBindDescriptorSets(
+            recorder.commandBuffer.handle,
+            VK10.VK_PIPELINE_BIND_POINT_GRAPHICS,
+            RawHandles.pipelineLayout(active.layout),
+            0,
+            1,
+            setHandleScratch,
+            offsetCount,
+            if (offsetCount == 0) MemoryUtil.NULL else dynamicOffsetScratch,
+        )
+        RenderStats.recordDescriptorBind()
+        System.arraycopy(dynamicOffsets, 0, boundDynamicOffsets, 0, offsetCount)
+        boundDynamicOffsetCount = offsetCount
+    }
+
+    private fun dynamicOffsetsChanged(): Boolean {
+        if (dynamicOffsetCount != boundDynamicOffsetCount) {
+            return true
+        }
+        for (index in 0 until dynamicOffsetCount) {
+            if (dynamicOffsets[index] != boundDynamicOffsets[index]) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun writeDescriptors(active: VulkanPipeline, set: DescriptorSet) {
@@ -668,15 +847,26 @@ internal class VulkanPassEncoder(
         var offset: Long = 0L
         var size: Long = 0L
         var kind: BindingKind? = null
+
+        fun reset() {
+            buffer = null
+            offset = 0L
+            size = 0L
+            kind = null
+        }
     }
 
     private companion object {
         const val MAX_BINDINGS = 16
+        const val BINDLESS_SET = 1
         const val MAX_VERTEX_SLOTS = 8
         const val MAX_PUSH_CONSTANT_BYTES = 256
 
         // VkDrawIndexedIndirectCommand
         const val INDIRECT_STRIDE = 20
         const val INITIAL_INDIRECT_CAPACITY = 1L shl 20
+
+        val FALLBACK_EXTENT = Extent(1, 1)
+        val EMPTY_LAYOUT: AttachmentLayout = AttachmentLayout.of(emptyList())
     }
 }

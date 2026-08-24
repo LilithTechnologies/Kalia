@@ -1,3 +1,7 @@
+#ifdef BINDLESS
+#extension GL_EXT_nonuniform_qualifier : require
+#endif
+
 layout(location = 0) in vec4 vColor;
 layout(location = 1) in vec2 vUv0;
 layout(location = 2) in vec3 vNormal;
@@ -7,7 +11,11 @@ layout(location = 5) in vec4 vMisc;
 layout(location = 6) in vec2 vLightUv;
 layout(location = 0) out vec4 fragColor;
 
-#ifdef TEXTURE_ARRAY
+layout(location = 8) in float vAlphaCutout;
+#ifdef BINDLESS
+layout(location = 7) flat in uint vTexture;
+layout(set = 1, binding = 0) uniform sampler2D kaliaTextures[];
+#elif defined(TEXTURE_ARRAY)
 layout(binding = 0) uniform sampler2DArray kaliaBaseTexture;
 #else
 layout(binding = 0) uniform sampler2D kaliaBaseTexture;
@@ -17,7 +25,9 @@ layout(binding = 2) uniform sampler2D kaliaLightmapTexture;
 #include "kalia:prelude.glsl"
 
 void main() {
-#ifdef TEXTURE_ARRAY
+#ifdef BINDLESS
+    vec4 color = vColor * texture(kaliaTextures[nonuniformEXT(vTexture)], vUv0);
+#elif defined(TEXTURE_ARRAY)
     vec4 color = vColor * texture(kaliaBaseTexture, vec3(vUv0, vMisc.w));
 #else
     vec4 color = vColor * texture(kaliaBaseTexture, vUv0);
@@ -29,7 +39,7 @@ void main() {
     if (vMisc.x > 0.5) {
         color.rgb *= texture(kaliaLightmapTexture, vLightUv).rgb;
     }
-    if (color.a <= KALIA_ALPHA_CUTOUT) {
+    if (color.a <= vAlphaCutout) {
         discard;
     }
     color.rgb = kaliaApplyFog(color.rgb, vViewDistance);

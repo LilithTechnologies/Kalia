@@ -80,6 +80,18 @@ internal class VulkanRenderDevice(
     private var computeValue = 0L
     private var submittedComputeValue = 0L
     private val computePipelines = ConcurrentHashMap<ComputePipelineDescription, VulkanComputePipeline>()
+    internal val pushConstantScratch: ByteBuffer = ByteBuffer
+        .allocateDirect(MAX_PUSH_CONSTANT_BYTES)
+        .order(ByteOrder.nativeOrder())
+
+    internal val descriptorBindScratch = MemoryUtil.nmemAllocChecked(Long.SIZE_BYTES.toLong())
+    internal val dynamicOffsetScratch = MemoryUtil.nmemAllocChecked((MAX_DYNAMIC_OFFSETS * Int.SIZE_BYTES).toLong())
+
+    internal val occlusionQueries = VulkanOcclusionQueries(context, slots = FRAMES_IN_FLIGHT)
+
+    internal val bindlessTextures: VulkanBindlessTextures? =
+        if (context.capabilities.supportsBindlessTextures) VulkanBindlessTextures(context) else null
+
     private val transientTextures = TransientTexturePool(this)
     private val executor = VulkanGraphExecutor(this, transientTextures)
 
@@ -107,14 +119,10 @@ internal class VulkanRenderDevice(
 
     private var resourceEpoch = 0
 
-    internal val pushConstantScratch: ByteBuffer = ByteBuffer
-        .allocateDirect(MAX_PUSH_CONSTANT_BYTES)
-        .order(ByteOrder.nativeOrder())
-
-    internal val descriptorBindScratch = MemoryUtil.nmemAllocChecked(Long.SIZE_BYTES.toLong())
-    internal val dynamicOffsetScratch = MemoryUtil.nmemAllocChecked((MAX_DYNAMIC_OFFSETS * Int.SIZE_BYTES).toLong())
-
     private var builtForExtent: Extent = platformSurface.framebufferExtent
+
+    @Volatile
+    private var surfaceExtentSnapshot: Extent = platformSurface.framebufferExtent
 
     override val capabilities: DeviceCapabilities =
         context.capabilities.copy(framesInFlight = FRAMES_IN_FLIGHT, supportsCompute = true)
@@ -334,7 +342,7 @@ internal class VulkanRenderDevice(
 
         val layout = context.device.createPipelineLayout(
             PipelineLayoutConfig(
-                descriptorSetLayouts = listOfNotNull(setLayout),
+                descriptorSetLayouts = listOfNotNull(setLayout, setLayout?.let { bindlessTextures?.layout }),
                 pushConstantRanges = if (program.pushConstantBytes > 0) {
                     listOf(PushConstantRange(0, program.pushConstantBytes, ShaderStageFlags.AllGraphics))
                 } else {
@@ -456,10 +464,16 @@ internal class VulkanRenderDevice(
     override val frameSlot: Int get() = frameIndex
 
     private var framePrepared = false
+    private var advancePending = false
 
     override fun beginFrame() {
         if (framePrepared) {
             return
+        }
+        surfaceExtentSnapshot = platformSurface.framebufferExtent
+        if (advancePending) {
+            advancePending = false
+            frameIndex = (frameIndex + 1) % frames.size
         }
         val frame = frames[frameIndex]
         frame.inFlightFence.wait()
@@ -469,33 +483,107 @@ internal class VulkanRenderDevice(
     }
 
     override fun render(graph: RenderGraph): Boolean {
-        val target = platformSurface.framebufferExtent
+        beginFrame()
+        if (!acquireFrame()) {
+            return false
+        }
+        val completed = encode(graph, frameIndex)
+        if (completed) {
+            presentFrame()
+            advancePending = true
+            framePrepared = false
+        }
+        return completed
+    }
+
+    override fun render(graph: RenderGraph, slot: Int): Boolean = encode(graph, slot)
+
+    override fun acquireFrame(): Boolean {
+        val target = surfaceExtentSnapshot
         val requested = pendingResize ?: target.takeIf { it != builtForExtent }
         if (requested != null) {
             pendingResize = requested.takeIf { !rebuildSwapchain(it) }
-            if (pendingResize != null) {
-                return false
-            }
+            return false
         }
 
-        beginFrame()
         val frame = frames[frameIndex]
-        insideFrame = true
+        val acquireStarted = System.nanoTime()
+        val acquiredImage = swapchain.acquire(frame.imageAvailable)
+        RenderStats.recordGpuWait(System.nanoTime() - acquireStarted)
 
-        submittedTransferValue = 0L
-        submittedComputeValue = 0L
-        flushUploads()
-
-        acquiredOrNull = swapchain.acquire(frame.imageAvailable) ?: run {
-            insideFrame = false
+        acquiredOrNull = acquiredImage
+        if (acquiredImage == null) {
             if (!rebuildSwapchain(target)) {
                 pendingResize = target
             }
             return false
         }
+        return true
+    }
+
+    override fun presentFrame() {
+        val acquired = acquiredOrNull ?: return
+        acquiredOrNull = null
+
+        val target = surfaceExtentSnapshot
+        val renderFinished = swapchain.renderFinishedSemaphore(acquired.index)
+
+        val presentStarted = System.nanoTime()
+        val presented = runCatching {
+            context.withQueueLock {
+                context.presentQueue.present(swapchain.swapchain, acquired.index, renderFinished)
+            }
+        }
+        RenderStats.recordGpuWait(System.nanoTime() - presentStarted)
+        presented.exceptionOrNull()?.let { failure ->
+            if (failure is VulkanResultException && failure.isSwapchainStale) {
+                pendingResize = target
+            } else {
+                throw failure
+            }
+        }
+        if (acquired.suboptimal && target != builtForExtent) {
+            pendingResize = target
+        }
+    }
+
+    override val occlusionQueryCapacity: Int get() = occlusionQueries.capacity
+
+    override fun occlusionResult(index: Int): Long = occlusionQueries.resultOf(index)
+
+    override fun prepareOcclusionQueries(count: Int) {
+        occlusionQueries.beginFrame(count)
+    }
+
+    override fun textureIndex(texture: GpuTexture, sampler: GpuSampler): Int {
+        val bindless = bindlessTextures ?: return -1
+        return bindless.indexOf(texture as VulkanTexture, sampler as VulkanSampler)
+    }
+
+    override fun endFrame() {
+        advancePending = true
+        framePrepared = false
+    }
+
+    private fun encode(graph: RenderGraph, slot: Int): Boolean {
+        val frame = frames[slot]
+        insideFrame = true
+
+        val acquired = acquiredOrNull
+        if (acquired == null) {
+            insideFrame = false
+            return false
+        }
+
+        submittedTransferValue = 0L
+        submittedComputeValue = 0L
+        val uploadStarted = System.nanoTime()
+        flushUploads()
+        RenderStats.recordUploadTime(System.nanoTime() - uploadStarted)
 
         frame.commandBuffer.reset()
         val recorder = frame.commandBuffer.begin()
+        occlusionQueries.reset(recorder)
 
         val earlyWaits = buildList {
             val timeline = transferTimeline
@@ -521,6 +609,7 @@ internal class VulkanRenderDevice(
             }
         }
 
+        val graphStarted = System.nanoTime()
         val finalRecorder = executor.execute(
             graph = graph,
             recorder = recorder,
@@ -537,6 +626,8 @@ internal class VulkanRenderDevice(
             finalLayout = if (hook != null) ImageLayout.ColorAttachmentOptimal else ImageLayout.PresentSource,
         )
         val recorded = finalRecorder.end()
+        RenderStats.recordGraph(System.nanoTime() - graphStarted)
+        val submitStarted = System.nanoTime()
 
         flushUploads()
 
@@ -638,26 +729,10 @@ internal class VulkanRenderDevice(
             }
         }
 
-        val presented = runCatching {
-            context.withQueueLock {
-                context.presentQueue.present(swapchain.swapchain, acquired.index, renderFinished)
-            }
-        }
-        presented.exceptionOrNull()?.let { failure ->
-            if (failure is VulkanResultException && failure.isSwapchainStale) {
-                pendingResize = target
-            } else {
-                throw failure
-            }
-        }
-        if (acquired.suboptimal) {
-            pendingResize = target
-        }
+        RenderStats.recordSubmit(System.nanoTime() - submitStarted)
 
         insideFrame = false
-        acquiredOrNull = null
-        frameIndex = (frameIndex + 1) % frames.size
-        framePrepared = false
+        occlusionQueries.submitted()
         return true
     }
 
@@ -751,6 +826,7 @@ internal class VulkanRenderDevice(
         frames.forEach(VulkanFrameSlot::close)
         frames = List(FRAMES_IN_FLIGHT) { VulkanFrameSlot.create(context) }
         frameIndex = 0
+        advancePending = false
         releaseTarget = null
         // The slots are new, so whatever was prepared before belongs to closed objects.
         framePrepared = false
@@ -761,6 +837,8 @@ internal class VulkanRenderDevice(
         context.device.waitIdle()
         VulkanPipelineCacheStore.save(runCatching { context.pipelineCache.data() }.getOrDefault(ByteArray(0)))
         transientTextures.close()
+        bindlessTextures?.close()
+        occlusionQueries.close()
         captureFence?.close()
         captureBuffer?.close()
         swapchain.close()

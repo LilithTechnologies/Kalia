@@ -140,7 +140,6 @@ object GuiItemCapture {
                     GuiItemMeshBuilder.VERTICES_PER_QUAD *
                     GuiItemMeshBuilder.VERTEX_BYTES
 
-
         if (scratch.capacity() < required) {
             var capacity = scratch.capacity()
             while (capacity < required) {

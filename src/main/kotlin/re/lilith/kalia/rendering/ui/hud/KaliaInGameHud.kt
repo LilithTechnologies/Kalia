@@ -88,6 +88,10 @@ object KaliaInGameHud {
         width: Int,
         height: Int,
     ) {
+        if (client.options.debugEnabled) {
+            return
+        }
+
         val scoreboard = client.world?.scoreboard ?: return
 
         var objective = scoreboard.getObjectiveForSlot(SIDEBAR_SLOT)

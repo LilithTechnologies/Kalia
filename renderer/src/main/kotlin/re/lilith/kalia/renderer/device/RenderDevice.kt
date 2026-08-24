@@ -75,7 +75,6 @@ interface RenderDevice : AutoCloseable {
      */
     fun createTexture(description: TextureDescription): GpuTexture
 
-
     /**
      * Creates a GPU sampler.
      *
@@ -152,6 +151,30 @@ interface RenderDevice : AutoCloseable {
      */
     fun render(graph: RenderGraph): Boolean
 
+    fun render(graph: RenderGraph, slot: Int): Boolean = render(graph)
+
+    /**
+     * Acquires the swapchain image that [render] will target for the current [frameSlot],
+     * on whichever thread owns window/surface presentation.
+     *
+     * Must be called, and must complete, before [render] is invoked for that frame slot.
+     *
+     * @return `true` if an image was acquired, `false` if rendering should be skipped
+     * this frame (e.g. the surface is being resized).
+     */
+    fun acquireFrame(): Boolean = true
+
+    /**
+     * Presents the image acquired by [acquireFrame] once [render] has submitted its work.
+     *
+     * This must run on the thread that owns window/surface presentation.
+     */
+    fun presentFrame() {}
+
+    fun endFrame() {}
+
+    fun textureIndex(texture: GpuTexture, sampler: GpuSampler): Int = -1
+
     /**
      * Copies the most recently presented frame back into host memory.
      *
@@ -166,6 +189,22 @@ interface RenderDevice : AutoCloseable {
      * @param extent The new surface dimensions.
      */
     fun resize(extent: Extent)
+
+    /**
+     * Number of occlusion queries the backend can track, or zero when it has none.
+     */
+    val occlusionQueryCapacity: Int get() = 0
+
+    /**
+     * Samples passed for [index] as of the most recent frame whose results were ready, or a
+     * negative value when nothing is known yet.
+     */
+    fun occlusionResult(index: Int): Long = -1L
+
+    /**
+     * Declares how many queries the next frame will issue, so the backend can reset them.
+     */
+    fun prepareOcclusionQueries(count: Int) {}
 
     /**
      * Blocks until all previously submitted GPU work has completed.

@@ -22,6 +22,19 @@ object TerrainSubmitter {
 
     private var frame = 0
 
+    fun prepareState(state: WorldFrameState) {
+        if (!state.active) {
+            return
+        }
+        val client = MinecraftClient.getInstance() ?: return
+
+        bindTerrainTextures(client)
+
+        state.terrainProjection.get(projectionValues)
+        state.view.get(viewValues)
+        PrimitiveChunkMatrixGetter.update(projectionValues, viewValues)
+    }
+
     fun prepare(state: WorldFrameState): Boolean {
         if (!state.active) {
             return false
@@ -31,12 +44,6 @@ object TerrainSubmitter {
         val renderer = CeleritasWorldRenderer.instanceNullable() ?: return false
 
         return runCatching {
-            bindTerrainTextures(client)
-
-            state.terrainProjection.get(projectionValues)
-            state.view.get(viewValues)
-            PrimitiveChunkMatrixGetter.update(projectionValues, viewValues)
-
             renderer.setupTerrain(
                 viewportFor(state),
                 CeleritasWorldRenderer.captureCameraState(state.tickDelta.toDouble()),

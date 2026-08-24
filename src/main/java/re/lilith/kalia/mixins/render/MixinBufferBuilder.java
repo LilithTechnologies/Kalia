@@ -1,6 +1,5 @@
 package re.lilith.kalia.mixins.render;
 
-import com.google.common.primitives.Floats;
 import net.minecraft.client.render.BufferBuilder;
 import net.minecraft.client.render.VertexFormat;
 import net.minecraft.client.render.VertexFormatElement;
@@ -48,8 +47,60 @@ public abstract class MixinBufferBuilder {
     private void grow(int size) {
     }
 
-    @Shadow
+    @Unique
+    private VertexFormat sulfide$layoutFormat;
+    @Unique
+    private int[] sulfide$offsets;
+    @Unique
+    private VertexFormatElement[] sulfide$elements;
+    @Unique
+    private int[] sulfide$nextElement;
+    @Unique
+    private int sulfide$stride;
+
+    @Unique
+    private void sulfide$refreshLayout() {
+        VertexFormat active = format;
+        int count = active.getSize();
+
+        int[] offsets = new int[count];
+        VertexFormatElement[] elements = new VertexFormatElement[count];
+        for (int i = 0; i < count; i++) {
+            offsets[i] = active.getIndex(i);
+            elements[i] = active.get(i);
+        }
+
+        int[] next = new int[count];
+        for (int i = 0; i < count; i++) {
+            int candidate = i;
+            for (int step = 0; step < count; step++) {
+                candidate = (candidate + 1) % count;
+                if (elements[candidate].getType() != VertexFormatElement.Type.PADDING) {
+                    break;
+                }
+            }
+            next[i] = candidate;
+        }
+
+        sulfide$offsets = offsets;
+        sulfide$elements = elements;
+        sulfide$nextElement = next;
+        sulfide$stride = active.getVertexSize();
+        sulfide$layoutFormat = active;
+    }
+
+    /**
+     * @reason Advance through a cached layout instead of re-reading boxed offsets from the format
+     * @author Lunasa
+     */
+    @Overwrite
     private void nextElement() {
+        if (format != sulfide$layoutFormat) {
+            sulfide$refreshLayout();
+        }
+        int next = sulfide$nextElement[currentElementId];
+        currentElementId = next;
+        currentElement = sulfide$elements[next];
     }
 
     @Unique
@@ -69,6 +120,17 @@ public abstract class MixinBufferBuilder {
     private long sulfide$addr;
 
     @Unique
+    private float[] sulfide$distances;
+    @Unique
+    private long[] sulfide$sortKeys;
+    @Unique
+    private int[] sulfide$sortOrder;
+    @Unique
+    private int[] sulfide$quadScratch;
+    @Unique
+    private final BitSet sulfide$sorted = new BitSet();
+
+    @Unique
     private void sulfide$refreshAddr() {
         sulfide$addr = MemoryAccess.getLong(buffer, sulfide$BUF_ADDR_OFF);
     }
@@ -76,6 +138,7 @@ public abstract class MixinBufferBuilder {
     @Inject(method = "begin", at = @At("RETURN"))
     private void sulfide$afterBegin(int drawMode, VertexFormat fmt, CallbackInfo ci) {
         sulfide$refreshAddr();
+        sulfide$refreshLayout();
     }
 
     @Inject(method = "grow", at = @At("RETURN"))
@@ -85,9 +148,12 @@ public abstract class MixinBufferBuilder {
 
     @Unique
     private long sulfide$elementPtr() {
+        if (format != sulfide$layoutFormat) {
+            sulfide$refreshLayout();
+        }
         return sulfide$addr
-                + (long) vertexCount * format.getVertexSize()
-                + format.getIndex(currentElementId);
+                + (long) vertexCount * sulfide$stride
+                + sulfide$offsets[currentElementId];
     }
 
     /**
@@ -398,7 +464,15 @@ public abstract class MixinBufferBuilder {
     @Overwrite
     public void sortQuads(float cameraX, float cameraY, float cameraZ) {
         int quadCount = vertexCount / 4;
-        float[] distances = new float[quadCount];
+        if (quadCount <= 1) {
+            return;
+        }
+
+        float[] distances = sulfide$distances;
+        if (distances == null || distances.length < quadCount) {
+            distances = new float[quadCount];
+            sulfide$distances = distances;
+        }
 
         int vertInts = format.getVertexSizeInteger();
         int vertBytes = format.getVertexSize();
@@ -431,16 +505,35 @@ public abstract class MixinBufferBuilder {
             distances[q] = dx * dx + dy * dy + dz * dz;
         }
 
-        Integer[] indices = new Integer[quadCount];
-        for (int i = 0; i < quadCount; i++) indices[i] = i;
-        final float[] dists = distances;
-        Arrays.sort(indices, (a, b) -> Floats.compare(dists[b], dists[a]));
+        long[] keys = sulfide$sortKeys;
+        if (keys == null || keys.length < quadCount) {
+            keys = new long[quadCount];
+            sulfide$sortKeys = keys;
+        }
+        for (int q = 0; q < quadCount; q++) {
+            keys[q] = (((long) ~Float.floatToRawIntBits(distances[q])) << 32) | (q & 0xFFFFFFFFL);
+        }
+        Arrays.sort(keys, 0, quadCount);
+
+        int[] indices = sulfide$sortOrder;
+        if (indices == null || indices.length < quadCount) {
+            indices = new int[quadCount];
+            sulfide$sortOrder = indices;
+        }
+        for (int i = 0; i < quadCount; i++) {
+            indices[i] = (int) keys[i];
+        }
 
         long quadBytes = (long) vertBytes * 4;
-        int[] temp = new int[vertBytes];
-        BitSet done = new BitSet();
+        int[] temp = sulfide$quadScratch;
+        if (temp == null || temp.length < vertBytes) {
+            temp = new int[vertBytes];
+            sulfide$quadScratch = temp;
+        }
+        BitSet done = sulfide$sorted;
+        done.clear();
 
-        for (int m = 0; (m = done.nextClearBit(m)) < indices.length; m++) {
+        for (int m = 0; (m = done.nextClearBit(m)) < quadCount; m++) {
             int target = indices[m];
             if (target != m) {
                 MemoryAccess.copyMemory(

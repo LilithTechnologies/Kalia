@@ -1,9 +1,10 @@
 package re.lilith.kalia.gl
 
-import org.joml.Matrix4f
-import org.joml.Vector4f
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import org.joml.Matrix4f
+import org.joml.Vector4f
+import re.lilith.kalia.frame.RenderThreadRef
 
 object ShaderUniforms {
     const val PUSH_CONSTANT_BYTES: Int = 128
@@ -12,86 +13,43 @@ object ShaderUniforms {
     private const val LIGHTING_ENABLED_BIT = 1
     private const val LIGHTMAP_ENABLED_BIT = 2
 
-    private val push = direct(PUSH_CONSTANT_BYTES)
-    private val scene = direct(SCENE_UNIFORM_BYTES)
+    private val gameState = ShaderUniformsData()
+    private val renderState = ShaderUniformsData()
 
-    private val modelView = Matrix4f()
-    private val projection = Matrix4f()
-    private val textureMatrix = Matrix4f()
+    private val state: ShaderUniformsData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
-    private var shaderRed = 1f
-    private var shaderGreen = 1f
-    private var shaderBlue = 1f
-    private var shaderAlpha = 1f
+    val sceneVersion: Long get() = state.sceneVersion
 
-    private var offsetX = 0f
-    private var offsetY = 0f
-    private var offsetZ = 0f
-    private var alphaCutout = -1f
+    val environmentVersion: Long get() = state.environmentVersion
 
-    private var fogRedInternal = 0f
-    private var fogGreenInternal = 0f
-    private var fogBlueInternal = 0f
-    private var fogAlphaInternal = 1f
-    private var fogStartInternal = 0f
-    private var fogEndInternal = 1f
-    private var fogDensityInternal = 0f
-    private var fogEnabledInternal = false
-    private var fogModeInternal = GlEnums.FogMode.EXP
-
-    private var light0X = 0f
-    private var light0Y = 1f
-    private var light0Z = 0f
-    private var light1X = 0f
-    private var light1Y = 1f
-    private var light1Z = 0f
-
-    private var overlayRed = 0f
-    private var overlayGreen = 0f
-    private var overlayBlue = 0f
-    private var overlayAlpha = 0f
-
-    private var lightmapS = 0f
-    private var lightmapT = 0f
-    private var lightingEnabled = false
-    private var lightmapEnabled = false
-
-    private var screenWidth = 1f
-    private var screenHeight = 1f
-
-    private val texGenPlanes = Array(4) { Vector4f() }
-    private val texGenSources = FloatArray(4)
-    private var texGenActive = false
-
-    private var pushDirty = true
-    private var sceneDirty = true
-
-    var sceneVersion: Long = 1L
-        private set
-
-    var environmentVersion: Long = 1L
-        private set
+    val environmentVersionWithoutCutout: Long get() = state.environmentVersionWithoutCutout
 
     private fun markEnvironmentDirty() {
-        environmentVersion++
+        state.environmentVersion++
+        state.environmentVersionWithoutCutout++
     }
 
     fun setModelView(matrix: Matrix4f) {
-        if (sameAs(modelView, matrix)) return
-        modelView.set(matrix)
-        pushDirty = true
+        val active = state
+        if (sameAs(active.modelView, matrix)) return
+        active.modelView.set(matrix)
+        active.pushDirty = true
+        FfpStats.uniformWrites++
     }
 
     fun setProjection(matrix: Matrix4f) {
-        if (sameAs(projection, matrix)) return
-        projection.set(matrix)
+        val active = state
+        if (sameAs(active.projection, matrix)) return
+        active.projection.set(matrix)
         markSceneDirty()
         markEnvironmentDirty()
     }
 
     fun setTexture(matrix: Matrix4f) {
-        if (sameAs(textureMatrix, matrix)) return
-        textureMatrix.set(matrix)
+        val active = state
+        if (sameAs(active.textureMatrix, matrix)) return
+        active.textureMatrix.set(matrix)
         markSceneDirty()
         markEnvironmentDirty()
     }
@@ -106,268 +64,296 @@ object ShaderUniforms {
                 current.m30() == other.m30() && current.m31() == other.m31() &&
                 current.m32() == other.m32() && current.m33() == other.m33()
 
-    fun modelViewMatrix(): Matrix4f = modelView
+    fun modelViewMatrix(): Matrix4f = state.modelView
 
-    fun projectionMatrix(): Matrix4f = projection
+    fun projectionMatrix(): Matrix4f = state.projection
 
-    fun shaderRed(): Float = shaderRed
+    fun shaderRed(): Float = state.shaderRed
 
-    fun shaderGreen(): Float = shaderGreen
+    fun shaderGreen(): Float = state.shaderGreen
 
-    fun shaderBlue(): Float = shaderBlue
+    fun shaderBlue(): Float = state.shaderBlue
 
-    fun shaderAlpha(): Float = shaderAlpha
+    fun shaderAlpha(): Float = state.shaderAlpha
 
-    fun modelOffsetX(): Float = offsetX
+    fun modelOffsetX(): Float = state.offsetX
 
-    fun modelOffsetY(): Float = offsetY
+    fun modelOffsetY(): Float = state.offsetY
 
-    fun modelOffsetZ(): Float = offsetZ
+    fun modelOffsetZ(): Float = state.offsetZ
 
-    fun overlayRed(): Float = overlayRed
+    fun overlayRed(): Float = state.overlayRed
 
-    fun overlayGreen(): Float = overlayGreen
+    fun overlayGreen(): Float = state.overlayGreen
 
-    fun overlayBlue(): Float = overlayBlue
+    fun overlayBlue(): Float = state.overlayBlue
 
-    fun overlayAlpha(): Float = overlayAlpha
+    fun overlayAlpha(): Float = state.overlayAlpha
 
-    fun lightmapS(): Float = lightmapS
+    fun lightmapS(): Float = state.lightmapS
 
-    fun lightmapT(): Float = lightmapT
+    fun lightmapT(): Float = state.lightmapT
 
-    fun isLightmapEnabled(): Boolean = lightmapEnabled
-
+    fun isLightmapEnabled(): Boolean = state.lightmapEnabled
 
     fun setShaderColor(red: Float, green: Float, blue: Float, alpha: Float) {
-        if (shaderRed == red && shaderGreen == green && shaderBlue == blue && shaderAlpha == alpha) return
-        shaderRed = red
-        shaderGreen = green
-        shaderBlue = blue
-        shaderAlpha = alpha
-        pushDirty = true
+        val active = state
+        if (active.shaderRed == red && active.shaderGreen == green && active.shaderBlue == blue && active.shaderAlpha == alpha) return
+        active.shaderRed = red
+        active.shaderGreen = green
+        active.shaderBlue = blue
+        active.shaderAlpha = alpha
+        active.pushDirty = true
+        FfpStats.uniformWrites++
     }
 
     fun setModelOffset(x: Float, y: Float, z: Float) {
-        if (offsetX == x && offsetY == y && offsetZ == z) return
-        offsetX = x
-        offsetY = y
-        offsetZ = z
-        pushDirty = true
+        val active = state
+        if (active.offsetX == x && active.offsetY == y && active.offsetZ == z) return
+        active.offsetX = x
+        active.offsetY = y
+        active.offsetZ = z
+        active.pushDirty = true
+        FfpStats.uniformWrites++
     }
 
     fun setAlphaCutout(value: Float) {
-        if (alphaCutout == value) return
-        alphaCutout = value
-        pushDirty = true
-        markEnvironmentDirty()
+        val active = state
+        if (active.alphaCutout == value) return
+        active.alphaCutout = value
+        active.pushDirty = true
+        FfpStats.uniformWrites++
+        active.environmentVersion++
     }
 
-    fun alphaCutout(): Float = alphaCutout
+    fun alphaCutout(): Float = state.alphaCutout
 
     fun setFogColor(red: Float, green: Float, blue: Float, alpha: Float) {
-        if (fogRedInternal == red && fogGreenInternal == green && fogBlueInternal == blue && fogAlphaInternal == alpha) return
-        fogRedInternal = red
-        fogGreenInternal = green
-        fogBlueInternal = blue
-        fogAlphaInternal = alpha
-        pushDirty = true
+        val active = state
+        if (active.fogRedInternal == red && active.fogGreenInternal == green && active.fogBlueInternal == blue && active.fogAlphaInternal == alpha) return
+        active.fogRedInternal = red
+        active.fogGreenInternal = green
+        active.fogBlueInternal = blue
+        active.fogAlphaInternal = alpha
+        active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
     fun setFogRange(start: Float, end: Float) {
-        if (fogStartInternal == start && fogEndInternal == end) return
-        fogStartInternal = start
-        fogEndInternal = end
-        pushDirty = true
+        val active = state
+        if (active.fogStartInternal == start && active.fogEndInternal == end) return
+        active.fogStartInternal = start
+        active.fogEndInternal = end
+        active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
     fun setFogDensity(value: Float) {
-        if (fogDensityInternal == value) return
-        fogDensityInternal = value
-        pushDirty = true
+        val active = state
+        if (active.fogDensityInternal == value) return
+        active.fogDensityInternal = value
+        active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
     fun setFogEnabled(value: Boolean) {
-        if (fogEnabledInternal == value) return
-        fogEnabledInternal = value
-        pushDirty = true
+        val active = state
+        if (active.fogEnabledInternal == value) return
+        active.fogEnabledInternal = value
+        active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
     fun setFogMode(value: GlEnums.FogMode) {
-        if (fogModeInternal == value) return
-        fogModeInternal = value
-        pushDirty = true
+        val active = state
+        if (active.fogModeInternal == value) return
+        active.fogModeInternal = value
+        active.pushDirty = true
+        FfpStats.uniformWrites++
         markEnvironmentDirty()
     }
 
-    fun isFogEnabled(): Boolean = fogEnabledInternal
+    fun isFogEnabled(): Boolean = state.fogEnabledInternal
 
-    fun fogMode(): GlEnums.FogMode = fogModeInternal
+    fun fogMode(): GlEnums.FogMode = state.fogModeInternal
 
-    fun fogStart(): Float = fogStartInternal
+    fun fogStart(): Float = state.fogStartInternal
 
-    fun fogEnd(): Float = fogEndInternal
+    fun fogEnd(): Float = state.fogEndInternal
 
-    fun fogDensity(): Float = fogDensityInternal
+    fun fogDensity(): Float = state.fogDensityInternal
 
-    fun fogRed(): Float = fogRedInternal
+    fun fogRed(): Float = state.fogRedInternal
 
-    fun fogGreen(): Float = fogGreenInternal
+    fun fogGreen(): Float = state.fogGreenInternal
 
-    fun fogBlue(): Float = fogBlueInternal
+    fun fogBlue(): Float = state.fogBlueInternal
 
-    fun lightDirection0X(): Float = light0X
+    fun lightDirection0X(): Float = state.light0X
 
-    fun lightDirection0Y(): Float = light0Y
+    fun lightDirection0Y(): Float = state.light0Y
 
-    fun lightDirection0Z(): Float = light0Z
+    fun lightDirection0Z(): Float = state.light0Z
 
-    fun lightDirection1X(): Float = light1X
+    fun lightDirection1X(): Float = state.light1X
 
-    fun lightDirection1Y(): Float = light1Y
+    fun lightDirection1Y(): Float = state.light1Y
 
-    fun lightDirection1Z(): Float = light1Z
+    fun lightDirection1Z(): Float = state.light1Z
 
     fun setLightDirections(
         firstX: Float, firstY: Float, firstZ: Float,
         secondX: Float, secondY: Float, secondZ: Float,
     ) {
-        if (light0X == firstX && light0Y == firstY && light0Z == firstZ &&
-            light1X == secondX && light1Y == secondY && light1Z == secondZ
+        val active = state
+        if (active.light0X == firstX && active.light0Y == firstY && active.light0Z == firstZ &&
+            active.light1X == secondX && active.light1Y == secondY && active.light1Z == secondZ
         ) {
             return
         }
-        light0X = firstX
-        light0Y = firstY
-        light0Z = firstZ
-        light1X = secondX
-        light1Y = secondY
-        light1Z = secondZ
+        active.light0X = firstX
+        active.light0Y = firstY
+        active.light0Z = firstZ
+        active.light1X = secondX
+        active.light1Y = secondY
+        active.light1Z = secondZ
         markSceneDirty()
         markEnvironmentDirty()
     }
 
     fun setLightDirection(index: Int, x: Float, y: Float, z: Float) {
+        val active = state
         if (index == 0) {
-            if (light0X == x && light0Y == y && light0Z == z) return
-            light0X = x
-            light0Y = y
-            light0Z = z
+            if (active.light0X == x && active.light0Y == y && active.light0Z == z) return
+            active.light0X = x
+            active.light0Y = y
+            active.light0Z = z
         } else {
-            if (light1X == x && light1Y == y && light1Z == z) return
-            light1X = x
-            light1Y = y
-            light1Z = z
+            if (active.light1X == x && active.light1Y == y && active.light1Z == z) return
+            active.light1X = x
+            active.light1Y = y
+            active.light1Z = z
         }
         markSceneDirty()
         markEnvironmentDirty()
     }
 
     fun setOverlayColor(red: Float, green: Float, blue: Float, alpha: Float) {
-        if (overlayRed == red && overlayGreen == green && overlayBlue == blue && overlayAlpha == alpha) return
-        overlayRed = red
-        overlayGreen = green
-        overlayBlue = blue
-        overlayAlpha = alpha
+        val active = state
+        if (active.overlayRed == red && active.overlayGreen == green && active.overlayBlue == blue && active.overlayAlpha == alpha) return
+        active.overlayRed = red
+        active.overlayGreen = green
+        active.overlayBlue = blue
+        active.overlayAlpha = alpha
         markSceneDirty()
     }
 
     fun setLightmapCoords(s: Float, t: Float) {
-        if (lightmapS == s && lightmapT == t) return
-        lightmapS = s
-        lightmapT = t
+        val active = state
+        if (active.lightmapS == s && active.lightmapT == t) return
+        active.lightmapS = s
+        active.lightmapT = t
         markSceneDirty()
     }
 
     fun setLightingEnabled(value: Boolean) {
-        if (lightingEnabled == value) return
-        lightingEnabled = value
+        val active = state
+        if (active.lightingEnabled == value) return
+        active.lightingEnabled = value
         markSceneDirty()
     }
 
-    fun isLightingEnabled(): Boolean = lightingEnabled
+    fun isLightingEnabled(): Boolean = state.lightingEnabled
 
     fun setLightmapEnabled(value: Boolean) {
-        if (lightmapEnabled == value) return
-        lightmapEnabled = value
+        val active = state
+        if (active.lightmapEnabled == value) return
+        active.lightmapEnabled = value
         markSceneDirty()
     }
 
     fun setTexGenPlane(coord: Int, x: Float, y: Float, z: Float, w: Float, eyeSpace: Boolean) {
-        val plane = texGenPlanes[coord]
+        val active = state
+        val plane = active.texGenPlanes[coord]
         val source = if (eyeSpace) 1f else 0f
-        if (plane.x == x && plane.y == y && plane.z == z && plane.w == w && texGenSources[coord] == source) return
+        if (plane.x == x && plane.y == y && plane.z == z && plane.w == w && active.texGenSources[coord] == source) return
         plane.set(x, y, z, w)
-        texGenSources[coord] = source
+        active.texGenSources[coord] = source
         markSceneDirty()
         markEnvironmentDirty()
     }
 
     fun setTexGenActive(value: Boolean) {
-        texGenActive = value
+        state.texGenActive = value
     }
 
-    fun isTexGenActive(): Boolean = texGenActive
+    fun isTexGenActive(): Boolean = state.texGenActive
 
     fun setScreenSize(width: Int, height: Int) {
+        val active = state
         val w = width.toFloat()
         val h = height.toFloat()
-        if (screenWidth == w && screenHeight == h) return
-        screenWidth = w
-        screenHeight = h
+        if (active.screenWidth == w && active.screenHeight == h) return
+        active.screenWidth = w
+        active.screenHeight = h
         markSceneDirty()
     }
 
     fun pushConstants(): ByteBuffer {
-        if (pushDirty) {
-            push.clear()
-            modelView.get(push)
-            push.position(64)
-            push.putFloat(shaderRed).putFloat(shaderGreen).putFloat(shaderBlue).putFloat(shaderAlpha)
-            push.putFloat(offsetX).putFloat(offsetY).putFloat(offsetZ).putFloat(alphaCutout)
-            push.putFloat(fogRedInternal).putFloat(fogGreenInternal).putFloat(fogBlueInternal).putFloat(fogAlphaInternal)
-            push.putFloat(fogStartInternal).putFloat(fogEndInternal).putFloat(fogDensityInternal)
-            push.putFloat(if (fogEnabledInternal) (fogModeInternal.ordinal + 1).toFloat() else 0f)
-            pushDirty = false
+        val active = state
+        val state = this.state
+        if (active.pushDirty) {
+            active.push.clear()
+            active.modelView.get(active.push)
+            active.push.position(64)
+            active.push.putFloat(active.shaderRed).putFloat(active.shaderGreen).putFloat(active.shaderBlue).putFloat(active.shaderAlpha)
+            active.push.putFloat(active.offsetX).putFloat(active.offsetY).putFloat(active.offsetZ).putFloat(active.alphaCutout)
+            active.push.putFloat(active.fogRedInternal).putFloat(active.fogGreenInternal).putFloat(active.fogBlueInternal).putFloat(active.fogAlphaInternal)
+            active.push.putFloat(active.fogStartInternal).putFloat(active.fogEndInternal).putFloat(active.fogDensityInternal)
+            active.push.putFloat(if (active.fogEnabledInternal) (active.fogModeInternal.ordinal + 1).toFloat() else 0f)
+            active.pushDirty = false
         }
-        push.position(0).limit(PUSH_CONSTANT_BYTES)
-        return push
+        active.push.position(0).limit(PUSH_CONSTANT_BYTES)
+        return active.push
     }
 
     fun sceneUniforms(): ByteBuffer {
-        if (sceneDirty) {
-            scene.clear()
-            projection.get(scene)
-            scene.position(64)
-            textureMatrix.get(scene)
-            scene.position(128)
-            scene.putFloat(light0X).putFloat(light0Y).putFloat(light0Z).putFloat(0f)
-            scene.putFloat(light1X).putFloat(light1Y).putFloat(light1Z).putFloat(0f)
-            scene.putFloat(overlayRed).putFloat(overlayGreen).putFloat(overlayBlue).putFloat(overlayAlpha)
-            scene.putFloat(lightmapS).putFloat(lightmapT)
-            scene.putFloat(if (lightmapEnabled) LIGHTMAP_ENABLED_BIT.toFloat() else 0f)
-            scene.putFloat(if (lightingEnabled) LIGHTING_ENABLED_BIT.toFloat() else 0f)
-            scene.putFloat(screenWidth).putFloat(screenHeight).putFloat(0f).putFloat(0f)
-            for (plane in texGenPlanes) {
-                scene.putFloat(plane.x).putFloat(plane.y).putFloat(plane.z).putFloat(plane.w)
+        val active = state
+        val state = this.state
+        if (active.sceneDirty) {
+            active.scene.clear()
+            active.projection.get(active.scene)
+            active.scene.position(64)
+            active.textureMatrix.get(active.scene)
+            active.scene.position(128)
+            active.scene.putFloat(active.light0X).putFloat(active.light0Y).putFloat(active.light0Z).putFloat(0f)
+            active.scene.putFloat(active.light1X).putFloat(active.light1Y).putFloat(active.light1Z).putFloat(0f)
+            active.scene.putFloat(active.overlayRed).putFloat(active.overlayGreen).putFloat(active.overlayBlue).putFloat(active.overlayAlpha)
+            active.scene.putFloat(active.lightmapS).putFloat(active.lightmapT)
+            active.scene.putFloat(if (active.lightmapEnabled) LIGHTMAP_ENABLED_BIT.toFloat() else 0f)
+            active.scene.putFloat(if (active.lightingEnabled) LIGHTING_ENABLED_BIT.toFloat() else 0f)
+            active.scene.putFloat(active.screenWidth).putFloat(active.screenHeight).putFloat(0f).putFloat(0f)
+            for (plane in active.texGenPlanes) {
+                active.scene.putFloat(plane.x).putFloat(plane.y).putFloat(plane.z).putFloat(plane.w)
             }
-            for (source in texGenSources) {
-                scene.putFloat(source)
+            for (source in active.texGenSources) {
+                active.scene.putFloat(source)
             }
-            sceneDirty = false
+            active.sceneDirty = false
         }
-        scene.position(0).limit(SCENE_UNIFORM_BYTES)
-        return scene
+        active.scene.position(0).limit(SCENE_UNIFORM_BYTES)
+        return active.scene
     }
 
     fun reset() {
-        modelView.identity()
-        projection.identity()
-        textureMatrix.identity()
+        val active = state
+        active.modelView.identity()
+        active.projection.identity()
+        active.textureMatrix.identity()
         setShaderColor(1f, 1f, 1f, 1f)
         setOverlayColor(0f, 0f, 0f, 0f)
         setModelOffset(0f, 0f, 0f)
@@ -375,19 +361,18 @@ object ShaderUniforms {
         setFogEnabled(false)
         setLightingEnabled(false)
         setLightmapEnabled(false)
-        texGenActive = false
-        texGenPlanes.forEach { it.zero() }
-        texGenSources.fill(0f)
-        pushDirty = true
+        active.texGenActive = false
+        active.texGenPlanes.forEach { it.zero() }
+        active.texGenSources.fill(0f)
+        active.pushDirty = true
+        FfpStats.uniformWrites++
         markSceneDirty()
         markEnvironmentDirty()
     }
 
     private fun markSceneDirty() {
-        sceneDirty = true
-        sceneVersion++
+        val active = state
+        active.sceneDirty = true
+        active.sceneVersion++
     }
-
-    private fun direct(bytes: Int): ByteBuffer =
-        ByteBuffer.allocateDirect(bytes).order(ByteOrder.nativeOrder())
 }

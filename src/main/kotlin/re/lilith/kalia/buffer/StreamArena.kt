@@ -23,7 +23,7 @@ class StreamArena(
         require(byteCount >= 0) { "byteCount must be >= 0." }
         if (byteCount == 0) {
             val page = pageFor(0)
-            return Slice(page.buffer, page.used, 0)
+            return slice(page.buffer, page.used, 0)
         }
 
         var page = pageFor(byteCount)
@@ -33,11 +33,15 @@ class StreamArena(
         }
 
         val offset = page.used
-        val slice = source.slice()
-        slice.limit(byteCount)
-        page.buffer.write(slice, offset)
+        val limit = source.limit()
+        try {
+            source.limit(source.position() + byteCount)
+            page.buffer.write(source, offset)
+        } finally {
+            source.limit(limit)
+        }
         page.used += byteCount.toLong()
-        return Slice(page.buffer, offset, byteCount)
+        return slice(page.buffer, offset, byteCount)
     }
 
     fun reset() {
@@ -53,6 +57,14 @@ class StreamArena(
         pages.forEach { it.buffer.close() }
         pages.clear()
         pageIndex = 0
+    }
+
+    private val reusedSlice = Slice()
+
+    private fun slice(buffer: GpuBuffer, offsetBytes: Long, sizeBytes: Int): Slice = reusedSlice.also {
+        it.buffer = buffer
+        it.offsetBytes = offsetBytes
+        it.sizeBytes = sizeBytes
     }
 
     private fun pageFor(requiredBytes: Int): Page {
@@ -91,7 +103,14 @@ class StreamArena(
         return capacity
     }
 
-    class Slice(val buffer: GpuBuffer, val offsetBytes: Long, val sizeBytes: Int)
+    class Slice internal constructor() {
+        lateinit var buffer: GpuBuffer
+            internal set
+        var offsetBytes: Long = 0L
+            internal set
+        var sizeBytes: Int = 0
+            internal set
+    }
 
     private class Page(val buffer: GpuBuffer, val capacity: Long, var used: Long = 0L)
 

@@ -327,7 +327,6 @@ object GlBridge {
     @JvmStatic
     fun lightmapCoords(s: Float, t: Float) = ShaderUniforms.setLightmapCoords(s, t)
 
-
     @JvmStatic
     fun multiTexCoord(unitOrToken: Int, s: Float, t: Float) {
         val unit = if (unitOrToken >= GL_TEXTURE0) unitOrToken - GL_TEXTURE0 else unitOrToken
@@ -481,7 +480,6 @@ object GlBridge {
     private val texGen = Array(4) { TexGenCoord() }
     private val texGenScratch = Vector4f()
     private val texGenInverse = Matrix4f()
-
 
     private const val FALLBACK_MAX_TEXTURE_SIZE = 4096
 }

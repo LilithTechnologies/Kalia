@@ -64,9 +64,20 @@ data class DeviceCapabilities(
      * Whether the backend can run compute shaders at all
      */
     val supportsCompute: Boolean = false,
+
+    /**
+     * Whether the backend can sample from a runtime-sized texture array indexed per instance,
+     * which is what lets draws that differ only by texture merge into one.
+     */
+    val supportsBindlessTextures: Boolean = false,
     /**
      * The number of fractional bits used to represent coordinates within a
      * single texture element (texel) during texture sampling.
      */
     val subTexelPrecisionBits: Int = 8,
+    /**
+     * Whether backend validation is active. This is false when validation was
+     * requested but the backend could not provide it.
+     */
+    val validation: Boolean = false,
 )

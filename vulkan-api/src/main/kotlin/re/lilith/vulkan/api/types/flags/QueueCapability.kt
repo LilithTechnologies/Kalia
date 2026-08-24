@@ -18,5 +18,3 @@ value class QueueCapability internal constructor(internal val vkBits: Int) {
         internal fun fromVk(bits: Int): QueueCapability = QueueCapability(bits)
     }
 }
-
-

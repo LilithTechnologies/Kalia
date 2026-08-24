@@ -24,5 +24,3 @@ internal object LogicalDeviceCommands {
         registrar.register(CommandPool(device, pointer[0], queueFamilyIndex, flags))
     }
 }
-
-

@@ -20,6 +20,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.draw.NametagTextRenderer;
 import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher;
+import re.lilith.kalia.frame.graph.entity.nametag.NametagStage;
 import re.lilith.kalia.rendering.world.NametagStyle;
 import re.lilith.kalia.frame.graph.entity.shadow.ShadowBatcher;
 import re.lilith.kalia.gl.MatrixState;
@@ -46,6 +47,16 @@ public class MixinEntityRenderer<T extends Entity> {
     @Shadow
     @Final
     protected EntityRenderDispatcher dispatcher;
+
+    @Unique
+    private static long kalia$labelSignature(String text, int halfWidth, int yOffset) {
+        long signature = text.hashCode();
+        signature = signature * 31L + halfWidth;
+        signature = signature * 31L + yOffset;
+        signature = signature * 31L + (NametagStyle.INSTANCE.getDrawBackground() ? 1L : 0L);
+        signature = signature * 31L + NametagStyle.INSTANCE.getBackgroundArgb();
+        return signature;
+    }
 
     /**
      * @reason Instance nametag rendering
@@ -78,18 +89,34 @@ public class MixinEntityRenderer<T extends Entity> {
         Matrix4f modelView = MatrixState.INSTANCE.modelView();
 
         NametagBatcher.INSTANCE.beginLabel();
-        if (NametagStyle.INSTANCE.getDrawBackground()) {
-            NametagBatcher.INSTANCE.recordBackground(
-                    modelView,
-                    -halfWidth - 1, -1 + yOffset, halfWidth + 1, 8 + yOffset,
-                    NametagStyle.INSTANCE.getBackgroundArgb()
-            );
+
+        long labelSignature = kalia$labelSignature(text, halfWidth, yOffset);
+        boolean staged = NametagStage.INSTANCE.begin(entity.getEntityId(), labelSignature);
+
+        NametagStage.INSTANCE.selectPass(0);
+        if (staged) {
+            NametagBatcher.INSTANCE.replayStaged(modelView);
+        } else {
+            if (NametagStyle.INSTANCE.getDrawBackground()) {
+                NametagBatcher.INSTANCE.recordBackground(
+                        modelView,
+                        -halfWidth - 1, -1 + yOffset, halfWidth + 1, 8 + yOffset,
+                        NametagStyle.INSTANCE.getBackgroundArgb()
+                );
+            }
+            textRenderer.kalia$drawNametag(text, -halfWidth, yOffset, 0x20FFFFFF);
         }
-        textRenderer.kalia$drawNametag(text, -halfWidth, yOffset, 0x20FFFFFF);
 
         GlStateManager.enableDepthTest();
         GlStateManager.depthMask(true);
-        textRenderer.kalia$drawNametag(text, -halfWidth, yOffset, -1);
+
+        NametagStage.INSTANCE.selectPass(1);
+        if (staged) {
+            NametagBatcher.INSTANCE.replayStaged(modelView);
+        } else {
+            textRenderer.kalia$drawNametag(text, -halfWidth, yOffset, -1);
+        }
+        NametagStage.INSTANCE.end();
 
         GlStateManager.enableLighting();
         GlStateManager.disableBlend();
@@ -111,7 +138,7 @@ public class MixinEntityRenderer<T extends Entity> {
 
         this.dispatcher.textureManager.bindTexture(SHADOW_TEXTURE);
         Texture texture = this.dispatcher.textureManager.getTexture(SHADOW_TEXTURE);
-        ShadowBatcher.texture = TextureTable.INSTANCE.get(texture.getGlId());
+        ShadowBatcher.setTexture(TextureTable.INSTANCE.get(texture.getGlId()));
 
         World world = this.getWorld();
         float g = this.shadowSize;
@@ -135,8 +162,10 @@ public class MixinEntityRenderer<T extends Entity> {
         double p = y - e;
         double q = z - h;
 
+        BlockPos.Mutable scratchDown = new BlockPos.Mutable();
         for (BlockPos blockPos : BlockPos.mutableIterate(new BlockPos(i, k, m), new BlockPos(j, l, n))) {
-            Block block = world.getBlockState(blockPos.down()).getBlock();
+            scratchDown.setPosition(blockPos.getX(), blockPos.getY() - 1, blockPos.getZ());
+            Block block = world.getBlockState(scratchDown).getBlock();
             if (block.getBlockType() != -1 && world.getLightLevelWithNeighbours(blockPos) > 3) {
                 kalia$recordShadowQuad(world, block, x, y, z, blockPos, f, g, o, p, q);
             }

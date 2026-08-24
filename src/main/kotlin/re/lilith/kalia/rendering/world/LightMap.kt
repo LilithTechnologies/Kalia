@@ -54,7 +54,7 @@ object LightMap {
         val world = client.world ?: return
         val renderer = client.gameRenderer as? GameRendererAccess ?: return
 
-        val tickDelta = WorldFrameState.tickDelta
+        val tickDelta = WorldFrame.consumedState.tickDelta
         val brightness = world.dimension.lightLevelToBrightness
 
         pushConstants.clear()

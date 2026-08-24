@@ -10,7 +10,8 @@
     "gl.MixinGLContext",
     "gl.MixinProject",
     "lwjgl.MixinDisplay",
-    "lwjgl.MixinSDLDisplay"
+    "lwjgl.MixinSDLDisplay",
+    "netty.MixinPlatformDependent0"
   ],
   "client": [
     "access.BufferBuilderAccess",
@@ -20,8 +21,12 @@
     "access.PlayerListHudAccess",
     "access.SpriteAccess",
     "access.WorldRendererAccess",
+    "entity.MixinBlockEntity",
+    "entity.MixinBlockEntityRenderDispatcher",
     "entity.MixinDataTracker",
+    "entity.MixinEntity",
     "entity.MixinSignBlockEntityRenderer",
+    "entity.MixinWorld",
     "gl.MixinGL11_Compat",
     "gl.MixinGL11_DisplayLists",
     "gl.MixinGL11_FFP",

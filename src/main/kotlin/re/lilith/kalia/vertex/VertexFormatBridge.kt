@@ -7,7 +7,6 @@ import re.lilith.kalia.renderer.format.VertexStepMode
 import java.util.*
 import re.lilith.kalia.renderer.format.VertexFormat as KaliaVertexFormat
 
-
 object VertexFormatBridge {
     private val cache = IdentityHashMap<VertexFormat, TranslatedVertexFormat>()
 

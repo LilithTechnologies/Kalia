@@ -1,10 +1,14 @@
 package re.lilith.kalia.rendering.world
 
+import re.lilith.kalia.renderer.command.list.CommandStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 class WorldSubmissions {
     private val byPhase = Array(WorldPhase.VALUES.size) { mutableListOf<WorldSubmission>() }
+
+    private val streams = arrayOfNulls<CommandStream>(WorldPhase.VALUES.size)
+    private val recorded = BooleanArray(WorldPhase.VALUES.size)
 
     private var staging = allocate(INITIAL_STAGING_BYTES)
     private var stagingUsed = 0
@@ -12,10 +16,23 @@ class WorldSubmissions {
     var size = 0
         private set
 
+    fun streamFor(phase: WorldPhase): CommandStream =
+        streams[phase.ordinal] ?: CommandStream().also { streams[phase.ordinal] = it }
+
+    fun hasRecorded(phase: WorldPhase): Boolean = recorded[phase.ordinal]
+
+    fun markRecorded(phase: WorldPhase) {
+        recorded[phase.ordinal] = true
+    }
+
     fun reset() {
         for (list in byPhase) {
             list.clear()
         }
+        for (stream in streams) {
+            stream?.reset()
+        }
+        recorded.fill(false)
         stagingUsed = 0
         size = 0
     }

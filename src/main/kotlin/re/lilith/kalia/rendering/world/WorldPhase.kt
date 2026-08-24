@@ -14,6 +14,8 @@ enum class WorldPhase {
 
     OVERLAYS,
 
+    OCCLUSION,
+
     PARTICLES,
     WEATHER,
     WORLD_BORDER,

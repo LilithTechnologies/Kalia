@@ -111,7 +111,3 @@ private fun attachmentReferences(
     }
     return buffer
 }
-
-
-
-

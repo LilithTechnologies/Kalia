@@ -1,5 +1,8 @@
 package re.lilith.kalia.shader
 
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.LongAdder
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.VertexFormat
@@ -8,17 +11,25 @@ import re.lilith.kalia.renderer.resource.GpuPipeline
 import re.lilith.kalia.renderer.shader.ShaderProgram
 
 object PipelineCache {
-    private var lastPipeline: GpuPipeline? = null
-    private var lastProgram: ShaderProgram? = null
-    private var lastVertexFormat: VertexFormat? = null
-    private var lastAttachments: AttachmentLayout? = null
-    private var lastRaster: RasterState? = null
-    private var lastDepth: DepthState? = null
-    private var lastBlend: BlendState? = null
-    private var lastColorMask: ColorMask? = null
+    private val lock = Any()
+    private val cache = ConcurrentHashMap<PipelineKey, GpuPipeline>()
+    private val misses = LongAdder()
 
-    var missCount: Long = 0L
-        private set
+    @Volatile
+    private var cachedDevice: RenderDevice? = null
+
+    @Volatile
+    private var epoch = 0
+
+    private val gameState = PipelineCacheData()
+    private val renderState = PipelineCacheData()
+
+    private val state: PipelineCacheData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
+
+    val missCount: Long get() = misses.sum()
+
+    val distinctPipelines: Int get() = cache.size
 
     fun pipelineFor(
         device: RenderDevice,
@@ -26,56 +37,80 @@ object PipelineCache {
         vertexFormat: VertexFormat?,
         attachments: AttachmentLayout,
     ): GpuPipeline {
+        if (cachedDevice !== device) {
+            synchronized(lock) {
+                if (cachedDevice !== device) {
+                    reset()
+                    cachedDevice = device
+                }
+            }
+        }
+
+        val active = state
+        val currentEpoch = epoch
+        if (active.epoch != currentEpoch) {
+            active.epoch = currentEpoch
+            active.forget()
+        }
+
         val raster = GlState.rasterState()
-        val depth = GlState.depthState()
         val blend = GlState.blendState()
         val colorMask = GlState.colorMask()
+        val depth = if (attachments.depthFormat != null) GlState.depthState() else DepthState.DISABLED
 
-        val memo = lastPipeline
+        val memo = active.lastPipeline
         if (memo != null &&
-            lastProgram === program &&
-            lastVertexFormat === vertexFormat &&
-            lastAttachments == attachments &&
-            lastRaster === raster &&
-            lastDepth === depth &&
-            lastBlend === blend &&
-            lastColorMask === colorMask
+            active.lastProgram === program &&
+            active.lastVertexFormat === vertexFormat &&
+            active.lastAttachments === attachments &&
+            active.lastRaster === raster &&
+            active.lastDepth === depth &&
+            active.lastBlend === blend &&
+            active.lastColorMask === colorMask
         ) {
             return memo
         }
 
-        val pipeline = device.createPipeline(
-            GraphicsPipelineDescription(
-                program = program,
-                vertexFormat = vertexFormat,
-                attachments = attachments,
-                raster = raster,
-                depth = if (attachments.depthFormat != null) depth else DepthState.DISABLED,
-                blend = blend,
-                colorMask = colorMask,
-            ),
-        )
+        val key = active.probe.set(program, vertexFormat, attachments, raster, depth, blend, colorMask)
+        val pipeline = cache[key] ?: synchronized(lock) {
+            cache[key] ?: device.createPipeline(
+                GraphicsPipelineDescription(
+                    program = program,
+                    vertexFormat = vertexFormat,
+                    attachments = attachments,
+                    raster = raster,
+                    depth = depth,
+                    blend = blend,
+                    colorMask = colorMask,
+                ),
+            ).also {
+                cache[key.copy()] = it
+                misses.increment()
+            }
+        }
 
-        lastPipeline = pipeline
-        lastProgram = program
-        lastVertexFormat = vertexFormat
-        lastAttachments = attachments
-        lastRaster = raster
-        lastDepth = depth
-        lastBlend = blend
-        lastColorMask = colorMask
-        missCount++
+        active.lastPipeline = pipeline
+        active.lastProgram = program
+        active.lastVertexFormat = vertexFormat
+        active.lastAttachments = attachments
+        active.lastRaster = raster
+        active.lastDepth = depth
+        active.lastBlend = blend
+        active.lastColorMask = colorMask
         return pipeline
     }
 
     fun invalidate() {
-        lastPipeline = null
-        lastProgram = null
-        lastVertexFormat = null
-        lastAttachments = null
-        lastRaster = null
-        lastDepth = null
-        lastBlend = null
-        lastColorMask = null
+        synchronized(lock) {
+            reset()
+            cachedDevice = null
+        }
+    }
+
+    private fun reset() {
+        cache.clear()
+        epoch++
+        state.epoch = epoch
+        state.forget()
     }
 }

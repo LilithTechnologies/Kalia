@@ -1,8 +1,10 @@
 package re.lilith.kalia.renderer.vulkan
 
+import re.lilith.kalia.renderer.device.RenderStats
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.geometry.Viewport
 import re.lilith.kalia.renderer.graph.*
+import re.lilith.kalia.renderer.pipeline.AttachmentLayout
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.kalia.renderer.vulkan.utils.TransientTexturePool
 import re.lilith.vulkan.api.command.CommandRecorder
@@ -40,8 +42,8 @@ internal class VulkanGraphExecutor(
             return recorder
         }
 
-        val lifetimes = graph.textureLifetimes
-        val bound = HashMap<Int, VulkanTexture>()
+        val lastUse = graph.textureLastUse
+        val bound = arrayOfNulls<VulkanTexture>(graph.textureIdCount)
         bound[TextureHandle.BACK_BUFFER.id] = backbuffer
 
         var active = recorder
@@ -49,7 +51,7 @@ internal class VulkanGraphExecutor(
             passes.forEachIndexed { index, pass ->
                 materialize(graph, pass, bound, backbufferExtent)
                 recordPass(pass, bound, active, frame)
-                releaseExpired(graph, lifetimes, bound, index)
+                releaseExpired(graph, lastUse, bound, index)
 
                 if (pass.name == graph.hudBoundaryAfterPass) {
                     val target = pass.colorAttachments.firstOrNull()?.target?.let { bound[it.id] }
@@ -90,7 +92,7 @@ internal class VulkanGraphExecutor(
     private fun materialize(
         graph: RenderGraph,
         pass: GraphPass,
-        bound: MutableMap<Int, VulkanTexture>,
+        bound: Array<VulkanTexture?>,
         backbufferExtent: Extent,
     ) {
         for (attachment in pass.colorAttachments) {
@@ -105,10 +107,10 @@ internal class VulkanGraphExecutor(
     private fun bind(
         graph: RenderGraph,
         handle: TextureHandle,
-        bound: MutableMap<Int, VulkanTexture>,
+        bound: Array<VulkanTexture?>,
         backbufferExtent: Extent,
     ) {
-        if (handle.id in bound) {
+        if (bound[handle.id] != null) {
             return
         }
         val declaration = graph.texture(handle)
@@ -121,7 +123,7 @@ internal class VulkanGraphExecutor(
             )
     }
 
-    private val expiredScratch = ArrayList<Int>()
+    private val encoder = VulkanPassEncoder(device)
 
     private val stableRenderingInfos = HashMap<String, RenderingInfo>()
 
@@ -136,18 +138,16 @@ internal class VulkanGraphExecutor(
 
     private fun releaseExpired(
         graph: RenderGraph,
-        lifetimes: Map<Int, IntRange>,
-        bound: MutableMap<Int, VulkanTexture>,
+        lastUse: IntArray,
+        bound: Array<VulkanTexture?>,
         passIndex: Int,
     ) {
-        expiredScratch.clear()
-        for ((id, lifetime) in lifetimes) {
-            if (lifetime.last == passIndex && id != TextureHandle.BACK_BUFFER.id) {
-                expiredScratch += id
+        for (id in lastUse.indices) {
+            if (lastUse[id] != passIndex || id == TextureHandle.BACK_BUFFER.id) {
+                continue
             }
-        }
-        for (id in expiredScratch) {
-            val texture = bound.remove(id) ?: continue
+            val texture = bound[id] ?: continue
+            bound[id] = null
             if (graph.texture(TextureHandle(id)).imported == null) {
                 pool.release(texture)
             }
@@ -156,12 +156,14 @@ internal class VulkanGraphExecutor(
 
     private fun recordPass(
         pass: GraphPass,
-        bound: Map<Int, VulkanTexture>,
+        bound: Array<VulkanTexture?>,
         recorder: CommandRecorder,
         frame: VulkanFrameSlot,
     ) {
-        val colorTargets = pass.colorAttachments.map { bound.getValue(it.target.id) }
-        val depthTarget = pass.depthAttachment?.let { bound.getValue(it.target.id) }
+        RenderStats.recordPass()
+        val setupStarted = System.nanoTime()
+        val colorTargets = pass.colorAttachments.map { bound[it.target.id]!! }
+        val depthTarget = pass.depthAttachment?.let { bound[it.target.id]!! }
         val extent = colorTargets.firstOrNull()?.extent
             ?: depthTarget?.extent
             ?: error("Pass '${pass.name}' has no attachments to size the render area from.")
@@ -179,7 +181,7 @@ internal class VulkanGraphExecutor(
                 target.barrierTo(layout, force = true)?.let(::add)
             }
             pass.sampledInputs.forEach { handle ->
-                bound.getValue(handle.id).barrierTo(ImageLayout.ShaderReadOnlyOptimal)?.let(::add)
+                bound[handle.id]!!.barrierTo(ImageLayout.ShaderReadOnlyOptimal)?.let(::add)
             }
         }
         if (barriers.isNotEmpty()) {
@@ -228,8 +230,7 @@ internal class VulkanGraphExecutor(
             ),
         )
 
-        val encoder = VulkanPassEncoder(
-            backend = device,
+        encoder.begin(
             recorder = recorder,
             frame = frame,
             defaultColor = colorTargets,
@@ -237,9 +238,9 @@ internal class VulkanGraphExecutor(
             defaultRendering = rendering,
             defaultLayout = attachmentLayoutOf(colorTargets, depthTarget, pass),
             resolvable = buildMap {
-                pass.sampledInputs.forEach { put(it.id, bound.getValue(it.id)) }
-                pass.colorAttachments.forEach { put(it.target.id, bound.getValue(it.target.id)) }
-                pass.depthAttachment?.let { put(it.target.id, bound.getValue(it.target.id)) }
+                pass.sampledInputs.forEach { put(it.id, bound[it.id]!!) }
+                pass.colorAttachments.forEach { put(it.target.id, bound[it.target.id]!!) }
+                pass.depthAttachment?.let { put(it.target.id, bound[it.target.id]!!) }
             },
         )
         recorder.beginDebugLabel(pass.name)
@@ -247,11 +248,15 @@ internal class VulkanGraphExecutor(
         encoder.viewport(Viewport.of(extent))
         encoder.scissor(null)
 
+        RenderStats.recordPassSetup(System.nanoTime() - setupStarted)
+
         try {
             pass.body(encoder)
         } finally {
+            val teardownStarted = System.nanoTime()
             encoder.finish()
             recorder.endDebugLabel()
+            RenderStats.recordPassSetup(System.nanoTime() - teardownStarted)
         }
     }
 
@@ -259,8 +264,8 @@ internal class VulkanGraphExecutor(
         colorTargets: List<VulkanTexture>,
         depthTarget: VulkanTexture?,
         pass: GraphPass,
-    ): re.lilith.kalia.renderer.pipeline.AttachmentLayout =
-        re.lilith.kalia.renderer.pipeline.AttachmentLayout(
+    ): AttachmentLayout =
+        AttachmentLayout.of(
             colorFormats = colorTargets.map(VulkanTexture::format),
             depthFormat = depthTarget?.format.takeIf { pass.depthAttachment != null },
         )

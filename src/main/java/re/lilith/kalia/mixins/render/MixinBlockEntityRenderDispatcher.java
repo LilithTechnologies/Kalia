@@ -1,22 +1,24 @@
 package re.lilith.kalia.mixins.render;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import net.minecraft.block.entity.BlockEntity;
 import net.minecraft.client.render.block.entity.BlockEntityRenderDispatcher;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.frame.draw.EntityBatchers;
 
 @Mixin(BlockEntityRenderDispatcher.class)
 public class MixinBlockEntityRenderDispatcher {
-    @Inject(method = "renderEntity(Lnet/minecraft/block/entity/BlockEntity;DDDFI)V", at = @At("HEAD"))
-    private void kalia$enterBlockEntity(BlockEntity blockEntity, double x, double y, double z, float tickDelta, int destroyStage, CallbackInfo ci) {
+    @WrapMethod(method = "renderEntity(Lnet/minecraft/block/entity/BlockEntity;DDDFI)V")
+    private void kalia$wrapBlockEntity(
+            BlockEntity blockEntity, double x, double y, double z, float tickDelta, int destroyStage,
+            Operation<Void> original
+    ) {
         EntityBatchers.INSTANCE.enterEntity();
-    }
-
-    @Inject(method = "renderEntity(Lnet/minecraft/block/entity/BlockEntity;DDDFI)V", at = @At("RETURN"))
-    private void kalia$exitBlockEntity(BlockEntity blockEntity, double x, double y, double z, float tickDelta, int destroyStage, CallbackInfo ci) {
-        EntityBatchers.INSTANCE.exitEntity();
+        try {
+            original.call(blockEntity, x, y, z, tickDelta, destroyStage);
+        } finally {
+            EntityBatchers.INSTANCE.exitEntity();
+        }
     }
 }

@@ -1,6 +1,7 @@
 package re.lilith.kalia.mixins.render;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.texture.TextureManager;
 import org.spongepowered.asm.mixin.Mixin;
@@ -11,6 +12,7 @@ import org.spongepowered.asm.mixin.injection.*;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import re.lilith.kalia.KaliaHooks;
+import re.lilith.kalia.frame.HostTimings;
 
 @Mixin(MinecraftClient.class)
 public abstract class MixinMinecraftClient {
@@ -30,7 +32,7 @@ public abstract class MixinMinecraftClient {
 
     @Inject(method = "isFramerateValid", at = @At("HEAD"), cancellable = true)
     private void kalia$extendFramerateLimit(CallbackInfoReturnable<Boolean> callback) {
-        callback.setReturnValue(this.options.maxFramerate <= 1000);
+        callback.setReturnValue(this.options.maxFramerate < (int) GameOptions.Option.MAX_FPS.getMaxValue());
     }
 
     @Inject(method = "loadLogo", at = @At("HEAD"), cancellable = true)
@@ -57,6 +59,32 @@ public abstract class MixinMinecraftClient {
                 tickDelta, limitTime
         );
         KaliaHooks.renderFrame();
+    }
+
+    @Unique
+    private long kalia$tickMark;
+
+    @Unique
+    private long kalia$displayMark;
+
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void kalia$tickStart(CallbackInfo callback) {
+        kalia$tickMark = System.nanoTime();
+    }
+
+    @Inject(method = "tick", at = @At("RETURN"))
+    private void kalia$tickEnd(CallbackInfo callback) {
+        HostTimings.addTick(System.nanoTime() - kalia$tickMark);
+    }
+
+    @Inject(method = "updateDisplay", at = @At("HEAD"))
+    private void kalia$displayStart(CallbackInfo callback) {
+        kalia$displayMark = System.nanoTime();
+    }
+
+    @Inject(method = "updateDisplay", at = @At("RETURN"))
+    private void kalia$displayEnd(CallbackInfo callback) {
+        HostTimings.addDisplay(System.nanoTime() - kalia$displayMark);
     }
 
     @Inject(method = "stop", at = @At("HEAD"))

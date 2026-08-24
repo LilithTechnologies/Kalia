@@ -57,12 +57,13 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
     var lastInstances = 0
         private set
 
-    private var uploaded: StreamArena.Slice? = null
+    private var uploadedBuffer: GpuBuffer? = null
+    private var uploadedOffset: Long = 0L
 
     fun prepare(state: GuiRenderState, guiWidth: Float, guiHeight: Float) {
         lastDrawCalls = 0
         lastInstances = 0
-        uploaded = null
+        uploadedBuffer = null
 
         if (state.isEmpty) {
             return
@@ -72,7 +73,7 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
             return
         }
 
-        uploaded = upload(state)
+        upload(state)
         writeProjection(guiWidth, guiHeight)
     }
 
@@ -82,14 +83,14 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
         textures: GuiTextureRegistry,
         phase: GuiBlurPhase?,
     ) {
-        val slice = uploaded ?: return
+        val buffer = uploadedBuffer ?: return
         val indices = FrameResources.of(device).indices.forQuads(1)
 
         if (phase == null) {
-            executePhase(pass, textures, scissors, slice, indices, GuiBlurPhase.BEFORE_BLUR.ordinal, group = ANY_GROUP)
-            executePhase(pass, textures, scissors, slice, indices, GuiBlurPhase.AFTER_BLUR.ordinal, group = ANY_GROUP)
+            executePhase(pass, textures, scissors, buffer, uploadedOffset, indices, GuiBlurPhase.BEFORE_BLUR.ordinal, group = ANY_GROUP)
+            executePhase(pass, textures, scissors, buffer, uploadedOffset, indices, GuiBlurPhase.AFTER_BLUR.ordinal, group = ANY_GROUP)
         } else {
-            executePhase(pass, textures, scissors, slice, indices, phase.ordinal, group = ANY_GROUP)
+            executePhase(pass, textures, scissors, buffer, uploadedOffset, indices, phase.ordinal, group = ANY_GROUP)
         }
 
         pass.scissor(null)
@@ -102,13 +103,13 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
         phase: GuiBlurPhase,
         group: Int,
     ) {
-        val slice = uploaded ?: return
+        val buffer = uploadedBuffer ?: return
         val indices = FrameResources.of(device).indices.forQuads(1)
-        executePhase(pass, textures, scissors, slice, indices, phase.ordinal, group)
+        executePhase(pass, textures, scissors, buffer, uploadedOffset, indices, phase.ordinal, group)
         pass.scissor(null)
     }
 
-    private fun upload(state: GuiRenderState): StreamArena.Slice {
+    private fun upload(state: GuiRenderState) {
         val count = builder.elements
         val required = count * GuiRenderState.INSTANCE_BYTES
         if (staging.capacity() < required) {
@@ -140,7 +141,9 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
 
         buffer.position(required).flip()
         lastInstances = count
-        return FrameResources.of(device).vertexArena.append(buffer, required)
+        val slice = FrameResources.of(device).vertexArena.append(buffer, required)
+        uploadedBuffer = slice.buffer
+        uploadedOffset = slice.offsetBytes
     }
 
     private fun putTint(address: Long, argb: Int) {
@@ -154,7 +157,8 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
         pass: PassContext,
         textures: GuiTextureRegistry,
         scissors: GuiScissorStack,
-        slice: StreamArena.Slice,
+        instances: GpuBuffer,
+        instanceOffset: Long,
         indices: GpuBuffer,
         phase: Int,
         group: Int,
@@ -204,8 +208,8 @@ class GuiRenderer(private val device: RenderDevice) : AutoCloseable {
             val first = builder.firstOf(batch)
             pass.bindVertexBuffer(
                 slot = 1,
-                buffer = slice.buffer,
-                offsetBytes = slice.offsetBytes + first.toLong() * GuiRenderState.INSTANCE_BYTES,
+                buffer = instances,
+                offsetBytes = instanceOffset + first.toLong() * GuiRenderState.INSTANCE_BYTES,
             )
             pass.drawIndexed(INDICES_PER_QUAD, builder.countOf(batch), 0, 0, 0)
             lastDrawCalls++

@@ -235,6 +235,8 @@ class PhysicalDevice internal constructor(
             descriptorBindingPartiallyBound = descriptorIndexingFeatures?.descriptorBindingPartiallyBound() == true,
             descriptorBindingVariableDescriptorCount = descriptorIndexingFeatures?.descriptorBindingVariableDescriptorCount() == true,
             descriptorBindingUpdateUnusedWhilePending = descriptorIndexingFeatures?.descriptorBindingUpdateUnusedWhilePending() == true,
+            shaderSampledImageArrayNonUniformIndexing =
+                descriptorIndexingFeatures?.shaderSampledImageArrayNonUniformIndexing() == true,
             runtimeDescriptorArray = descriptorIndexingFeatures?.runtimeDescriptorArray() == true,
             bufferDeviceAddress = apiVersion >= Version.V1_2,
             timelineSemaphore = apiVersion >= Version.V1_2,
@@ -281,6 +283,3 @@ class PhysicalDevice internal constructor(
         )
     }
 }
-
-
-

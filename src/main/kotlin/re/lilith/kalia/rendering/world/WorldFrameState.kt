@@ -3,7 +3,7 @@ package re.lilith.kalia.rendering.world
 import org.joml.FrustumIntersection
 import org.joml.Matrix4f
 
-object WorldFrameState {
+class WorldFrameState {
     var active = false
 
     var tickDelta = 0f
@@ -88,8 +88,6 @@ object WorldFrameState {
         handVisible = false
     }
 
-    const val DISABLED_ANAGLYPH = 2
-
     fun applyAnaglyph(rgb: FloatArray) {
         if (anaglyphFilter == DISABLED_ANAGLYPH) {
             return
@@ -101,5 +99,8 @@ object WorldFrameState {
         rgb[1] = (red * 30f + green * 70f) / 100f
         rgb[2] = (red * 30f + blue * 70f) / 100f
     }
-}
 
+    companion object {
+        const val DISABLED_ANAGLYPH = 2
+    }
+}

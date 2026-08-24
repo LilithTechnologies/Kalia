@@ -56,6 +56,7 @@ internal object LogicalDeviceFactory {
                 config.features.descriptorBindingPartiallyBound ||
                 config.features.descriptorBindingVariableDescriptorCount ||
                 config.features.descriptorBindingUpdateUnusedWhilePending ||
+                config.features.shaderSampledImageArrayNonUniformIndexing ||
                 config.features.runtimeDescriptorArray ||
                 config.features.bufferDeviceAddress ||
                 config.features.timelineSemaphore ||
@@ -88,6 +89,9 @@ internal object LogicalDeviceFactory {
                 .descriptorBindingPartiallyBound(config.features.descriptorBindingPartiallyBound)
                 .descriptorBindingVariableDescriptorCount(config.features.descriptorBindingVariableDescriptorCount)
                 .descriptorBindingUpdateUnusedWhilePending(config.features.descriptorBindingUpdateUnusedWhilePending)
+                .shaderSampledImageArrayNonUniformIndexing(
+                    config.features.shaderSampledImageArrayNonUniformIndexing,
+                )
                 .runtimeDescriptorArray(config.features.runtimeDescriptorArray)
                 .bufferDeviceAddress(config.features.bufferDeviceAddress)
                 .timelineSemaphore(config.features.timelineSemaphore)

@@ -84,6 +84,7 @@ class MemoryAllocator internal constructor(
     fun createImage(config: ImageConfig, usage: MemoryUsage = MemoryUsage.GpuOnly): Image = pushStack { stack ->
         val createInfo = VkImageCreateInfo.calloc(stack)
             .sType(VK10.VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO)
+            .flags(config.flags.vkValue)
             .imageType(config.type.vkValue)
             .format(config.format.vkValue)
             .extent { it.set(config.extent.width, config.extent.height, config.extent.depth) }

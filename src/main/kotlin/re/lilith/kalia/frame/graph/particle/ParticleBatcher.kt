@@ -1,34 +1,24 @@
 package re.lilith.kalia.frame.graph.particle
 
-import re.lilith.kalia.frame.draw.BatchEnvironment
-import re.lilith.kalia.frame.draw.KaliaDraw
 import re.lilith.kalia.frame.FrameResources
 import re.lilith.kalia.frame.GameFrame
+import re.lilith.kalia.frame.RenderThreadRef
+import re.lilith.kalia.frame.draw.KaliaDraw
 import re.lilith.kalia.gl.GlBridge
 import re.lilith.kalia.gl.GlState
 import re.lilith.kalia.gl.ShaderUniforms
-import re.lilith.kalia.renderer.device.RenderDevice
-import re.lilith.kalia.renderer.format.IndexFormat
+import re.lilith.kalia.gl.TextureUnits
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.format.VertexFormat
 import re.lilith.kalia.renderer.format.VertexStepMode
 import re.lilith.kalia.renderer.pipeline.AttachmentLayout
-import re.lilith.kalia.renderer.pipeline.BlendState
-import re.lilith.kalia.renderer.pipeline.ColorMask
 import re.lilith.kalia.renderer.pipeline.DepthState
 import re.lilith.kalia.renderer.pipeline.GraphicsPipelineDescription
 import re.lilith.kalia.renderer.pipeline.RasterState
-import re.lilith.kalia.renderer.resource.GpuPipeline
-import re.lilith.kalia.renderer.resource.GpuSampler
-import re.lilith.kalia.renderer.resource.GpuTexture
-import re.lilith.kalia.shader.ShaderPrelude
 import re.lilith.kalia.renderer.utility.MemoryAccess
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import kotlin.collections.iterator
 
 object ParticleBatcher {
-    private const val BYTES_PER_INSTANCE = 48
+    private const val TEXTURE_SLOT_OFFSET = 48
 
     val INSTANCE_FORMAT: VertexFormat = VertexFormat.of(VertexStepMode.INSTANCE) {
         attribute("instCenter", 1, VertexAttributeFormat.FLOAT3)
@@ -37,40 +27,14 @@ object ParticleBatcher {
         attribute("instColor", 4, VertexAttributeFormat.UNORM8X4)
         attribute("instLightUv", 5, VertexAttributeFormat.FLOAT2)
         attribute("instAlphaCutout", 6, VertexAttributeFormat.FLOAT)
+        attribute("instTexture", 7, VertexAttributeFormat.UINT)
     }
 
-    private data class GroupKey(
-        val description: GraphicsPipelineDescription,
-        val texture: GpuTexture,
-        val sampler: GpuSampler,
-        val lightmap: GpuTexture,
-        val lightmapSampler: GpuSampler,
-    )
+    private val gameState = ParticleBatchData()
+    private val renderState = ParticleBatchData()
 
-    private val groups = LinkedHashMap<GroupKey, Instances>()
-    private val instancePool = ArrayDeque<Instances>()
-    private val environment = BatchEnvironment()
-
-    private val pipelines = HashMap<GraphicsPipelineDescription, GpuPipeline>()
-    private var pipelineDevice: RenderDevice? = null
-
-    private var lastDescAttachments: AttachmentLayout? = null
-    private var lastDescDepth: DepthState? = null
-    private var lastDescBlend: BlendState? = null
-    private var lastDescColorMask: ColorMask? = null
-    private var lastDescription: GraphicsPipelineDescription? = null
-
-    private var environmentVersion = 0L
-    private var biasConstant = 0f
-    private var biasSlope = 0f
-    private var lineWidth = 1f
-
-    private var lastKeyDescription: GraphicsPipelineDescription? = null
-    private var lastKeyTexture: GpuTexture? = null
-    private var lastKeySampler: GpuSampler? = null
-    private var lastKeyLightmap: GpuTexture? = null
-    private var lastKeyLightmapSampler: GpuSampler? = null
-    private var lastInstances: Instances? = null
+    private val state: ParticleBatchData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
     fun record(
         eyeX: Float, eyeY: Float, eyeZ: Float,
@@ -79,81 +43,68 @@ object ParticleBatcher {
         rgba: Int,
         lightU: Float, lightV: Float,
     ) {
+        val active = state
         val encoder = GameFrame.current ?: return
         val resources = FrameResources.of(encoder.device)
 
-        if (ShaderUniforms.environmentVersion != environmentVersion ||
-            GlState.lineWidth != lineWidth ||
-            GlState.effectiveDepthBiasConstant() != biasConstant ||
-            GlState.effectiveDepthBiasSlope() != biasSlope
+        if (ShaderUniforms.environmentVersionWithoutCutout != active.environmentVersion ||
+            GlState.lineWidth != active.lineWidth ||
+            GlState.effectiveDepthBiasConstant() != active.biasConstant ||
+            GlState.effectiveDepthBiasSlope() != active.biasSlope
         ) {
             flush()
-            environmentVersion = ShaderUniforms.environmentVersion
-            biasConstant = GlState.effectiveDepthBiasConstant()
-            biasSlope = GlState.effectiveDepthBiasSlope()
-            lineWidth = GlState.lineWidth
+            active.environmentVersion = ShaderUniforms.environmentVersionWithoutCutout
+            active.biasConstant = GlState.effectiveDepthBiasConstant()
+            active.biasSlope = GlState.effectiveDepthBiasSlope()
+            active.lineWidth = GlState.lineWidth
         }
-        environment.open(resources)
+        active.groups.environment.open(resources)
 
-        val texture = KaliaDraw.textureForUnit(0, resources)
-        val sampler = KaliaDraw.samplerForUnit(0, resources)
-        val lightmap = KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources)
-        val lightmapSampler = KaliaDraw.samplerForUnit(GlBridge.LIGHTMAP_UNIT, resources)
-        val description = descriptionFor(encoder.attachments)
-
-        val instances: Instances
-        val cached = lastInstances
-        if (cached != null &&
-            lastKeyDescription === description && lastKeyTexture === texture && lastKeySampler === sampler &&
-            lastKeyLightmap === lightmap && lastKeyLightmapSampler === lightmapSampler
+        val texId = TextureUnits.boundTexture(0)
+        val lightmapId = TextureUnits.boundTexture(GlBridge.LIGHTMAP_UNIT)
+        val attachments = encoder.attachments
+        var instances = active.groups.activeInstances
+        if (instances == null ||
+            !active.memoValid ||
+            texId != active.memoTexId ||
+            lightmapId != active.memoLightmapId ||
+            attachments !== active.memoAttachments
         ) {
-            instances = cached
-        } else {
-            val key = GroupKey(description, texture, sampler, lightmap, lightmapSampler)
-            instances = groups.getOrPut(key) { instancePool.removeLastOrNull()?.also { it.reset() } ?: Instances() }
-            lastKeyDescription = description
-            lastKeyTexture = texture
-            lastKeySampler = sampler
-            lastKeyLightmap = lightmap
-            lastKeyLightmapSampler = lightmapSampler
-            lastInstances = instances
+            val texture = KaliaDraw.textureForUnit(0, resources)
+            val sampler = KaliaDraw.samplerForUnit(0, resources)
+            val slot = encoder.device.textureIndex(texture, sampler)
+
+            instances = active.groups.resolve(
+                description = descriptionFor(attachments, slot >= 0),
+                texture = if (slot >= 0) null else texture,
+                sampler = if (slot >= 0) null else sampler,
+                lightmap = KaliaDraw.textureForUnit(GlBridge.LIGHTMAP_UNIT, resources),
+                lightmapSampler = KaliaDraw.samplerForUnit(GlBridge.LIGHTMAP_UNIT, resources),
+            )
+            active.groups.activeInstances = instances
+            active.textureIndex = if (slot >= 0) slot else 0
+            active.memoTexId = texId
+            active.memoLightmapId = lightmapId
+            active.memoAttachments = attachments
+            active.memoValid = true
         }
 
-        writeInstance(instances.reserve(), eyeX, eyeY, eyeZ, half, u0, v0, u1, v1, rgba, lightU, lightV)
+        val address = instances.reserve()
+        writeInstance(address, eyeX, eyeY, eyeZ, half, u0, v0, u1, v1, rgba, lightU, lightV)
+        MemoryAccess.putInt(address + TEXTURE_SLOT_OFFSET, active.textureIndex)
     }
 
-    private fun descriptionFor(attachments: AttachmentLayout): GraphicsPipelineDescription {
-        val raster = RasterState.TWO_SIDED
-        val depth = if (attachments.depthFormat != null) GlState.depthState() else DepthState.DISABLED
-        val blend = GlState.blendState()
-        val colorMask = GlState.colorMask()
-
-        val cached = lastDescription
-        if (cached != null &&
-            lastDescAttachments === attachments &&
-            lastDescDepth === depth &&
-            lastDescBlend === blend &&
-            lastDescColorMask === colorMask
-        ) {
-            return cached
-        }
-        val created = GraphicsPipelineDescription(
-            program = ParticleShaders.program(),
+    private fun descriptionFor(attachments: AttachmentLayout, bindless: Boolean): GraphicsPipelineDescription =
+        state.groups.describe(
+            program = ParticleShaders.program(bindless),
             vertexFormat = ParticleMesh.VERTEX_FORMAT,
-            attachments = attachments,
-            raster = raster,
-            depth = depth,
-            blend = blend,
-            colorMask = colorMask,
             instanceFormat = INSTANCE_FORMAT,
+            attachments = attachments,
+            raster = RasterState.TWO_SIDED,
+            depth = if (attachments.depthFormat != null) GlState.depthState() else DepthState.DISABLED,
+            blend = GlState.blendState(),
+            colorMask = GlState.colorMask(),
         )
-        lastDescAttachments = attachments
-        lastDescDepth = depth
-        lastDescBlend = blend
-        lastDescColorMask = colorMask
-        lastDescription = created
-        return created
-    }
 
     private fun writeInstance(
         address: Long,
@@ -186,94 +137,7 @@ object ParticleBatcher {
     }
 
     fun flush() {
-        if (groups.isEmpty()) {
-            return
-        }
-        val encoder = GameFrame.current
-        if (encoder == null) {
-            recycle()
-            return
-        }
-        val device = encoder.device
-        val resources = FrameResources.of(device)
-        if (pipelineDevice !== device) {
-            pipelines.clear()
-            pipelineDevice = device
-        }
-
-        val quadVertices = ParticleMesh.vertices(device)
-        val quadIndices = ParticleMesh.indices(device)
-
-        for ((key, instances) in groups) {
-            val pipeline = pipelines.getOrPut(key.description) { device.createPipeline(key.description) }
-            encoder.bindPipeline(pipeline)
-            GlBridge.applyDepthBias()
-            encoder.lineWidth(GlState.lineWidth)
-            encoder.bindTexture(ShaderPrelude.Bindings.BASE_TEXTURE, key.texture, key.sampler)
-            encoder.bindTexture(ShaderPrelude.Bindings.LIGHTMAP_TEXTURE, key.lightmap, key.lightmapSampler)
-            environment.apply(encoder)
-
-            val data = instances.finish()
-            val slice = resources.vertexArena.append(data, data.remaining())
-            encoder.bindVertexBuffer(0, quadVertices)
-            encoder.bindVertexBuffer(1, slice.buffer, slice.offsetBytes)
-            encoder.bindIndexBuffer(quadIndices, IndexFormat.UINT32)
-            encoder.drawIndexed(ParticleMesh.INDEX_COUNT, instances.count, 0, 0, 0)
-        }
-        recycle()
+        state.groups.flush(ParticleGeometry)
     }
 
-    private fun recycle() {
-        for (instances in groups.values) {
-            if (instancePool.size < POOL_CAPACITY) {
-                instancePool.addLast(instances)
-            }
-        }
-        groups.clear()
-        environment.close()
-        lastKeyDescription = null
-        lastKeyTexture = null
-        lastKeySampler = null
-        lastKeyLightmap = null
-        lastKeyLightmapSampler = null
-        lastInstances = null
-    }
-
-    private class Instances {
-        private var data = ByteBuffer.allocateDirect(INITIAL_CAPACITY).order(ByteOrder.nativeOrder())
-        private var baseAddress = MemoryAccess.addressOf(data)
-
-        var count: Int = 0
-            private set
-
-        fun reserve(): Long {
-            if (data.remaining() < BYTES_PER_INSTANCE) {
-                val grown = ByteBuffer.allocateDirect(data.capacity() * 2).order(ByteOrder.nativeOrder())
-                data.flip()
-                grown.put(data)
-                data = grown
-                baseAddress = MemoryAccess.addressOf(data)
-            }
-            val address = baseAddress + data.position()
-            data.position(data.position() + BYTES_PER_INSTANCE)
-            count++
-            return address
-        }
-
-        fun finish(): ByteBuffer {
-            data.flip()
-            return data
-        }
-
-        fun reset() {
-            data.clear()
-            count = 0
-        }
-
-        private companion object {
-            const val INITIAL_CAPACITY = 1024 * BYTES_PER_INSTANCE
-        }
-    }
-
-    private const val POOL_CAPACITY = 32
 }

@@ -109,6 +109,8 @@ class OversizedItemRenderer(private val device: RenderDevice) : AutoCloseable {
             }
         }
 
+        pass.retarget(null)
+        pass.viewport(Viewport.of(pass.extent))
         pass.scissor(null)
         queue.clear()
     }

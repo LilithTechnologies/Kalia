@@ -17,5 +17,3 @@ internal val RenderingImageView.ownerDevice: LogicalDevice
         is SwapchainImageView -> device
         else -> error("Unsupported rendering image view type: ${this::class.qualifiedName}")
     }
-
-

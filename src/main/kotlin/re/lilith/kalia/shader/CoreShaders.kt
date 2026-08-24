@@ -1,6 +1,7 @@
 package re.lilith.kalia.shader
 
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.ShaderUniforms
 import re.lilith.kalia.renderer.format.VertexAttributeFormat
 import re.lilith.kalia.renderer.shader.*
@@ -13,32 +14,38 @@ object CoreShaders {
     private const val TEXTURE_ARRAY_BIT = 1 shl 10
     private const val TEXTURE_SLOTS_BIT = 1 shl 11
 
+    private val lock = Any()
     private val programs = Int2ObjectOpenHashMap<ShaderProgram>()
 
-    private var lastFormat: TranslatedVertexFormat? = null
-    private var lastTexGen = false
-    private var lastProgram: ShaderProgram? = null
+    private val gameState = CoreShadersData()
+    private val renderState = CoreShadersData()
+
+    private val state: CoreShadersData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
 
     fun programFor(format: TranslatedVertexFormat, texGen: Boolean = false): ShaderProgram {
-        val memo = lastProgram
-        if (memo != null && lastFormat === format && lastTexGen == texGen) {
+        val active = state
+        val memo = active.lastProgram
+        if (memo != null && active.lastFormat === format && active.lastTexGen == texGen) {
             return memo
         }
         val signature = signature(format) or (if (texGen) TEXGEN_BIT else 0)
-        return programs.getOrPut(signature) {
-            val key = if (texGen) "${format.shaderKey}-texgen" else format.shaderKey
-            build(
-                label = "kalia/core/$key",
-                key = key,
-                file = "core",
-                format = format,
-                texGen = texGen,
-                signature = signature,
-            )
+        return synchronized(lock) {
+            programs.getOrPut(signature) {
+                val key = if (texGen) "${format.shaderKey}-texgen" else format.shaderKey
+                build(
+                    label = "kalia/core/$key",
+                    key = key,
+                    file = "core",
+                    format = format,
+                    texGen = texGen,
+                    signature = signature,
+                )
+            }
         }.also {
-            lastFormat = format
-            lastTexGen = texGen
-            lastProgram = it
+            active.lastFormat = format
+            active.lastTexGen = texGen
+            active.lastProgram = it
         }
     }
 
@@ -48,32 +55,36 @@ object CoreShaders {
      */
     fun slottedProgramFor(format: TranslatedVertexFormat): ShaderProgram {
         val signature = signature(format) or TEXTURE_SLOTS_BIT
-        return programs.getOrPut(signature) {
-            build(
-                label = "kalia/core/${format.shaderKey}-slots",
-                key = "${format.shaderKey}-slots",
-                file = "core",
-                format = format,
-                texGen = false,
-                signature = signature,
-                textureSlots = true,
-            )
+        return synchronized(lock) {
+            programs.getOrPut(signature) {
+                build(
+                    label = "kalia/core/${format.shaderKey}-slots",
+                    key = "${format.shaderKey}-slots",
+                    file = "core",
+                    format = format,
+                    texGen = false,
+                    signature = signature,
+                    textureSlots = true,
+                )
+            }
         }
     }
 
     fun instancedProgramFor(format: TranslatedVertexFormat, textureArray: Boolean = false): ShaderProgram {
         val signature = signature(format) or INSTANCED_BIT or (if (textureArray) TEXTURE_ARRAY_BIT else 0)
         val suffix = if (textureArray) "-instanced-array" else "-instanced"
-        return programs.getOrPut(signature) {
-            build(
-                label = "kalia/instanced/${format.shaderKey}${if (textureArray) "-array" else ""}",
-                key = "${format.shaderKey}$suffix",
-                file = "instanced",
-                format = format,
-                texGen = false,
-                signature = signature,
-                textureArray = textureArray,
-            )
+        return synchronized(lock) {
+            programs.getOrPut(signature) {
+                build(
+                    label = "kalia/instanced/${format.shaderKey}${if (textureArray) "-array" else ""}",
+                    key = "${format.shaderKey}$suffix",
+                    file = "instanced",
+                    format = format,
+                    texGen = false,
+                    signature = signature,
+                    textureArray = textureArray,
+                )
+            }
         }
     }
 

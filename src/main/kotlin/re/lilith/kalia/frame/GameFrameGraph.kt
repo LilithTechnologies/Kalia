@@ -23,7 +23,7 @@ import re.lilith.kalia.rendering.world.WorldFrame
 import re.lilith.kalia.rendering.world.WorldFrameTimings
 
 object GameFrameGraph {
-    val clearColor: Color get() = GlState.clearColor
+    val clearColor: Color get() = GameFrameShape.clearColor
     val sceneFormat: TextureFormat = TextureFormat.RGBA16F
 
     private val frameRenderer = KaliaFrameRenderer()
@@ -34,7 +34,7 @@ object GameFrameGraph {
         val scene = texture("scene", sceneFormat)
         val depth = depthTexture("depth", sceneDepthFormat(device))
 
-        val world = WorldFrame.isActive
+        val world = GameFrameShape.worldActive
         if (world) {
             val lightmap = LightMap.texture(device)?.let { import("lightmap", it) }
 
@@ -63,7 +63,7 @@ object GameFrameGraph {
         }
 
         val worldBlurred =
-            GuiBackgroundBlur.enabled &&
+            GameFrameShape.blurEnabled &&
                     world
 
         val sceneForUi =
@@ -74,14 +74,14 @@ object GameFrameGraph {
                     stage("horizontal", GuiBlur.PROGRAM) {
                         params {
                             vec2(1f, 0f)
-                            float(GuiBackgroundBlur.radius)
+                            float(GameFrameShape.blurRadius)
                         }
                     }
 
                     stage("vertical", GuiBlur.PROGRAM) {
                         params {
                             vec2(0f, 1f)
-                            float(GuiBackgroundBlur.radius)
+                            float(GameFrameShape.blurRadius)
                         }
                     }
                 }
@@ -91,13 +91,13 @@ object GameFrameGraph {
                 processedScene
             }
 
-        val atlasColour = GuiItems.atlasTexture
-        val atlasDepth = GuiItems.atlasDepth
+        val atlasColour = GameFrameShape.atlasTexture
+        val atlasDepth = GameFrameShape.atlasDepth
 
         val atlasHandle = atlasColour?.let { import("gui-item-atlas", it) }
         val atlasDepthHandle = atlasDepth?.let { import("gui-item-atlas-depth", it) }
 
-        if (!GuiItems.isIdle && atlasHandle != null && atlasDepthHandle != null) {
+        if (!GameFrameShape.itemsIdle && atlasHandle != null && atlasDepthHandle != null) {
             pass("gui/item-atlas") {
                 sideEffects()
 
@@ -107,10 +107,10 @@ object GameFrameGraph {
             }
         }
 
-        val previewHandle = GuiEntityPreview.texture?.let { import("gui-entity-preview", it) }
-        val previewDepthHandle = GuiEntityPreview.depth?.let { import("gui-entity-preview-depth", it) }
+        val previewHandle = GameFrameShape.previewTexture?.let { import("gui-entity-preview", it) }
+        val previewDepthHandle = GameFrameShape.previewDepth?.let { import("gui-entity-preview-depth", it) }
 
-        if (!GuiEntityPreview.isIdle && previewHandle != null && previewDepthHandle != null) {
+        if (!GameFrameShape.previewIdle && previewHandle != null && previewDepthHandle != null) {
             pass("gui/entity-preview") {
                 color(previewHandle)
                 depth(previewDepthHandle)

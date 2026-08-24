@@ -5,10 +5,8 @@ import re.lilith.kalia.renderer.graph.RenderGraphBuilder
 import re.lilith.kalia.renderer.graph.TextureHandle
 import java.util.concurrent.CopyOnWriteArrayList
 
-
 interface WorldPostProcessor {
     val isEnabled: Boolean get() = true
-
 
     fun render(
         builder: RenderGraphBuilder,

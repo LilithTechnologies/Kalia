@@ -1,52 +1,58 @@
 package re.lilith.kalia.gl
 
 import org.lwjgl.opengl.GL13.GL_TEXTURE0
+import re.lilith.kalia.frame.RenderThreadRef
 import re.lilith.kalia.gl.GlBridge.LIGHTMAP_UNIT
 
 object TextureUnits {
     const val COUNT: Int = 8
 
-    private val enabled = BooleanArray(COUNT) { it == 0 }
-    private val bound = IntArray(COUNT)
+    private val gameState = TextureUnitsData()
+    private val renderState = TextureUnitsData()
 
-    var activeUnit: Int = 0
-        private set
+    private val state: TextureUnitsData
+        get() = if (Thread.currentThread() === RenderThreadRef.thread) renderState else gameState
+
+    val activeUnit: Int get() = state.activeUnit
 
     @JvmStatic
     fun activeTexture(unitOrToken: Int) {
         val unit = if (unitOrToken >= GL_TEXTURE0) unitOrToken - GL_TEXTURE0 else unitOrToken
         if (unit in 0 until COUNT) {
-            activeUnit = unit
+            state.activeUnit = unit
             MatrixState.activeTextureUnit = unit
         }
     }
 
     @JvmStatic
     fun setEnabled(value: Boolean) {
-        enabled[activeUnit] = value
-        if (activeUnit == LIGHTMAP_UNIT) {
+        val active = state
+        active.enabled[active.activeUnit] = value
+        if (active.activeUnit == LIGHTMAP_UNIT) {
             ShaderUniforms.setLightmapEnabled(value)
         }
     }
 
     @JvmStatic
-    fun isEnabled(unit: Int = activeUnit): Boolean = unit in 0 until COUNT && enabled[unit]
+    fun isEnabled(unit: Int = activeUnit): Boolean = unit in 0 until COUNT && state.enabled[unit]
 
     @JvmStatic
     fun bind(textureId: Int) {
-        bound[activeUnit] = textureId
+        val active = state
+        active.bound[active.activeUnit] = textureId
     }
 
     @JvmStatic
-    fun boundTexture(unit: Int = activeUnit): Int = if (unit in 0 until COUNT) bound[unit] else 0
+    fun boundTexture(unit: Int = activeUnit): Int = if (unit in 0 until COUNT) state.bound[unit] else 0
 
     @JvmStatic
     fun reset() {
+        val active = state
         for (unit in 0 until COUNT) {
-            enabled[unit] = unit == 0
-            bound[unit] = 0
+            active.enabled[unit] = unit == 0
+            active.bound[unit] = 0
         }
-        activeUnit = 0
+        active.activeUnit = 0
         MatrixState.activeTextureUnit = 0
     }
 }
