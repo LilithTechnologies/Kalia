@@ -19,9 +19,9 @@ java {
 
 
 repositories {
-    maven(url = "https://maven.legacyfabric.net/") { name = "Legacy Fabric" }
-    maven(url = "https://maven.axolotlclient.com/releases") { name = "Axolotl Client" }
-    maven(url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1") { name = "DevAuth" }
+    maven(url = "https://maven.legacyfabric.net/")
+    maven(url = "https://maven.cloverclient.com/releases")
+    maven(url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1")
     mavenCentral()
     exclusiveContent {
         forRepository { mavenCentral() }
@@ -37,7 +37,7 @@ dependencies {
     minecraft(libs.minecraft)
     mappings(variantOf(libs.legacy.yarn) { classifier("v2") })
 
-    modApi(libs.legacy.lwjgl3)
+    modApi(libs.lumen)
     modImplementation(libs.fabric.loader)
     modImplementation(libs.devauth.fabric)
     modImplementation(libs.fabric.language.kotlin)
@@ -68,6 +68,7 @@ dependencies {
 
     implementation(libs.lwjgl.opengl)
     implementation(libs.lwjgl.openal)
+    implementation(libs.lwjgl.sdl)
 
     lwjglDesktopNatives("lwjgl")
     lwjglDesktopNatives("lwjgl-vma")
