@@ -28,6 +28,7 @@ final class ClonedChunkSection {
     private final Short2ObjectMap<BlockEntity> blockEntities = new Short2ObjectOpenHashMap<>();
     private final byte[] biomes;
     private final boolean hasSky;
+    private final BlockPosPool blockPosPool;
 
     ClonedChunkSection(World world, int sectionX, int sectionY, int sectionZ) {
         this.position = new SectionPos(sectionX, sectionY, sectionZ);
@@ -47,6 +48,16 @@ final class ClonedChunkSection {
             this.skyLight = this.hasSky && source.getSkyLight() != null ? copy(source.getSkyLight()) : null;
             this.emptySectionSkyLight = null;
         }
+
+        int chunkBaseX = sectionX << 4;
+        int chunkBaseY = sectionY << 4;
+        int chunkBaseZ = sectionZ << 4;
+
+        this.blockPosPool = new BlockPosPool(
+                chunkBaseX,
+                chunkBaseY,
+                chunkBaseZ
+        );
 
         this.biomes = Arrays.copyOf(chunk.getBiomeArray(), 256);
         copyBlockEntities(chunk, sectionY);
@@ -83,28 +94,19 @@ final class ClonedChunkSection {
     }
 
     private void copyBlockEntities(Chunk chunk, int sectionY) {
-        int minY = sectionY << 4;
-        int maxY = minY + 15;
-
-        int chunkBaseX = this.position.x() << 4;
-        int chunkBaseZ = this.position.z() << 4;
-
-        for (int y = minY; y <= maxY; y++) {
+        for (int y = 0; y < 16; y++) {
             for (int z = 0; z < 16; z++) {
                 for (int x = 0; x < 16; x++) {
-                    BlockPos pos = new BlockPos(
-                            chunkBaseX + x,
-                            y,
-                            chunkBaseZ + z
-                    );
+                    BlockPos pos = this.blockPosPool.get(x, y, z);
 
-                    BlockEntity blockEntity = chunk.getBlockEntity(pos, Chunk.Status.IMMEDIATE);
+                    BlockEntity blockEntity =
+                            chunk.getBlockEntity(pos, Chunk.Status.IMMEDIATE);
 
                     if (blockEntity != null) {
-                        blockEntity.setPos(pos); // Apparently, the block entity does not know where it is
+                        blockEntity.setPos(pos);
 
                         this.blockEntities.put(
-                                packLocal(x, y & 15, z),
+                                packLocal(x, y, z),
                                 blockEntity
                         );
                     }
