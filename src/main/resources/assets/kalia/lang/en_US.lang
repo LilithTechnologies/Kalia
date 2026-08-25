@@ -42,6 +42,18 @@ celeritas.options.mipmap_levels.tooltip=Controls the number of mipmaps which wil
 celeritas.options.thin_fog.name=Thin Fog
 celeritas.options.thin_fog.tooltip=Makes the Nether/End fog less thick, similar to OptiFine.
 
+celeritas.options.fxaa_mode.name=FXAA
+celeritas.options.fxaa_mode.tooltip=Controls the anti-aliasing quality applied to the world. Fast uses a cheap edge blur, Quality uses a slower edge-search filter for cleaner results.
+celeritas.options.upscale_mode.name=Upscale Filter
+celeritas.options.upscale_mode.tooltip=Controls how the world is upscaled back to full resolution when the World Downscale Factor is below 100%% and FXAA is off. Nearest is blocky, Bilinear is smooth, Sharp adds contrast-adaptive sharpening.
+celeritas.options.world_downscale.name=World Downscale Factor
+celeritas.options.world_downscale.tooltip=Renders the world at a fraction of the display resolution before upscaling it back, improving performance at the cost of sharpness.
+celeritas.options.value.fast=Fast
+celeritas.options.value.quality=Quality
+celeritas.options.value.nearest=Nearest
+celeritas.options.value.bilinear=Bilinear
+celeritas.options.value.sharp=Sharp
+
 sodium.options.chunk_update_threads.name=Chunk Update Threads
 sodium.options.chunk_update_threads.tooltip=Specifies the number of threads to use for chunk building. Using more threads can speed up chunk loading and update speed but may negatively impact frame times.
 sodium.options.always_defer_chunk_updates.name=Always Defer Chunk Updates

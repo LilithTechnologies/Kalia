@@ -240,8 +240,41 @@ final class CeleritasOptionPages {
                 )
                 .build();
 
+        OptionGroup antiAliasing = OptionGroup.createBuilder()
+                .setId(OptionIdentifier.create("kalia", "anti_aliasing"))
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("fxaa_mode"))
+                        .setName(text("fxaa_mode.name"))
+                        .setTooltip(text("fxaa_mode.tooltip"))
+                        .setControl(option -> new CyclingControl<>(option,
+                                new Integer[]{0, 1, 2}, values("off", "fast", "quality")))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setFxaaMode(value),
+                                config -> IHooks.INSTANCE.getFxaaMode())
+                        .setImpact(OptionImpact.MEDIUM)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("upscale_mode"))
+                        .setName(text("upscale_mode.name"))
+                        .setTooltip(text("upscale_mode.tooltip"))
+                        .setControl(option -> new CyclingControl<>(option,
+                                new Integer[]{0, 1, 2}, values("nearest", "bilinear", "sharp")))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setUpscaleMode(value),
+                                config -> IHooks.INSTANCE.getUpscaleMode())
+                        .setImpact(OptionImpact.LOW)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("world_downscale"))
+                        .setName(text("world_downscale.name"))
+                        .setTooltip(text("world_downscale.tooltip"))
+                        .setControl(option -> new SliderControl(option, 10, 100, 5, ControlValueFormatter.percentage()))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setWorldDownscale(value / 100.0F),
+                                config -> Math.round(IHooks.INSTANCE.getWorldDownscale() * 100.0F))
+                        .setImpact(OptionImpact.HIGH)
+                        .build())
+                .build();
+
         return new OptionPage(StandardOptions.Pages.QUALITY, text("pages.quality"),
-                List.of(graphics, details));
+                List.of(graphics, details, antiAliasing));
     }
 
     static OptionPage performance() {

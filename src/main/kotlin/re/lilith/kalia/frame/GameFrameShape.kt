@@ -1,5 +1,8 @@
 package re.lilith.kalia.frame
 
+import re.lilith.kalia.frame.graph.aa.AaSettings
+import re.lilith.kalia.frame.graph.aa.FxaaMode
+import re.lilith.kalia.frame.graph.aa.UpscaleMode
 import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
@@ -52,6 +55,22 @@ object GameFrameShape {
     var replaysVanilla = false
         private set
 
+    @Volatile
+    var fxaaMode = FxaaMode.FAST
+        private set
+
+    @Volatile
+    var upscaleMode = UpscaleMode.BILINEAR
+        private set
+
+    @Volatile
+    var upscaleSharpness = 0.6f
+        private set
+
+    @Volatile
+    var worldDownscale = 1f
+        private set
+
     fun capture() {
         replaysVanilla = !GuiEntityPreview.isIdle
         worldActive = WorldFrame.isActive
@@ -64,5 +83,9 @@ object GameFrameShape {
         previewIdle = GuiEntityPreview.isIdle
         previewTexture = GuiEntityPreview.texture
         previewDepth = GuiEntityPreview.depth
+        fxaaMode = AaSettings.fxaaMode
+        upscaleMode = AaSettings.upscaleMode
+        upscaleSharpness = AaSettings.upscaleSharpness
+        worldDownscale = AaSettings.worldDownscale.coerceIn(0.1f, 1f)
     }
 }

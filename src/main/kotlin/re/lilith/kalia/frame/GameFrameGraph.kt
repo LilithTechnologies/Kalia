@@ -1,19 +1,14 @@
 package re.lilith.kalia.frame
 
-import re.lilith.kalia.gl.GlState
+import re.lilith.kalia.frame.graph.aa.FxaaMode
+import re.lilith.kalia.frame.graph.aa.WorldResolveRenderer
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.geometry.Color
-import re.lilith.kalia.renderer.graph.LoadOp
-import re.lilith.kalia.renderer.graph.RenderGraph
-import re.lilith.kalia.renderer.graph.RenderGraphBuilder
-
-import re.lilith.kalia.renderer.graph.TextureHandle
-import re.lilith.kalia.renderer.graph.renderGraph
+import re.lilith.kalia.renderer.graph.*
 import re.lilith.kalia.renderer.post.postChain
 import re.lilith.kalia.rendering.ExternalRenderers
 import re.lilith.kalia.rendering.KaliaFrameRenderer
-import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
 import re.lilith.kalia.rendering.ui.GuiBlur
 import re.lilith.kalia.rendering.ui.GuiPanorama
 import re.lilith.kalia.rendering.ui.item.GuiItems
@@ -32,7 +27,21 @@ object GameFrameGraph {
 
     fun build(device: RenderDevice): RenderGraph = renderGraph("kalia/game") {
         val scene = texture("scene", sceneFormat)
+
+        val worldScale = GameFrameShape.worldDownscale
+        val directRender = GameFrameShape.fxaaMode == FxaaMode.OFF && worldScale == 1f
+
         val depth = depthTexture("depth", sceneDepthFormat(device))
+
+        val worldColorTarget: TextureHandle
+        val worldDepthTarget: TextureHandle
+        if (directRender) {
+            worldColorTarget = scene
+            worldDepthTarget = depth
+        } else {
+            worldColorTarget = texture("world", sceneFormat, sizing = TextureSizing.RelativeToBackbuffer(worldScale))
+            worldDepthTarget = depthTexture("world", sceneDepthFormat(device), sizing = TextureSizing.RelativeToBackbuffer(worldScale))
+        }
 
         val world = GameFrameShape.worldActive
         if (world) {
@@ -46,11 +55,30 @@ object GameFrameGraph {
             }
 
             pass("world") {
-                color(scene, clear = clearColor)
-                depth(depth, clear = 1f)
+                color(worldColorTarget, clear = clearColor)
+                depth(worldDepthTarget, clear = 1f)
                 // Keeps the lightmap pass alive and transitions it back for sampling
                 lightmap?.let(::reads)
                 draw { WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) { WorldFrame.draw(this) } }
+            }
+
+            if (!directRender) {
+                pass("world/resolve") {
+                    color(scene, clear = clearColor)
+                    depth(depth, clear = 1f)
+
+                    reads(setOf(worldColorTarget, worldDepthTarget))
+
+                    draw {
+                        WorldResolveRenderer.render(
+                            this,
+                            worldColorTarget,
+                            GameFrameShape.fxaaMode,
+                            GameFrameShape.upscaleMode,
+                            GameFrameShape.upscaleSharpness,
+                        )
+                    }
+                }
             }
         }
 
