@@ -35,6 +35,14 @@ object NametagShaders {
                 }
                 add(
                     ShaderBinding(
+                        name = "kaliaLightmapTexture",
+                        binding = ShaderPrelude.Bindings.LIGHTMAP_TEXTURE,
+                        kind = BindingKind.TEXTURE,
+                        stages = setOf(ShaderStage.FRAGMENT),
+                    ),
+                )
+                add(
+                    ShaderBinding(
                         name = "KaliaScene",
                         binding = ShaderPrelude.Bindings.SCENE_UNIFORMS,
                         kind = BindingKind.UNIFORM_BUFFER_DYNAMIC,

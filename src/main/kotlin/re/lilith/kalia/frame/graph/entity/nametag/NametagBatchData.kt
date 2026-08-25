@@ -13,7 +13,7 @@ internal class NametagBatchData {
     var textureIndex = 0
 
     private companion object {
-        const val BYTES_PER_INSTANCE = 92
+        const val BYTES_PER_INSTANCE = 100
         const val INITIAL_INSTANCES = 256
         const val POOL_CAPACITY = 64
     }

@@ -19,6 +19,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.draw.NametagTextRenderer;
+import re.lilith.kalia.draw.TextObfuscation;
 import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher;
 import re.lilith.kalia.frame.graph.entity.nametag.NametagStage;
 import re.lilith.kalia.rendering.world.NametagStyle;
@@ -91,7 +92,8 @@ public class MixinEntityRenderer<T extends Entity> {
         NametagBatcher.INSTANCE.beginLabel();
 
         long labelSignature = kalia$labelSignature(text, halfWidth, yOffset);
-        boolean staged = NametagStage.INSTANCE.begin(entity.getEntityId(), labelSignature);
+        boolean cacheable = !TextObfuscation.contains(text);
+        boolean staged = NametagStage.INSTANCE.begin(entity.getEntityId(), labelSignature, cacheable);
 
         NametagStage.INSTANCE.selectPass(0);
         if (staged) {

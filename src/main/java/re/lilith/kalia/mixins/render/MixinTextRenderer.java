@@ -16,6 +16,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import re.lilith.kalia.frame.draw.KaliaDraw;
 import re.lilith.kalia.draw.NametagTextRenderer;
+import re.lilith.kalia.draw.TextObfuscation;
 import re.lilith.kalia.frame.draw.TextMeshCache;
 import re.lilith.kalia.frame.graph.entity.nametag.NametagBatcher;
 import re.lilith.kalia.gl.MatrixState;
@@ -254,7 +255,7 @@ public class MixinTextRenderer implements NametagTextRenderer {
                 : TextMeshCache.find(text, shadow, opaqueColor, this.unicode, styleBits, TextMeshCache.OUT_MESH);
         boolean owned = false;
         if (cached == null) {
-            boolean cacheable = !this.obfuscated && !kalia$containsObfuscationCode(text);
+            boolean cacheable = !this.obfuscated && !TextObfuscation.contains(text);
             cached = kalia$bake(text, shadow, opaqueColor, TextMeshCache.OUT_MESH);
             if (cacheable) {
                 TextMeshCache.put(text, shadow, opaqueColor, this.unicode, styleBits, TextMeshCache.OUT_MESH, cached);
@@ -401,6 +402,12 @@ public class MixinTextRenderer implements NametagTextRenderer {
         kalia$instanceScratch.clear();
         kalia$instanceSegStart = 0;
         int decoCount = 0;
+
+        this.obfuscated = false;
+        this.bold = false;
+        this.strikethrough = false;
+        this.underline = false;
+        this.italic = false;
 
         float relX = 0.0F;
         int rgba = baseColor;

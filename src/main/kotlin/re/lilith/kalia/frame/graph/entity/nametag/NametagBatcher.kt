@@ -20,12 +20,11 @@ import re.lilith.kalia.renderer.resource.GpuSampler
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.renderer.utility.MemoryAccess
 
-// TODO: create a generalised "batching" abstratcion
 object NametagBatcher {
-    private const val BYTES_PER_INSTANCE = 92
+    private const val BYTES_PER_INSTANCE = 100
     private const val TRANSFORM_BYTES = 48L
     private const val TAIL_OFFSET = 84L
-    private const val TAIL_BYTES = 8L
+    private const val TAIL_BYTES = 16L
 
     const val FLOATS_PER_GLYPH: Int = 9
 
@@ -38,6 +37,7 @@ object NametagBatcher {
         attribute("instColor", 6, VertexAttributeFormat.UNORM8X4)
         attribute("instAlphaCutout", 7, VertexAttributeFormat.FLOAT)
         attribute("instTexture", 8, VertexAttributeFormat.UINT)
+        attribute("instLightUv", 9, VertexAttributeFormat.FLOAT2)
     }
 
     private val gameState = NametagBatchData()
@@ -98,6 +98,8 @@ object NametagBatcher {
         MemoryAccess.putFloat(first + 40, m22); MemoryAccess.putFloat(first + 44, m32)
         MemoryAccess.putFloat(first + 84, cutout)
         MemoryAccess.putInt(first + 88, textureIndex)
+        MemoryAccess.putFloat(first + 92, ShaderUniforms.lightmapS())
+        MemoryAccess.putFloat(first + 96, ShaderUniforms.lightmapT())
 
         var p = first
         var off = 0
@@ -217,7 +219,9 @@ object NametagBatcher {
         MemoryAccess.putByte(p, ((rgba ushr 8) and 255).toByte()); p += 1
         MemoryAccess.putByte(p, (rgba and 255).toByte()); p += 1
 
-        MemoryAccess.putFloat(p, ShaderUniforms.alphaCutout())
+        MemoryAccess.putFloat(p, ShaderUniforms.alphaCutout()); p += 4
+        MemoryAccess.putFloat(p, ShaderUniforms.lightmapS()); p += 4
+        MemoryAccess.putFloat(p, ShaderUniforms.lightmapT())
     }
 
     fun replayStaged(modelView: Matrix4f) {

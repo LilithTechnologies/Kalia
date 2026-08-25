@@ -20,9 +20,14 @@ internal object NametagStage {
 
     private var current: Entry? = null
 
-    fun begin(id: Int, signature: Long): Boolean {
+    fun begin(id: Int, signature: Long, cacheable: Boolean): Boolean {
         end()
         if (!enabled) {
+            return false
+        }
+        if (!cacheable) {
+            entries.remove(id)?.release()
+            live += id
             return false
         }
         live += id
@@ -86,5 +91,5 @@ internal object NametagStage {
         }
     }
 
-    private const val BYTES_PER_INSTANCE = 92
+    private const val BYTES_PER_INSTANCE = 100
 }

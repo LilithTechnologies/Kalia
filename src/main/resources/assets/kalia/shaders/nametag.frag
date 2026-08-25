@@ -6,8 +6,9 @@ layout(location = 0) in vec4 vColor;
 layout(location = 1) in vec2 vUv;
 layout(location = 2) in float vViewDistance;
 layout(location = 3) in float vAlphaCutout;
+layout(location = 4) in vec2 vLightUv;
 #ifdef BINDLESS
-layout(location = 4) flat in uint vTexture;
+layout(location = 5) flat in uint vTexture;
 #endif
 layout(location = 0) out vec4 fragColor;
 
@@ -16,6 +17,7 @@ layout(set = 1, binding = 0) uniform sampler2D kaliaTextures[];
 #else
 layout(binding = 0) uniform sampler2D kaliaBaseTexture;
 #endif
+layout(binding = 2) uniform sampler2D kaliaLightmapTexture;
 
 #include "kalia:prelude.glsl"
 
@@ -25,6 +27,7 @@ void main() {
 #else
     vec4 color = vColor * texture(kaliaBaseTexture, vUv);
 #endif
+    color.rgb *= texture(kaliaLightmapTexture, vLightUv).rgb;
     if (color.a <= vAlphaCutout) {
         discard;
     }
