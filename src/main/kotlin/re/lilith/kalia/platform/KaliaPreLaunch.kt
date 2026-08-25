@@ -1,7 +1,7 @@
 package re.lilith.kalia.platform
 
 import net.fabricmc.loader.api.entrypoint.PreLaunchEntrypoint
-import pl.tomgirl.lumen.window.DisplaySdl
+import pl.tomgirl.lenis.window.DisplaySdl
 
 class KaliaPreLaunch : PreLaunchEntrypoint {
     override fun onPreLaunch() {

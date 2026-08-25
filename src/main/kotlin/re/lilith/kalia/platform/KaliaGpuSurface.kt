@@ -10,7 +10,7 @@ import org.lwjgl.system.Library
 import org.lwjgl.system.Platform
 import org.lwjgl.system.SharedLibrary
 import org.lwjgl.vulkan.VK
-import pl.tomgirl.lumen.window.GpuSurface
+import pl.tomgirl.lenis.window.GpuSurface
 import re.lilith.kalia.KaliaHooks
 
 class KaliaGpuSurface : GpuSurface {

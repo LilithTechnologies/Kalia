@@ -1,7 +1,7 @@
 package re.lilith.kalia.platform
 
 import org.lwjgl.opengl.Display
-import pl.tomgirl.lumen.window.DisplaySdl
+import pl.tomgirl.lenis.window.DisplaySdl
 import re.lilith.kalia.renderer.device.PlatformSurface
 import re.lilith.kalia.renderer.device.WindowSystem
 import re.lilith.kalia.renderer.geometry.Extent

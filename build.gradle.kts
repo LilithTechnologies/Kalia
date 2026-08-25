@@ -37,7 +37,7 @@ dependencies {
     minecraft(libs.minecraft)
     mappings(variantOf(libs.legacy.yarn) { classifier("v2") })
 
-    modApi(libs.lumen)
+    modApi(libs.lenis)
     modImplementation(libs.fabric.loader)
     modImplementation(libs.devauth.fabric)
     modImplementation(libs.fabric.language.kotlin)
@@ -64,11 +64,6 @@ dependencies {
     bundled(libs.lwjgl.vulkan)
     bundled(libs.lwjgl.vma)
     bundled(libs.lwjgl.shaderc)
-
-    api(libs.lwjgl.asProvider())
-    api(libs.lwjgl.opengl)
-    api(libs.lwjgl.openal)
-    api(libs.lwjgl.sdl)
 
     lwjglDesktopNatives("lwjgl-vma")
     lwjglDesktopNatives("lwjgl-shaderc")
