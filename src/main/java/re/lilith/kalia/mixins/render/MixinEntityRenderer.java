@@ -2,6 +2,7 @@ package re.lilith.kalia.mixins.render;
 
 import com.mojang.blaze3d.platform.GlStateManager;
 import net.minecraft.block.Block;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.render.entity.EntityRenderDispatcher;
 import net.minecraft.client.render.entity.EntityRenderer;
@@ -77,7 +78,13 @@ public class MixinEntityRenderer<T extends Entity> {
         GlStateManager.translate((float) x, (float) y + entity.height + 0.5F, (float) z);
         GL11.glNormal3f(0.0F, 1.0F, 0.0F);
         GlStateManager.rotate(-this.dispatcher.yaw, 0.0F, 1.0F, 0.0F);
-        GlStateManager.rotate(this.dispatcher.pitch, 1.0F, 0.0F, 0.0F);
+
+        float pitch = this.dispatcher.pitch;
+        if (MinecraftClient.getInstance().options != null && MinecraftClient.getInstance().options.perspective == 2) {
+            pitch = -pitch;
+        }
+        GlStateManager.rotate(pitch, 1.0F, 0.0F, 0.0F);
+
         GlStateManager.scale(-0.02666667F, -0.02666667F, 0.02666667F);
 
         GlStateManager.disableLighting();
