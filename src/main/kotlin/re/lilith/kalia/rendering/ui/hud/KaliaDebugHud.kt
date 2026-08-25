@@ -3,7 +3,7 @@ package re.lilith.kalia.rendering.ui.hud
 import re.lilith.kalia.KaliaEngine
 import re.lilith.kalia.frame.FrameAllocations
 import re.lilith.kalia.frame.HostTimings
-import org.taumc.celeritas.impl.debug.RenderMetrics
+import dev.rdh.argentum.impl.debug.RenderMetrics
 import re.lilith.kalia.frame.graph.BatchStats
 import re.lilith.kalia.gl.FfpStats
 import re.lilith.kalia.frame.graph.occlusion.EntityOcclusion

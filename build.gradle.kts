@@ -42,7 +42,7 @@ dependencies {
     modImplementation(libs.devauth.fabric)
     modImplementation(libs.fabric.language.kotlin)
 
-    ploceus.dependOsl("0.17.0")
+    ploceus.dependOsl("0.20.3")
 
     api(include(project(":vulkan-api"))!!)
     api(include(project(":renderer"))!!)

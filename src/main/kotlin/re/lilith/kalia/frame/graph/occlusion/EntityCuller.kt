@@ -1,7 +1,7 @@
 package re.lilith.kalia.frame.graph.occlusion
 
 import net.minecraft.entity.Entity
-import org.taumc.celeritas.impl.render.entity.EntityCullingHook
+import dev.rdh.argentum.impl.render.entity.EntityCullingHook
 
 internal object EntityCuller : EntityCullingHook.Provider {
     fun install() {

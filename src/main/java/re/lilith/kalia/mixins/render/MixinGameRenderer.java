@@ -7,7 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.Slice;
-import org.taumc.celeritas.impl.Celeritas;
+import dev.rdh.argentum.impl.Argentum;
 import re.lilith.kalia.gl.GlBridge;
 
 import java.nio.FloatBuffer;
@@ -29,7 +29,7 @@ public class MixinGameRenderer {
         index = 0
     )
     private float kalia$thinFogStart(float value) {
-        return Celeritas.CONFIG.thinFog ? this.viewDistance * 0.05F : value;
+        return Argentum.CONFIG.thinFog ? this.viewDistance * 0.05F : value;
     }
 
     @ModifyArg(
@@ -39,6 +39,6 @@ public class MixinGameRenderer {
         index = 0
     )
     private float kalia$thinFogEnd(float value) {
-        return Celeritas.CONFIG.thinFog ? this.viewDistance : value;
+        return Argentum.CONFIG.thinFog ? this.viewDistance : value;
     }
 }

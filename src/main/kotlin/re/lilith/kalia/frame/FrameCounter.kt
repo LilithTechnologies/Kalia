@@ -1,7 +1,7 @@
 package re.lilith.kalia.frame
 
 import net.minecraft.client.MinecraftClient
-import org.taumc.celeritas.impl.Celeritas
+import dev.rdh.argentum.impl.Argentum
 
 object FrameCounter {
     private val frameTimings = LongArray(SAMPLE_SIZE)
@@ -20,7 +20,7 @@ object FrameCounter {
     fun render() {
         val minecraft = MinecraftClient.getInstance()
 
-        if (!Celeritas.CONFIG.fpsOverlay) return
+        if (!Argentum.CONFIG.fpsOverlay) return
 
         val currentTime = System.nanoTime()
         val deltaTime = currentTime - lastFrameTime

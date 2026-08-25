@@ -6,8 +6,8 @@ import net.minecraft.client.texture.SpriteAtlasTexture
 import org.embeddedt.embeddium.impl.render.viewport.Viewport
 import org.embeddedt.embeddium.impl.render.viewport.frustum.SimpleFrustum
 import org.joml.Vector3d
-import org.taumc.celeritas.impl.render.terrain.CeleritasWorldRenderer
-import org.taumc.celeritas.impl.render.terrain.matrix.PrimitiveChunkMatrixGetter
+import dev.rdh.argentum.impl.render.terrain.CeleritasWorldRenderer
+import dev.rdh.argentum.impl.render.terrain.matrix.PrimitiveChunkMatrixGetter
 import re.lilith.kalia.platform.KaliaMod
 import re.lilith.kalia.rendering.world.WorldFrameState
 import re.lilith.kalia.rendering.world.WorldMaterial

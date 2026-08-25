@@ -4,7 +4,7 @@ import net.fabricmc.api.ClientModInitializer
 import net.fabricmc.loader.api.FabricLoader
 import org.apache.logging.log4j.LogManager
 import org.apache.logging.log4j.Logger
-import org.taumc.celeritas.impl.Celeritas
+import dev.rdh.argentum.impl.Argentum
 import re.lilith.kalia.renderer.Kalia
 
 class KaliaMod : ClientModInitializer {
@@ -13,7 +13,7 @@ class KaliaMod : ClientModInitializer {
             it.id.displayName
         })
 
-        Celeritas.onInitializeClient(
+        Argentum.onInitializeClient(
             FabricLoader.getInstance().getModContainer("kalia")
                 .get().metadata.version.friendlyString,
             FabricLoader.getInstance().configDir
