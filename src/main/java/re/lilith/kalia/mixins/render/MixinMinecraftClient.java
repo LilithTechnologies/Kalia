@@ -1,7 +1,6 @@
 package re.lilith.kalia.mixins.render;
 
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.option.GameOptions;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.texture.TextureManager;
 import org.spongepowered.asm.mixin.Mixin;
@@ -32,7 +31,7 @@ public abstract class MixinMinecraftClient {
 
     @Inject(method = "isFramerateValid", at = @At("HEAD"), cancellable = true)
     private void kalia$extendFramerateLimit(CallbackInfoReturnable<Boolean> callback) {
-        callback.setReturnValue(this.options.maxFramerate < (int) GameOptions.Option.MAX_FPS.getMaxValue());
+        callback.setReturnValue(this.options.maxFramerate < 1000);
     }
 
     @Inject(method = "loadLogo", at = @At("HEAD"), cancellable = true)
