@@ -35,7 +35,6 @@ object KaliaHooks  {
                 return
             }
             GuiBackgroundBlur.enabled = false
-            KaliaEngine.awaitExclusiveRender()
             WorldFrame.collect(FrameState.tickDelta)
 
             KaliaEngine.awaitRender()
@@ -53,6 +52,7 @@ object KaliaHooks  {
             GameFrameShape.capture()
             ScreenshotUtility.processScreenshots()
             KaliaEngine.submitFrame()
+            KaliaEngine.awaitExclusiveRender()
         } finally {
             WorldFrameTimings.markWallEnd()
             FrameAllocations.end()
