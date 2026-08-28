@@ -137,8 +137,38 @@ class PhysicalDevice internal constructor(
                 } else {
                     null
                 }
-            if (multiDrawFeatures != null || vulkan13Features != null || dynamicRenderingFeatures != null) {
+            // Ray tracing needs three extensions to line up before any of it is
+            // usable, so all of them are probed together and reported as one
+            // capability rather than three independent ones.
+            val rayTracingExtensions = apiVersion >= Version.V1_2 &&
+                    KHRAccelerationStructure.VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME in extensionNames &&
+                    KHRDeferredHostOperations.VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME in extensionNames
+            val accelerationStructureFeatures = if (rayTracingExtensions) {
+                VkPhysicalDeviceAccelerationStructureFeaturesKHR.calloc(stack)
+                    .sType(KHRAccelerationStructure.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR)
+            } else {
+                null
+            }
+            val rayQueryFeatures =
+                if (rayTracingExtensions && KHRRayQuery.VK_KHR_RAY_QUERY_EXTENSION_NAME in extensionNames) {
+                    VkPhysicalDeviceRayQueryFeaturesKHR.calloc(stack)
+                        .sType(KHRRayQuery.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR)
+                } else {
+                    null
+                }
+
+            if (multiDrawFeatures != null || vulkan13Features != null || dynamicRenderingFeatures != null ||
+                accelerationStructureFeatures != null
+            ) {
                 var next = 0L
+                if (rayQueryFeatures != null) {
+                    rayQueryFeatures.pNext(next)
+                    next = rayQueryFeatures.address()
+                }
+                if (accelerationStructureFeatures != null) {
+                    accelerationStructureFeatures.pNext(next)
+                    next = accelerationStructureFeatures.address()
+                }
                 if (dynamicRenderingFeatures != null) {
                     dynamicRenderingFeatures.pNext(next)
                     next = dynamicRenderingFeatures.address()
@@ -174,6 +204,8 @@ class PhysicalDevice internal constructor(
                     descriptorIndexingFeatures = descriptorIndexingFeatures,
                     dynamicRendering = vulkan13Features?.dynamicRendering() == true || dynamicRenderingFeatures?.dynamicRendering() == true,
                     multiDrawFeatures = multiDrawFeatures,
+                    accelerationStructureFeatures = accelerationStructureFeatures,
+                    rayQueryFeatures = rayQueryFeatures,
                 ),
                 memoryProperties = memoryProperties.toView(),
                 queueFamilies = queueFamilyProperties.toView(),
@@ -216,6 +248,8 @@ class PhysicalDevice internal constructor(
             descriptorIndexingFeatures: VkPhysicalDeviceDescriptorIndexingFeatures?,
             dynamicRendering: Boolean,
             multiDrawFeatures: VkPhysicalDeviceMultiDrawFeaturesEXT?,
+            accelerationStructureFeatures: VkPhysicalDeviceAccelerationStructureFeaturesKHR?,
+            rayQueryFeatures: VkPhysicalDeviceRayQueryFeaturesKHR?,
         ): DeviceFeatureSet = DeviceFeatureSet(
             robustBufferAccess = robustBufferAccess(),
             samplerAnisotropy = samplerAnisotropy(),
@@ -245,6 +279,9 @@ class PhysicalDevice internal constructor(
             imagelessFramebuffer = apiVersion >= Version.V1_2 || "VK_KHR_imageless_framebuffer" in extensionNames,
             pushDescriptors = KHRPushDescriptor.VK_KHR_PUSH_DESCRIPTOR_EXTENSION_NAME in extensionNames,
             multiDraw = multiDrawFeatures?.multiDraw() == true,
+            accelerationStructure = accelerationStructureFeatures?.accelerationStructure() == true,
+            rayQuery = accelerationStructureFeatures?.accelerationStructure() == true &&
+                    rayQueryFeatures?.rayQuery() == true,
         )
 
         private fun VkExtensionProperties.Buffer.toExtensionNames(): Set<String> = buildSet(capacity()) {

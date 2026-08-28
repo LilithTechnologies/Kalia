@@ -27,6 +27,12 @@ internal object LogicalDeviceMemory {
             .pVulkanFunctions(vulkanFunctions)
             .vulkanApiVersion(instance.config.applicationInfo.apiVersion.encoded)
 
+        // VMA has to know device addresses are in play up front, because it adds
+        // the usage bit to every internal allocation it makes on our behalf.
+        if (device.config.features.bufferDeviceAddress) {
+            createInfo.flags(Vma.VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT)
+        }
+
         val pointer = stack.mallocPointer(1)
         checkVulkanResult(Vma.vmaCreateAllocator(createInfo, pointer), "Creating VMA allocator")
         registrar.register(MemoryAllocator(device, pointer[0]))

@@ -61,6 +61,16 @@ public abstract class RenderSectionManager {
 
     private final RenderRegionManager regions;
 
+    /**
+     * {@return the regions holding every uploaded section mesh}
+     * <p>
+     * Exposed so a ray tracing backend can build acceleration structures over the
+     * same geometry the raster path draws, without keeping a second copy of it.
+     */
+    public RenderRegionManager getRegions() {
+        return this.regions;
+    }
+
     private final Long2ReferenceMap<RenderSection> sectionByPosition = new Long2ReferenceOpenHashMap<>();
 
     private final ConcurrentLinkedDeque<ChunkJobResult<? extends ChunkTaskOutput>> buildResults = new ConcurrentLinkedDeque<>();

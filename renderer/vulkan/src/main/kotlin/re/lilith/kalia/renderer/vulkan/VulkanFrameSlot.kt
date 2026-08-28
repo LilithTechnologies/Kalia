@@ -116,12 +116,18 @@ internal class VulkanFrameSlot(
             descriptorPool = context.device.createDescriptorPool(
                 DescriptorPoolConfig(
                     maxSets = MAX_SETS_PER_FRAME,
-                    poolSizes = listOf(
-                        DescriptorPoolSize(DescriptorType.CombinedImageSampler, MAX_SETS_PER_FRAME * 12),
-                        DescriptorPoolSize(DescriptorType.UniformBuffer, MAX_SETS_PER_FRAME),
-                        DescriptorPoolSize(DescriptorType.UniformBufferDynamic, MAX_SETS_PER_FRAME),
-                        DescriptorPoolSize(DescriptorType.StorageBuffer, MAX_SETS_PER_FRAME),
-                    ),
+                    poolSizes = buildList {
+                        add(DescriptorPoolSize(DescriptorType.CombinedImageSampler, MAX_SETS_PER_FRAME * 12))
+                        add(DescriptorPoolSize(DescriptorType.UniformBuffer, MAX_SETS_PER_FRAME))
+                        add(DescriptorPoolSize(DescriptorType.UniformBufferDynamic, MAX_SETS_PER_FRAME))
+                        add(DescriptorPoolSize(DescriptorType.StorageBuffer, MAX_SETS_PER_FRAME))
+                        // Asking for a descriptor type the device does not
+                        // implement is invalid, so this only appears once the
+                        // ray tracing extensions are actually enabled.
+                        if (context.device.config.features.rayQuery) {
+                            add(DescriptorPoolSize(DescriptorType.AccelerationStructure, MAX_SETS_PER_FRAME))
+                        }
+                    },
                 ),
             ),
             transferPool = context.transferCommandPool,

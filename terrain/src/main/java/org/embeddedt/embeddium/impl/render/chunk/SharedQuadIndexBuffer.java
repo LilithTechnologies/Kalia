@@ -41,8 +41,11 @@ public class SharedQuadIndexBuffer {
             this.buffer.close();
         }
 
+        // Every unsorted section indexes into this one buffer, so it is also the
+        // index source for their acceleration structures.
         this.buffer = device.createBuffer(new BufferDescription("shared-quad-index", bufferSize, BufferUsage.STATIC,
-                /* vertex */ false, /* index */ true, /* uniform */ false, /* indirect */ false, /* transfer */ false));
+                /* vertex */ false, /* index */ true, /* uniform */ false, /* indirect */ false, /* transfer */ false,
+                /* rayTracingInput */ device.getCapabilities().getSupportsRayTracing()));
         this.buffer.write(data);
 
         this.maxPrimitives = primitiveCount;

@@ -2,6 +2,7 @@ package re.lilith.kalia.renderer.device
 
 import re.lilith.kalia.renderer.command.MultiDrawLayout
 
+import re.lilith.kalia.renderer.accel.RayTracingSupport
 import re.lilith.kalia.renderer.command.ComputeEncoder
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.geometry.Extent
@@ -115,6 +116,22 @@ interface RenderDevice : AutoCloseable {
     fun compute(body: (ComputeEncoder) -> Unit) {
         throw UnsupportedOperationException("This backend does not support compute.")
     }
+
+    /**
+     * Hardware ray tracing, or `null` when the adapter cannot do it. Non-null
+     * exactly when [DeviceCapabilities.supportsRayTracing] is set.
+     */
+    val rayTracing: RayTracingSupport? get() = null
+
+    /**
+     * The device address of [buffer], for shaders that dereference it directly.
+     *
+     * Only valid for buffers created with
+     * [re.lilith.kalia.renderer.resource.BufferDescription.rayTracingInput] on a
+     * device reporting [DeviceCapabilities.supportsBufferAddresses].
+     */
+    fun bufferAddress(buffer: GpuBuffer): Long =
+        throw UnsupportedOperationException("This backend does not expose buffer addresses.")
 
     /**
      * The frame slot the next [render] will record into, in `0 until [DeviceCapabilities.framesInFlight]`.

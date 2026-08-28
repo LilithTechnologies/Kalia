@@ -177,6 +177,7 @@ internal object Convert {
         BindingKind.UNIFORM_BUFFER -> DescriptorType.UniformBuffer
         BindingKind.UNIFORM_BUFFER_DYNAMIC -> DescriptorType.UniformBufferDynamic
         BindingKind.STORAGE_BUFFER -> DescriptorType.StorageBuffer
+        BindingKind.ACCELERATION_STRUCTURE -> DescriptorType.AccelerationStructure
     }
 
     fun shaderStage(stage: ShaderStage): re.lilith.vulkan.api.pipeline.ShaderStage = when (stage) {
@@ -194,13 +195,22 @@ internal object Convert {
             }
         }
 
-    fun bufferUsage(description: BufferDescription): BufferUsage {
+    fun bufferUsage(description: BufferDescription, rayTracing: Boolean = false): BufferUsage {
         var usage = BufferUsage.None
         if (description.vertex) usage += BufferUsage.VertexBuffer
         if (description.index) usage += BufferUsage.IndexBuffer
         if (description.uniform) usage += BufferUsage.UniformBuffer
         if (description.indirect) usage += BufferUsage.IndirectBuffer
         if (description.usage == re.lilith.kalia.renderer.resource.BufferUsage.STORAGE) {
+            usage += BufferUsage.StorageBuffer
+        }
+        // Requesting the address bit on a device without the feature enabled is
+        // invalid usage, so the caller decides whether ray tracing is live.
+        if (rayTracing && description.rayTracingInput) {
+            usage += BufferUsage.ShaderDeviceAddress
+            usage += BufferUsage.AccelerationStructureBuildInput
+            // Vertex data is read through buffer_reference when shading a hit,
+            // which the storage bit covers.
             usage += BufferUsage.StorageBuffer
         }
         usage += BufferUsage.TransferSource

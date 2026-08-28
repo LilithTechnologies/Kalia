@@ -1,5 +1,6 @@
 package re.lilith.kalia.renderer.command
 
+import re.lilith.kalia.renderer.accel.GpuAccelerationStructure
 import re.lilith.kalia.renderer.format.IndexFormat
 import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.geometry.Extent
@@ -86,6 +87,16 @@ interface PassEncoder {
      * @param sizeBytes Size of the bound range in bytes.
      */
     fun bindStorageBuffer(binding: Int, buffer: GpuBuffer, offsetBytes: Long = 0L, sizeBytes: Long = buffer.sizeBytes)
+
+    /**
+     * Binds a traceable scene to a shader binding slot.
+     *
+     * @param binding The shader binding index.
+     * @param structure The top-level structure rays are traced against.
+     */
+    fun bindAccelerationStructure(binding: Int, structure: GpuAccelerationStructure) {
+        throw UnsupportedOperationException("This backend does not support ray tracing.")
+    }
 
     /**
      * Uploads push constant data for subsequent shader invocations.

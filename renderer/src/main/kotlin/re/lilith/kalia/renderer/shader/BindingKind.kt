@@ -20,4 +20,11 @@ enum class BindingKind {
      * A storage block, `layout(binding = n) buffer Block { ... }`
      */
     STORAGE_BUFFER,
+
+    /**
+     * A traceable scene, `layout(binding = n) uniform accelerationStructureEXT`.
+     * Only usable when the device reports
+     * [re.lilith.kalia.renderer.device.DeviceCapabilities.supportsRayTracing].
+     */
+    ACCELERATION_STRUCTURE,
 }

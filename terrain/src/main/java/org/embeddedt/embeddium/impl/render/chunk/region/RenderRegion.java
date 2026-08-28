@@ -169,6 +169,7 @@ public class RenderRegion {
         for (var storage : this.sectionRenderData.values()) {
             storage.removeMeshes(sectionIndex);
         }
+        RenderRegionManager.invalidateGeometry();
     }
 
     public boolean hasSectionsInPass(TerrainRenderPass pass) {
@@ -183,6 +184,9 @@ public class RenderRegion {
         for (var storage : this.sectionRenderData.values()) {
             storage.onBufferResized();
         }
+        // A resize moves every segment in the arena and may replace the buffer,
+        // so anything holding onto addresses into it is now stale.
+        RenderRegionManager.invalidateGeometry();
     }
 
     public void addSection(RenderSection section) {

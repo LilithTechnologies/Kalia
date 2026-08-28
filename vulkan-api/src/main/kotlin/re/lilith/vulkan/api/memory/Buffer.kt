@@ -3,7 +3,11 @@ package re.lilith.vulkan.api.memory
 import org.lwjgl.system.MemoryUtil
 import org.lwjgl.util.vma.Vma
 import org.lwjgl.vulkan.VK10
+import org.lwjgl.vulkan.VK12
+import org.lwjgl.vulkan.VkBufferDeviceAddressInfo
 import re.lilith.vulkan.api.device.LogicalDevice
+import re.lilith.vulkan.api.internal.vk.VulkanConstants
+import re.lilith.vulkan.api.qol.pushStack
 import re.lilith.vulkan.api.resource.VulkanResource
 import java.nio.ByteBuffer
 
@@ -22,6 +26,24 @@ class Buffer internal constructor(
     /** Whether this buffer was created with a persistent host mapping. */
     val isMapped: Boolean
         get() = mappedAddress != 0L
+
+    /**
+     * The GPU virtual address of this buffer, for shaders that dereference it
+     * through `buffer_reference` and for acceleration structure builds.
+     *
+     * The buffer must have been created with [BufferUsage.ShaderDeviceAddress].
+     */
+    val deviceAddress: Long by lazy {
+        require(config.usage.vkBits and VulkanConstants.BufferUsages.shaderDeviceAddress != 0) {
+            "Buffer was not created with BufferUsage.ShaderDeviceAddress, so it has no device address."
+        }
+        pushStack { stack ->
+            val info = VkBufferDeviceAddressInfo.calloc(stack)
+                .sType(VK12.VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO)
+                .buffer(handle)
+            VK12.vkGetBufferDeviceAddress(device.handle, info)
+        }
+    }
 
     /**
      * Returns a [ByteBuffer] view over the persistent host mapping for `[offset, offset + size)`.

@@ -66,6 +66,18 @@ data class DeviceCapabilities(
     val supportsCompute: Boolean = false,
 
     /**
+     * Whether acceleration structures can be built and traced from ordinary
+     * graphics stages, which is what gates [re.lilith.kalia.renderer.device.RenderDevice.rayTracing].
+     */
+    val supportsRayTracing: Boolean = false,
+
+    /**
+     * Whether shaders may dereference 64-bit buffer addresses, which a ray hit
+     * needs in order to read the vertex data of whatever it struck.
+     */
+    val supportsBufferAddresses: Boolean = false,
+
+    /**
      * Whether the backend can sample from a runtime-sized texture array indexed per instance,
      * which is what lets draws that differ only by texture merge into one.
      */

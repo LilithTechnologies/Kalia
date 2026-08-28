@@ -2,6 +2,9 @@ package re.lilith.kalia.frame
 
 import re.lilith.kalia.frame.graph.aa.FxaaMode
 import re.lilith.kalia.frame.graph.aa.WorldResolveRenderer
+import re.lilith.kalia.frame.graph.rt.RayTracingFrame
+import re.lilith.kalia.frame.graph.rt.RayTracingGraph
+import re.lilith.kalia.frame.graph.rt.RayTracingPasses
 import re.lilith.kalia.renderer.device.RenderDevice
 import re.lilith.kalia.renderer.format.TextureFormat
 import re.lilith.kalia.renderer.geometry.Color
@@ -29,7 +32,10 @@ object GameFrameGraph {
         val scene = texture("scene", sceneFormat)
 
         val worldScale = GameFrameShape.worldDownscale
-        val directRender = GameFrameShape.fxaaMode == FxaaMode.OFF && worldScale == 1f
+        // Tracing composites into a separate target, so the world can no longer
+        // be rendered straight into the scene texture.
+        val traced = RayTracingFrame.enabled && RayTracingGraph.isSupported(device)
+        val directRender = !traced && GameFrameShape.fxaaMode == FxaaMode.OFF && worldScale == 1f
 
         val depth = depthTexture("depth", sceneDepthFormat(device))
 
@@ -54,25 +60,89 @@ object GameFrameGraph {
                 }
             }
 
-            pass("world") {
-                color(worldColorTarget, clear = clearColor)
-                depth(worldDepthTarget, clear = 1f)
-                // Keeps the lightmap pass alive and transitions it back for sampling
-                lightmap?.let(::reads)
-                draw { WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) { WorldFrame.draw(this) } }
+            if (!traced) {
+                pass("world") {
+                    color(worldColorTarget, clear = clearColor)
+                    depth(worldDepthTarget, clear = 1f)
+                    // Keeps the lightmap pass alive and transitions it back for sampling
+                    lightmap?.let(::reads)
+                    draw { WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) { WorldFrame.draw(this) } }
+                }
+            } else {
+                // Terrain is rasterised into a geometry buffer rather than a
+                // finished image, so the tracer can light it from real sources
+                // instead of Minecraft's baked light map.
+                val worldSizing = TextureSizing.RelativeToBackbuffer(worldScale)
+                val albedo = texture("world-albedo", RayTracingGraph.GBUFFER_FORMATS[0], worldSizing)
+                val gbufferSurface = texture("world-surface", RayTracingGraph.GBUFFER_FORMATS[1], worldSizing)
+
+                // The sky writes colour but no depth, so it sits behind everything
+                // and the lighting pass leaves it alone.
+                pass("world/sky") {
+                    color(worldColorTarget, clear = clearColor)
+                    depth(worldDepthTarget, clear = 1f)
+                    lightmap?.let(::reads)
+                    draw { WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) { WorldFrame.drawSky(this) } }
+                }
+
+                pass("world/gbuffer") {
+                    color(albedo, clear = Color.TRANSPARENT)
+                    color(gbufferSurface, clear = Color.TRANSPARENT)
+                    depth(worldDepthTarget, load = LoadOp.LOAD)
+                    lightmap?.let(::reads)
+                    draw { WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) { WorldFrame.drawTerrain(this) } }
+                }
+
+                val litByTracing = RayTracingGraph.attach(
+                    builder = this,
+                    device = device,
+                    albedo = albedo,
+                    gbufferSurface = gbufferSurface,
+                    depth = worldDepthTarget,
+                    lit = worldColorTarget,
+                    worldExtent = device.surfaceExtent.scaled(worldScale),
+                )
+
+                if (!litByTracing) {
+                    // The scene is not traceable yet, which happens while a world
+                    // streams in. Terrain still has to be lit by something, or it
+                    // would not appear at all.
+                    pass("world/gbuffer-resolve") {
+                        color(worldColorTarget, load = LoadOp.LOAD)
+                        reads(setOf(albedo, gbufferSurface, worldDepthTarget))
+                        draw {
+                            RayTracingPasses.fallback(this, albedo, gbufferSurface, worldDepthTarget)
+                        }
+                    }
+                }
+
+                // Everything blended or overlaid composites over the lit image,
+                // the way a forward pass does in any deferred renderer.
+                pass("world/forward") {
+                    color(worldColorTarget, load = LoadOp.LOAD)
+                    depth(worldDepthTarget, load = LoadOp.LOAD)
+                    lightmap?.let(::reads)
+                    draw {
+                        WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) {
+                            WorldFrame.drawForward(this)
+                        }
+                    }
+                }
             }
 
             if (!directRender) {
+                val resolveSource = worldColorTarget
+
                 pass("world/resolve") {
                     color(scene, clear = clearColor)
                     depth(depth, clear = 1f)
 
-                    reads(setOf(worldColorTarget, worldDepthTarget))
+                    reads(setOf(resolveSource, worldDepthTarget))
 
                     draw {
                         WorldResolveRenderer.render(
                             this,
-                            worldColorTarget,
+                            resolveSource,
                             GameFrameShape.fxaaMode,
                             GameFrameShape.upscaleMode,
                             GameFrameShape.upscaleSharpness,

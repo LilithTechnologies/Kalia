@@ -274,7 +274,175 @@ final class CeleritasOptionPages {
                 .build();
 
         return new OptionPage(StandardOptions.Pages.QUALITY, text("pages.quality"),
-                List.of(graphics, details, antiAliasing));
+                List.of(graphics, details, antiAliasing, rayTracing()));
+    }
+
+    private static OptionGroup rayTracing() {
+        // Every control below is inert without an adapter that can trace, so the
+        // whole group greys out rather than silently doing nothing.
+        java.util.function.BooleanSupplier supported = () -> IHooks.INSTANCE.isRayTracingSupported();
+        java.util.function.BooleanSupplier active =
+                () -> IHooks.INSTANCE.isRayTracingSupported() && IHooks.INSTANCE.isRayTracingEnabled();
+
+        return OptionGroup.createBuilder()
+                .setId(OptionIdentifier.create("kalia", "ray_tracing"))
+                .add(OptionImpl.createBuilder(boolean.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing"))
+                        .setName(text("ray_tracing.name"))
+                        .setTooltip(rayTracingTooltip())
+                        .setControl(TickBoxControl::new)
+                        .setBinding((config, value) -> {
+                            IHooks.INSTANCE.setRayTracingEnabled(value);
+                            // Acceleration structures read chunk positions in
+                            // place as plain floats. The compact format packs
+                            // them into scaled shorts, which cannot be traced, so
+                            // turning tracing on switches the mesh format with it.
+                            if (value) {
+                                config.compactVertexFormat = false;
+                            }
+                        }, config -> IHooks.INSTANCE.isRayTracingEnabled())
+                        .setImpact(OptionImpact.HIGH)
+                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        .setEnabledPredicate(supported)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_quality"))
+                        .setName(text("ray_tracing_quality.name"))
+                        .setTooltip(text("ray_tracing_quality.tooltip"))
+                        .setControl(option -> new CyclingControl<>(option,
+                                new Integer[]{0, 1, 2, 3}, values("performance", "balanced", "quality", "ultra")))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracingQuality(value),
+                                config -> IHooks.INSTANCE.getRayTracingQuality())
+                        .setImpact(OptionImpact.HIGH)
+                        .setEnabledPredicate(active)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_scale"))
+                        .setName(text("ray_tracing_scale.name"))
+                        .setTooltip(text("ray_tracing_scale.tooltip"))
+                        .setControl(option -> new CyclingControl<>(option,
+                                new Integer[]{0, 1, 2, 3}, values("quarter", "half", "three_quarter", "full")))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracingScale(value),
+                                config -> IHooks.INSTANCE.getRayTracingScale())
+                        .setImpact(OptionImpact.HIGH)
+                        .setEnabledPredicate(active)
+                        .build())
+                .add(percentage("ray_tracing_sun", 0, 400, OptionImpact.LOW, active,
+                        IHooks.INSTANCE::setRayTracingSun, IHooks.INSTANCE::getRayTracingSun))
+                .add(percentage("ray_tracing_sky_ambient", 0, 300, OptionImpact.LOW, active,
+                        IHooks.INSTANCE::setRayTracingSkyAmbient, IHooks.INSTANCE::getRayTracingSkyAmbient))
+                .add(percentage("ray_tracing_block_light", 0, 300, OptionImpact.LOW, active,
+                        IHooks.INSTANCE::setRayTracingBlockLight, IHooks.INSTANCE::getRayTracingBlockLight))
+                .add(percentage("ray_tracing_exposure", 25, 400, OptionImpact.LOW, active,
+                        IHooks.INSTANCE::setRayTracingExposure, IHooks.INSTANCE::getRayTracingExposure))
+                .add(percentage("ray_tracing_indirect", 0, 300, OptionImpact.LOW, active,
+                        IHooks.INSTANCE::setRayTracingIndirect, IHooks.INSTANCE::getRayTracingIndirect))
+                .add(percentage("ray_tracing_occlusion", 0, 100, OptionImpact.LOW, active,
+                        IHooks.INSTANCE::setRayTracingOcclusion, IHooks.INSTANCE::getRayTracingOcclusion))
+                .add(percentage("ray_tracing_sky_light", 0, 200, OptionImpact.LOW, active,
+                        IHooks.INSTANCE::setRayTracingSkyLight, IHooks.INSTANCE::getRayTracingSkyLight))
+                .add(percentage("ray_tracing_emissive", 0, 400, OptionImpact.LOW, active,
+                        IHooks.INSTANCE::setRayTracingEmissive, IHooks.INSTANCE::getRayTracingEmissive))
+                .add(OptionImpl.createBuilder(boolean.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_reflections"))
+                        .setName(text("ray_tracing_reflections.name"))
+                        .setTooltip(text("ray_tracing_reflections.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracedReflections(value),
+                                config -> IHooks.INSTANCE.isRayTracedReflections())
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setEnabledPredicate(active)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_denoiser"))
+                        .setName(text("ray_tracing_denoiser.name"))
+                        .setTooltip(text("ray_tracing_denoiser.tooltip"))
+                        .setControl(option -> new CyclingControl<>(option,
+                                new Integer[]{0, 1, 2}, values("off", "temporal", "full")))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracingDenoiser(value),
+                                config -> IHooks.INSTANCE.getRayTracingDenoiser())
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setEnabledPredicate(active)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_filter"))
+                        .setName(text("ray_tracing_filter.name"))
+                        .setTooltip(text("ray_tracing_filter.tooltip"))
+                        .setControl(option -> new SliderControl(option, 0, 5, 1, ControlValueFormatter.number()))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracingFilterIterations(value),
+                                config -> IHooks.INSTANCE.getRayTracingFilterIterations())
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setEnabledPredicate(active)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_accumulation"))
+                        .setName(text("ray_tracing_accumulation.name"))
+                        .setTooltip(text("ray_tracing_accumulation.tooltip"))
+                        .setControl(option -> new SliderControl(option, 4, 128, 4,
+                                value -> text("ray_tracing_accumulation.value", value)))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracingAccumulation(value),
+                                config -> IHooks.INSTANCE.getRayTracingAccumulation())
+                        .setImpact(OptionImpact.LOW)
+                        .setEnabledPredicate(active)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_radius"))
+                        .setName(text("ray_tracing_radius.name"))
+                        .setTooltip(text("ray_tracing_radius.tooltip"))
+                        .setControl(option -> new SliderControl(option, 2, 24, 1,
+                                value -> vanilla("options.chunks", value)))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracingSceneRadius(value),
+                                config -> IHooks.INSTANCE.getRayTracingSceneRadius())
+                        .setImpact(OptionImpact.HIGH)
+                        .setEnabledPredicate(active)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_budget"))
+                        .setName(text("ray_tracing_budget.name"))
+                        .setTooltip(text("ray_tracing_budget.tooltip"))
+                        .setControl(option -> new SliderControl(option, 1, 64, 1, ControlValueFormatter.number()))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracingBuildBudget(value),
+                                config -> IHooks.INSTANCE.getRayTracingBuildBudget())
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setEnabledPredicate(active)
+                        .build())
+                .add(OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                        .setId(id("ray_tracing_debug"))
+                        .setName(text("ray_tracing_debug.name"))
+                        .setTooltip(text("ray_tracing_debug.tooltip"))
+                        .setControl(option -> new CyclingControl<>(option,
+                                new Integer[]{0, 1, 2, 3, 4, 5, 6, 7},
+                                values("off", "indirect", "occlusion", "reflections", "normals", "variance",
+                                        "history", "instances")))
+                        .setBinding((config, value) -> IHooks.INSTANCE.setRayTracingDebugView(value),
+                                config -> IHooks.INSTANCE.getRayTracingDebugView())
+                        .setImpact(OptionImpact.LOW)
+                        .setEnabledPredicate(active)
+                        .build())
+                .build();
+    }
+
+    private static TextComponent rayTracingTooltip() {
+        String status = IHooks.INSTANCE.getRayTracingStatus();
+        return status.isEmpty()
+                ? text("ray_tracing.tooltip")
+                : TextComponent.literal(status);
+    }
+
+    private static OptionImpl<ArgentumConfig, Integer> percentage(String id, int minimum, int maximum,
+                                                                  OptionImpact impact,
+                                                                  java.util.function.BooleanSupplier enabled,
+                                                                  java.util.function.IntConsumer setter,
+                                                                  java.util.function.IntSupplier getter) {
+        return OptionImpl.createBuilder(int.class, CONFIG_STORAGE)
+                .setId(id(id))
+                .setName(text(id + ".name"))
+                .setTooltip(text(id + ".tooltip"))
+                .setControl(option -> new SliderControl(option, minimum, maximum, 5, ControlValueFormatter.percentage()))
+                .setBinding((config, value) -> setter.accept(value), config -> getter.getAsInt())
+                .setImpact(impact)
+                .setEnabledPredicate(enabled)
+                .build();
     }
 
     static OptionPage performance() {
@@ -337,10 +505,19 @@ final class CeleritasOptionPages {
                 .add(toggle("safe_chunk_edges", OptionImpact.LOW,
                         (config, value) -> config.safeChunkEdges = value, config -> config.safeChunkEdges,
                         OptionFlag.REQUIRES_RENDERER_RELOAD))
-                .add(toggle(StandardOptions.Option.COMPACT_VERTEX_FORMAT,
-                        "sodium.options.use_compact_vertex_format", OptionImpact.MEDIUM,
-                        (config, value) -> config.compactVertexFormat = value, config -> config.compactVertexFormat,
-                        OptionFlag.REQUIRES_RENDERER_RELOAD))
+                .add(OptionImpl.createBuilder(boolean.class, CONFIG_STORAGE)
+                        .setId(StandardOptions.Option.COMPACT_VERTEX_FORMAT.cast())
+                        .setName(TextComponent.translatable("sodium.options.use_compact_vertex_format.name"))
+                        .setTooltip(TextComponent.translatable("sodium.options.use_compact_vertex_format.tooltip"))
+                        .setControl(TickBoxControl::new)
+                        .setBinding((config, value) -> config.compactVertexFormat = value,
+                                config -> config.compactVertexFormat)
+                        .setImpact(OptionImpact.MEDIUM)
+                        .setFlags(OptionFlag.REQUIRES_RENDERER_RELOAD)
+                        // Ray tracing needs float positions it can read in place,
+                        // which this format does not provide.
+                        .setEnabledPredicate(() -> !IHooks.INSTANCE.isRayTracingEnabled())
+                        .build())
                 .build();
 
         return new OptionPage(StandardOptions.Pages.PERFORMANCE, text("pages.performance"),

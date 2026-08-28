@@ -87,6 +87,11 @@ internal object VulkanConstants {
         const val indexBuffer: Int = VK10.VK_BUFFER_USAGE_INDEX_BUFFER_BIT
         const val vertexBuffer: Int = VK10.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
         const val indirectBuffer: Int = VK10.VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT
+        const val shaderDeviceAddress: Int = VK12.VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT
+        const val accelerationStructureBuildInput: Int =
+            KHRAccelerationStructure.VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR
+        const val accelerationStructureStorage: Int =
+            KHRAccelerationStructure.VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR
     }
 
     object ImageUsages {

@@ -121,6 +121,24 @@ public class SectionRenderDataStorage {
         this.storageStrategy.rebase(data, vertexOffset, indexOffset, this.primitiveType);
     }
 
+    /**
+     * {@return the arena segment holding a section's vertices, or null when it has no mesh}
+     * <p>
+     * The segment's offset and length are counted in vertices, which is what an
+     * acceleration structure build needs in order to point at the section's
+     * geometry in place.
+     */
+    public @Nullable BufferSegment getAllocation(int sectionIndex) {
+        return this.allocations[sectionIndex];
+    }
+
+    /**
+     * {@return the arena segment holding a section's sorted indices, or null when the section draws from a shared index buffer}
+     */
+    public @Nullable BufferSegment getIndexAllocation(int sectionIndex) {
+        return this.indexAllocations[sectionIndex];
+    }
+
     public long getDataPointer(int sectionIndex) {
         return this.storageStrategy.heapPointer(this.pMeshDataArray, sectionIndex);
     }

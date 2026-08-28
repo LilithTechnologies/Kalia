@@ -104,6 +104,19 @@ public class TerrainRenderPass {
         return this.useTranslucencySorting;
     }
 
+    /**
+     * {@return whether this pass draws see-through geometry}
+     * <p>
+     * Unlike {@link #isSorted()} this does not depend on whether translucency
+     * sorting happens to be enabled, so it is the reliable way to tell solid
+     * geometry from blended geometry. Anything that has to treat the two
+     * differently, such as a deferred renderer deciding what may write a geometry
+     * buffer, has to ask this rather than that.
+     */
+    public boolean isBlended() {
+        return this.blend.getEnabled();
+    }
+
     public boolean hasNoLightmap() {
         return this.hasNoLightmap;
     }

@@ -8,6 +8,10 @@ import re.lilith.kalia.frame.graph.BatchStats
 import re.lilith.kalia.gl.FfpStats
 import re.lilith.kalia.frame.graph.occlusion.EntityOcclusion
 import re.lilith.kalia.frame.graph.EntityPoseStats
+import re.lilith.kalia.frame.graph.rt.RayTracingFrame
+import re.lilith.kalia.frame.graph.rt.RayTracingScene
+import re.lilith.kalia.frame.graph.rt.RayTracingSettings
+import re.lilith.kalia.renderer.device.DeviceCapabilities
 import re.lilith.kalia.shader.PipelineCache
 import re.lilith.kalia.renderer.device.RenderStats
 import re.lilith.kalia.rendering.ui.GuiLayer
@@ -35,6 +39,27 @@ object KaliaDebugHud {
     private val lines = ArrayList<String>()
     private val builder = StringBuilder()
 
+    /**
+     * Says in one line whether the ray tracer is doing anything, and if not, why.
+     * Without it the only symptom of a scene that failed to build is an image that
+     * looks exactly like an untraced one.
+     */
+    private fun rayTracingLine(capabilities: DeviceCapabilities?): String {
+        if (capabilities?.supportsRayTracing != true) {
+            return "rt unsupported (needs Vulkan ray query)"
+        }
+        if (!RayTracingSettings.enabled) {
+            return "rt off"
+        }
+        val instances = RayTracingScene.instanceCount
+        return "rt ${RayTracingFrame.quality.name.lowercase()}" +
+            "  ${RayTracingFrame.traceScale.name.lowercase()} res" +
+            "  sections $instances" +
+            (if (RayTracingScene.pendingSections > 0) " (+${RayTracingScene.pendingSections} pending)" else "") +
+            "  structures ${bytes(RayTracingScene.structureBytes.toDouble())}" +
+            (if (instances == 0) "  NOTHING TRACEABLE" else "")
+    }
+
     private fun buildDiagnostics(): List<String> {
         lines.clear()
 
@@ -53,6 +78,8 @@ object KaliaDebugHud {
             "  encode ${millis(WorldFrameTimings.encodeMillis)}"
         lines += "gpu wait ${millis(WorldFrameTimings.gpuWaitMillis)}ms" +
             if (FrameAllocations.isSupported) "  alloc ${bytes(FrameAllocations.bytesPerFrame)}/frame" else ""
+
+        lines += rayTracingLine(capabilities)
 
         appendMetrics(WorldFrameTimings.stageCount, WorldFrameTimings::stageName, WorldFrameTimings::stageMillis)
         appendMetrics(WorldFrameTimings.partCount, WorldFrameTimings::partName, WorldFrameTimings::partMillis)

@@ -17,6 +17,17 @@ value class BufferUsage internal constructor(internal val vkBits: Int) {
         val IndexBuffer = BufferUsage(VulkanConstants.BufferUsages.indexBuffer)
         val VertexBuffer = BufferUsage(VulkanConstants.BufferUsages.vertexBuffer)
         val IndirectBuffer = BufferUsage(VulkanConstants.BufferUsages.indirectBuffer)
+
+        /** Required before [re.lilith.vulkan.api.memory.Buffer.deviceAddress] may be taken. */
+        val ShaderDeviceAddress = BufferUsage(VulkanConstants.BufferUsages.shaderDeviceAddress)
+
+        /** Marks vertex, index and instance data an acceleration structure build reads. */
+        val AccelerationStructureBuildInput =
+            BufferUsage(VulkanConstants.BufferUsages.accelerationStructureBuildInput)
+
+        /** Backing storage an acceleration structure is created on top of. */
+        val AccelerationStructureStorage =
+            BufferUsage(VulkanConstants.BufferUsages.accelerationStructureStorage)
     }
 }
 

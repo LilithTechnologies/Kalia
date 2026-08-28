@@ -150,6 +150,48 @@ internal object LogicalDeviceFactory {
             null
         }
 
+        var chainHead = when {
+            featureMultiDraw != null -> featureMultiDraw.address()
+            feature13 != null -> feature13.address()
+            dynamicRenderingFeatures != null -> dynamicRenderingFeatures.address()
+            feature12 != null -> feature12.address()
+            feature11 != null -> feature11.address()
+            else -> 0L
+        }
+
+        if (config.features.accelerationStructure) {
+            require(
+                KHRAccelerationStructure.VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME in config.enabledExtensions &&
+                        KHRDeferredHostOperations.VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME in config.enabledExtensions,
+            ) {
+                "VK_KHR_acceleration_structure and VK_KHR_deferred_host_operations must both be enabled " +
+                        "when the accelerationStructure feature is requested."
+            }
+            require(config.features.bufferDeviceAddress) {
+                "Acceleration structures read their inputs through device addresses, so bufferDeviceAddress " +
+                        "must be requested alongside them."
+            }
+            chainHead = VkPhysicalDeviceAccelerationStructureFeaturesKHR.calloc(stack)
+                .sType(KHRAccelerationStructure.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR)
+                .accelerationStructure(true)
+                .pNext(chainHead)
+                .address()
+        }
+
+        if (config.features.rayQuery) {
+            require(config.features.accelerationStructure) {
+                "rayQuery has nothing to trace without the accelerationStructure feature."
+            }
+            require(KHRRayQuery.VK_KHR_RAY_QUERY_EXTENSION_NAME in config.enabledExtensions) {
+                "VK_KHR_ray_query must be enabled when the rayQuery feature is requested."
+            }
+            chainHead = VkPhysicalDeviceRayQueryFeaturesKHR.calloc(stack)
+                .sType(KHRRayQuery.VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR)
+                .rayQuery(true)
+                .pNext(chainHead)
+                .address()
+        }
+
         val createInfo = VkDeviceCreateInfo.calloc(stack)
             .sType(VK10.VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO)
             .pQueueCreateInfos(queueCreateInfos)
@@ -157,14 +199,7 @@ internal object LogicalDeviceFactory {
                 if (config.enabledExtensions.isEmpty()) null else stack.pointerBufferOf(config.enabledExtensions),
             )
             .pEnabledFeatures(coreFeatures)
-
-        when {
-            featureMultiDraw != null -> createInfo.pNext(featureMultiDraw.address())
-            feature13 != null -> createInfo.pNext(feature13.address())
-            dynamicRenderingFeatures != null -> createInfo.pNext(dynamicRenderingFeatures.address())
-            feature12 != null -> createInfo.pNext(feature12.address())
-            feature11 != null -> createInfo.pNext(feature11.address())
-        }
+            .pNext(chainHead)
 
         val pointer = stack.mallocPointer(1)
         checkVulkanResult(

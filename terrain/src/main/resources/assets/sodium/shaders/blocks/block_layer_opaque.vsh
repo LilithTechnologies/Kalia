@@ -9,6 +9,14 @@
 layout(location = 0) out vec4 v_Color;
 layout(location = 1) out vec2 v_TexCoord;
 
+#ifdef KALIA_GBUFFER
+// The light coordinate stays raw so the lighting pass can decide what block and
+// sky light mean, and the world position lets the fragment stage recover an exact
+// geometric normal from its own derivatives.
+layout(location = 8) out vec2 v_LightCoord;
+layout(location = 9) out vec3 v_WorldPos;
+#endif
+
 #if defined(USE_FOG) && defined(CHUNK_FADE_IN_DURATION_MS) && CHUNK_FADE_IN_DURATION_MS > 0
 layout(location = 2) out float v_ChunkAgeMs;
 #endif
@@ -58,7 +66,14 @@ void main() {
     gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * vec4(position, 1.0);
 
     // Add the light color to the vertex color, and pass the texture coordinates to the fragment shader
-#ifdef CELERITAS_NO_LIGHTMAP
+#if defined(KALIA_GBUFFER)
+    // Baking the light map into the colour here is exactly what a geometry buffer
+    // must not do: the surface has to arrive downstream as albedo so it can be lit
+    // by real sources instead.
+    v_Color = _vert_color;
+    v_LightCoord = vec2(_vert_tex_light_coord);
+    v_WorldPos = position;
+#elif defined(CELERITAS_NO_LIGHTMAP)
     v_Color = _vert_color;
 #else
     v_Color = _vert_color * _sample_lightmap(u_LightTex, _vert_tex_light_coord);

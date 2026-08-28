@@ -101,8 +101,12 @@ public abstract class ShaderChunkRenderer implements ChunkRenderer {
                 PUSH_CONSTANT_BYTES
         );
 
+        // Only solid geometry becomes a geometry buffer. Blended passes draw over
+        // the finished image in a forward pass, which has a single attachment.
         AttachmentLayout attachments = new AttachmentLayout(
-                List.of(KaliaAccess.INSTANCE.sceneColorFormat()),
+                options.usesGeometryBuffer()
+                        ? KaliaAccess.INSTANCE.worldColorFormats()
+                        : List.of(KaliaAccess.INSTANCE.sceneColorFormat()),
                 KaliaAccess.INSTANCE.sceneDepthFormat());
 
         GpuPipeline pipeline = this.device.createPipeline(new GraphicsPipelineDescription(

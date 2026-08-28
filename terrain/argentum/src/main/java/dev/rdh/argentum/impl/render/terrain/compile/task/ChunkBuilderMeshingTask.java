@@ -10,6 +10,7 @@ import org.embeddedt.embeddium.impl.render.chunk.compile.ChunkBuildContext;
 import org.embeddedt.embeddium.impl.render.chunk.compile.ChunkBuildOutput;
 import org.embeddedt.embeddium.impl.render.chunk.compile.tasks.ChunkBuilderTask;
 import org.embeddedt.embeddium.impl.render.chunk.data.BuiltSectionMeshParts;
+import org.embeddedt.embeddium.impl.render.chunk.data.SectionEmitters;
 import org.embeddedt.embeddium.impl.render.chunk.terrain.TerrainRenderPass;
 import org.embeddedt.embeddium.impl.util.task.CancellationToken;
 import org.joml.Vector3d;
@@ -70,6 +71,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 
         buildContext.beginSection(this.renderContext, minX, minY, minZ);
         ChunkOcclusionDataBuilder occluder = buildContext.getOcclusionBuilder();
+        var emitters = new SectionEmitters.Builder();
 
         try {
             for (int y = minY; y < maxY; y++) {
@@ -110,12 +112,23 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
 						if (block.isFullBlock()) {
                             occluder.markClosed(blockPos.getX(), blockPos.getY(), blockPos.getZ());
                         }
+
+                        // Emitters are collected here rather than in a pass of
+                        // their own: this loop already visits every block with a
+                        // thread-safe snapshot, and a section is re-meshed exactly
+                        // when its blocks change, so the list can never go stale.
+                        int emission = block.getLightLevel();
+                        if (emission > 0) {
+                            emitters.add(x - minX, y - minY, z - minZ, emission);
+                        }
                     }
                 }
             }
         } catch (Throwable exception) {
             throw this.addCrashContext(CrashReport.create(exception, "Encountered exception while building chunk meshes"), blockPos);
         }
+
+        renderData.emitters = emitters.build();
 
         buildContext.finishSection(buffers);
 

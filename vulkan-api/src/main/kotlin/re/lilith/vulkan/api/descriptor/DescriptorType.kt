@@ -1,5 +1,6 @@
 package re.lilith.vulkan.api.descriptor
 
+import org.lwjgl.vulkan.KHRAccelerationStructure
 import org.lwjgl.vulkan.VK10
 
 enum class DescriptorType(internal val vkValue: Int) {
@@ -14,4 +15,5 @@ enum class DescriptorType(internal val vkValue: Int) {
     UniformBufferDynamic(VK10.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC),
     StorageBufferDynamic(VK10.VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC),
     InputAttachment(VK10.VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT),
+    AccelerationStructure(KHRAccelerationStructure.VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR),
 }

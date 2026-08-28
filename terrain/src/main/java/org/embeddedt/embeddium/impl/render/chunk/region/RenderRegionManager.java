@@ -24,6 +24,24 @@ public class RenderRegionManager {
 
     private final RenderPassConfiguration<?> renderPassConfiguration;
 
+    /**
+     * Bumped whenever an uploaded mesh appears, moves or disappears.
+     * <p>
+     * A ray tracing backend cannot cheaply observe individual arena allocations,
+     * because compaction moves segments and growth replaces the buffer outright.
+     * Watching one counter and rewalking the regions when it changes is both
+     * simpler and immune to both.
+     */
+    private static volatile int geometryRevision;
+
+    public static int getGeometryRevision() {
+        return geometryRevision;
+    }
+
+    public static void invalidateGeometry() {
+        geometryRevision++;
+    }
+
     public RenderRegionManager(RenderPassConfiguration<?> renderPassConfiguration) {
         this.renderPassConfiguration = renderPassConfiguration;
     }
@@ -43,6 +61,7 @@ public class RenderRegionManager {
 
                 this.regionIds.clear(region.getId());
                 this.nextFreeId = Math.min(this.nextFreeId, region.getId());
+                invalidateGeometry();
             }
         }
     }
@@ -51,6 +70,7 @@ public class RenderRegionManager {
         for (var entry : this.createMeshUploadQueues(results)) {
             new MeshUploader(device, entry.getKey(), graphUpdateTrigger).processResults(entry.getValue());
         }
+        invalidateGeometry();
     }
 
     /* Copied from fastutil 8 as we don't have access to it when limited to fastutil 7 */

@@ -98,10 +98,34 @@ object WorldFrame {
         producing = payloads[producingIndex]
     }
 
-    fun draw(pass: PassContext) {
+    fun draw(pass: PassContext) = draw(pass, WorldPhase.VALUES)
+
+    /**
+     * Draws the sky, which writes colour but no depth and so belongs behind
+     * everything without taking part in any depth-based reasoning.
+     */
+    fun drawSky(pass: PassContext) = draw(pass, SKY_PHASES)
+
+    /**
+     * Draws solid terrain, and nothing else.
+     *
+     * These are the phases a geometry buffer is built from: their depth describes
+     * real opaque surfaces, and they are exactly the geometry the ray tracer holds
+     * in its acceleration structure.
+     */
+    fun drawTerrain(pass: PassContext) = draw(pass, TERRAIN_PHASES)
+
+    /**
+     * Draws the blended and overlaid phases, for a graph that deferred them past a
+     * pass which needed the world's own depth. They composite over the finished
+     * image the way a forward pass does.
+     */
+    fun drawForward(pass: PassContext) = draw(pass, FORWARD_PHASES)
+
+    private fun draw(pass: PassContext, phases: Array<WorldPhase>) {
         val payload = consuming
         GameFrame.record(pass) {
-            for (phase in WorldPhase.VALUES) {
+            for (phase in phases) {
                 WorldExecutor.draw(pass, payload.state, payload.submissions, phase)
             }
         }
@@ -117,4 +141,25 @@ object WorldFrame {
     }
 
     private const val PAYLOADS = 2
+
+    private val SKY_PHASES = arrayOf(WorldPhase.SKY)
+
+    // Solid terrain, and nothing else. These are the only phases whose depth
+    // describes a real opaque surface, and the only geometry the ray tracer holds
+    // in its acceleration structure. Entities are excluded for that reason: they
+    // are not traceable yet, and lighting them from a scene they do not appear in
+    // reads as a bug.
+    private val TERRAIN_PHASES = arrayOf(
+        WorldPhase.TERRAIN_SOLID,
+        WorldPhase.TERRAIN_CUTOUT_MIPPED,
+        WorldPhase.TERRAIN_CUTOUT,
+    )
+
+    // Everything that is blended, overlaid, or otherwise composites over a
+    // finished image. Occlusion queries land here too: they only test depth, and
+    // terrain depth is exactly what they are testing against.
+    private val FORWARD_PHASES = WorldPhase.VALUES
+        .filterNot(SKY_PHASES::contains)
+        .filterNot(TERRAIN_PHASES::contains)
+        .toTypedArray()
 }

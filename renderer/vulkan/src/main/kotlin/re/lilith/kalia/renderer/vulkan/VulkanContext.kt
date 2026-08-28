@@ -1,7 +1,10 @@
 package re.lilith.kalia.renderer.vulkan
 
 import org.lwjgl.vulkan.EXTMultiDraw
+import org.lwjgl.vulkan.KHRAccelerationStructure
+import org.lwjgl.vulkan.KHRDeferredHostOperations
 import org.lwjgl.vulkan.KHRDynamicRendering
+import org.lwjgl.vulkan.KHRRayQuery
 import re.lilith.kalia.renderer.device.*
 import re.lilith.kalia.renderer.vulkan.utils.Convert
 import re.lilith.vulkan.api.Vulkan
@@ -105,6 +108,8 @@ internal class VulkanContext private constructor(
                 device.config.features.descriptorBindingVariableDescriptorCount &&
                 device.config.features.shaderSampledImageArrayNonUniformIndexing &&
                 device.config.features.runtimeDescriptorArray,
+        supportsRayTracing = device.config.features.rayQuery,
+        supportsBufferAddresses = device.config.features.bufferDeviceAddress,
         validation = InstanceConfigBuilder.VALIDATION_LAYER_NAME in instance.enabledLayers,
     )
 
@@ -265,6 +270,15 @@ internal class VulkanContext private constructor(
                     if (physicalDevice.features.multiDraw) {
                         enableExtension(EXTMultiDraw.VK_EXT_MULTI_DRAW_EXTENSION_NAME)
                     }
+                    // Ray query is what the pipeline uses; the ray tracing
+                    // pipeline extension is deliberately not enabled, because
+                    // tracing happens inside ordinary fragment shaders.
+                    val rayTracing = physicalDevice.features.rayQuery && physicalDevice.features.shaderInt64
+                    if (rayTracing) {
+                        enableExtension(KHRAccelerationStructure.VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME)
+                        enableExtension(KHRDeferredHostOperations.VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME)
+                        enableExtension(KHRRayQuery.VK_KHR_RAY_QUERY_EXTENSION_NAME)
+                    }
                     val bindless = physicalDevice.features.descriptorIndexing &&
                             physicalDevice.features.descriptorBindingPartiallyBound &&
                             physicalDevice.features.descriptorBindingVariableDescriptorCount &&
@@ -287,6 +301,12 @@ internal class VulkanContext private constructor(
                         dynamicRendering = true,
                         pushDescriptors = physicalDevice.features.pushDescriptors,
                         multiDraw = physicalDevice.features.multiDraw,
+                        accelerationStructure = rayTracing,
+                        rayQuery = rayTracing,
+                        // Hit shading dereferences vertex buffers by address, so
+                        // both of these ride along with ray tracing.
+                        bufferDeviceAddress = rayTracing,
+                        shaderInt64 = rayTracing,
                     )
                 }
 

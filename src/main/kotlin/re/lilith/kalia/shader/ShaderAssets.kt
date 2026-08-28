@@ -9,9 +9,26 @@ import re.lilith.kalia.renderer.shader.ShaderSource
 object ShaderAssets {
     private val dumpDirectory = Paths.get(".kalia", "shaders", "source").apply { Files.createDirectories(this) }
 
+    /**
+     * The version every shader compiles against unless it asks for more.
+     */
+    const val DEFAULT_VERSION: Int = 450
+
+    /**
+     * Ray tracing builtins are only added to the symbol table at 460, so a shader
+     * that declares a `rayQueryEXT` has to ask for that version even though the
+     * extension itself is enabled explicitly.
+     */
+    const val RAY_TRACING_VERSION: Int = 460
+
     @JvmStatic
-    fun assemble(fileName: String, defines: List<String> = emptyList()): String = buildString {
-        appendLine("#version 450")
+    @JvmOverloads
+    fun assemble(
+        fileName: String,
+        defines: List<String> = emptyList(),
+        version: Int = DEFAULT_VERSION,
+    ): String = buildString {
+        appendLine("#version $version")
         defines.forEach { appendLine("#define $it") }
         append(resolveIncludes(readAsset(fileName)))
     }

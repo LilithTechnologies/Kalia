@@ -92,6 +92,9 @@ internal class VulkanRenderDevice(
     internal val bindlessTextures: VulkanBindlessTextures? =
         if (context.capabilities.supportsBindlessTextures) VulkanBindlessTextures(context) else null
 
+    override val rayTracing: VulkanRayTracingSupport? =
+        if (context.capabilities.supportsRayTracing) VulkanRayTracingSupport(this, context) else null
+
     private val transientTextures = TransientTexturePool(this)
     private val executor = VulkanGraphExecutor(this, transientTextures)
 
@@ -151,7 +154,7 @@ internal class VulkanRenderDevice(
         val buffer = context.allocator.createBuffer(
             BufferConfig(
                 size = description.sizeBytes,
-                usage = Convert.bufferUsage(description),
+                usage = Convert.bufferUsage(description, rayTracing = context.capabilities.supportsRayTracing),
                 sharingMode = if (families.isEmpty()) SharingMode.Exclusive else SharingMode.Concurrent,
                 queueFamilyIndices = families,
             ),
@@ -833,10 +836,18 @@ internal class VulkanRenderDevice(
         return true
     }
 
+    override fun bufferAddress(buffer: GpuBuffer): Long {
+        check(context.capabilities.supportsBufferAddresses) {
+            "This adapter does not expose buffer device addresses."
+        }
+        return (buffer as VulkanBuffer).buffer.deviceAddress
+    }
+
     override fun close() {
         context.device.waitIdle()
         VulkanPipelineCacheStore.save(runCatching { context.pipelineCache.data() }.getOrDefault(ByteArray(0)))
         transientTextures.close()
+        rayTracing?.close()
         bindlessTextures?.close()
         occlusionQueries.close()
         captureFence?.close()

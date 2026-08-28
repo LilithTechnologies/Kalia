@@ -31,7 +31,10 @@ object KaliaEngine {
         get() = (state as? State.Running)?.device
 
     var settings: DeviceSettings = DeviceSettings(
-        validation = false,
+        // Off by default because it costs performance, but a faulting GPU reports
+        // nothing more useful than a lost device without it, so it is worth being
+        // able to turn on from the launch arguments.
+        validation = java.lang.Boolean.getBoolean("kalia.validation"),
     )
         set(value) {
             field = value

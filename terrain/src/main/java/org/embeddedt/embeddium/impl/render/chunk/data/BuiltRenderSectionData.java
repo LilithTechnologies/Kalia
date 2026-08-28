@@ -13,6 +13,12 @@ public class BuiltRenderSectionData {
     public boolean hasBlockGeometry;
     public long visibilityData;
 
+    /**
+     * Light-emitting blocks in this section, for renderers that treat them as
+     * actual light sources rather than as a baked glow.
+     */
+    public SectionEmitters emitters = SectionEmitters.EMPTY;
+
     public int getVisualBitmaskForSection() {
         return this.hasBlockGeometry ? (1 << RenderVisualsService.HAS_BLOCK_GEOMETRY) : 0;
     }

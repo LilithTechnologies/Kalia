@@ -3,6 +3,7 @@ package re.lilith.kalia.frame
 import re.lilith.kalia.frame.graph.aa.AaSettings
 import re.lilith.kalia.frame.graph.aa.FxaaMode
 import re.lilith.kalia.frame.graph.aa.UpscaleMode
+import re.lilith.kalia.frame.graph.rt.RayTracingFrame
 import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.resource.GpuTexture
 import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
@@ -87,5 +88,6 @@ object GameFrameShape {
         upscaleMode = AaSettings.upscaleMode
         upscaleSharpness = AaSettings.upscaleSharpness
         worldDownscale = AaSettings.worldDownscale.coerceIn(0.1f, 1f)
+        RayTracingFrame.capture()
     }
 }

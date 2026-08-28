@@ -28,4 +28,14 @@ data class DeviceFeatureSet(
     val imagelessFramebuffer: Boolean = false,
     val pushDescriptors: Boolean = false,
     val multiDraw: Boolean = false,
+    /**
+     * Whether acceleration structures can be built and traced. Implies
+     * [bufferDeviceAddress] and `VK_KHR_deferred_host_operations`.
+     */
+    val accelerationStructure: Boolean = false,
+    /**
+     * Whether `rayQueryEXT` is usable from ordinary graphics and compute stages.
+     * Requires [accelerationStructure].
+     */
+    val rayQuery: Boolean = false,
 )

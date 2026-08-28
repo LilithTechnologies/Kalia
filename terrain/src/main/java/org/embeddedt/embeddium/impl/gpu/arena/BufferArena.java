@@ -54,8 +54,13 @@ public class BufferArena {
     }
 
     private static GpuBuffer allocateBuffer(RenderDevice device, String label, int capacity, int stride, boolean index) {
+        // Chunk geometry is what acceleration structures are built over, and what
+        // a ray hit reads back through a buffer address, so the arenas carry the
+        // ray tracing usage whenever the device can make use of it.
+        boolean rayTracing = device.getCapabilities().getSupportsRayTracing();
         return device.createBuffer(new BufferDescription(label, (long) capacity * stride, BufferUsage.STATIC,
-                /* vertex */ !index, /* index */ index, /* uniform */ false, /* indirect */ false, /* transfer */ false));
+                /* vertex */ !index, /* index */ index, /* uniform */ false, /* indirect */ false, /* transfer */ false,
+                /* rayTracingInput */ rayTracing));
     }
 
     private void resize(RenderDevice device, int newCapacity) {

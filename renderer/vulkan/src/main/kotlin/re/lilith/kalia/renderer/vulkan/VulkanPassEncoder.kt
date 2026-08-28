@@ -12,6 +12,7 @@ import re.lilith.kalia.renderer.format.IndexFormat
 import re.lilith.kalia.renderer.geometry.Color
 import re.lilith.kalia.renderer.geometry.Extent
 import re.lilith.kalia.renderer.geometry.Rect
+import re.lilith.kalia.renderer.accel.GpuAccelerationStructure
 import re.lilith.kalia.renderer.geometry.Viewport
 import re.lilith.kalia.renderer.graph.TextureHandle
 import re.lilith.kalia.renderer.pipeline.AttachmentLayout
@@ -65,6 +66,7 @@ internal class VulkanPassEncoder(private val backend: VulkanRenderDevice) : Pass
     private var pipeline: VulkanPipeline? = null
     private val boundTextures = arrayOfNulls<VulkanTexture>(MAX_BINDINGS)
     private val boundSamplers = arrayOfNulls<VulkanSampler>(MAX_BINDINGS)
+    private val boundStructures = arrayOfNulls<VulkanAccelerationStructure>(MAX_BINDINGS)
     private val boundBuffers = Array(MAX_BINDINGS) { BufferBinding() }
     private var bindingsDirty = false
     private var dynamicOffsetsDirty = false
@@ -142,6 +144,7 @@ internal class VulkanPassEncoder(private val backend: VulkanRenderDevice) : Pass
 
         boundTextures.fill(null)
         boundSamplers.fill(null)
+        boundStructures.fill(null)
         for (slot in boundBuffers) {
             slot.reset()
         }
@@ -357,6 +360,15 @@ internal class VulkanPassEncoder(private val backend: VulkanRenderDevice) : Pass
         if (boundTextures[binding] !== vulkanTexture || boundSamplers[binding] !== vulkanSampler) {
             boundTextures[binding] = vulkanTexture
             boundSamplers[binding] = vulkanSampler
+            bindingsDirty = true
+        }
+    }
+
+    override fun bindAccelerationStructure(binding: Int, structure: GpuAccelerationStructure) {
+        require(binding in 0 until MAX_BINDINGS) { "Acceleration structure binding $binding is out of range." }
+        val vulkanStructure = structure as VulkanAccelerationStructure
+        if (boundStructures[binding] !== vulkanStructure) {
+            boundStructures[binding] = vulkanStructure
             bindingsDirty = true
         }
     }
@@ -691,6 +703,9 @@ internal class VulkanPassEncoder(private val backend: VulkanRenderDevice) : Pass
                 BindingKind.TEXTURE ->
                     bindingProbe.put(index, boundTextures[slot], boundSamplers[slot], 0L, 0L)
 
+                BindingKind.ACCELERATION_STRUCTURE ->
+                    bindingProbe.put(index, boundStructures[slot], null, 0L, 0L)
+
                 // The offset moves to the bind call, so it must not take part in the descriptor identity
                 BindingKind.UNIFORM_BUFFER_DYNAMIC -> {
                     val bound = boundBuffers[slot]
@@ -814,6 +829,19 @@ internal class VulkanPassEncoder(private val backend: VulkanRenderDevice) : Pass
                                 sampler = sampler.sampler,
                             ),
                         ),
+                    )
+                }
+
+                BindingKind.ACCELERATION_STRUCTURE -> {
+                    val structure = boundStructures[binding.binding]
+                        ?: error(
+                            "Pipeline '${active.label}' expects acceleration structure '${binding.name}' " +
+                                    "at binding ${binding.binding}.",
+                        )
+                    DescriptorSetWrite.AccelerationStructureWrite(
+                        targetSet = set,
+                        binding = binding.binding,
+                        structures = listOf(structure.structure),
                     )
                 }
 
