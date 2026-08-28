@@ -14,6 +14,7 @@ import re.lilith.kalia.rendering.world.entity.ParticleSubmitter
 import re.lilith.kalia.rendering.world.entity.WeatherSubmitter
 import re.lilith.kalia.rendering.world.sky.SkySubmitter
 import re.lilith.kalia.rendering.world.terrain.TerrainSubmitter
+import re.lilith.kalia.voxel.render.SvoScene
 
 object WorldFrame {
     private val payloads = Array(PAYLOADS) { WorldFramePayload() }
@@ -74,6 +75,10 @@ object WorldFrame {
         WorldFrameTimings.end(WorldFrameTimings.WEATHER_HAND)
 
         payload.submissionCount = submissions.size
+
+        // Applies queued bricks and snapshots the octree anchor before the render thread reads it.
+        SvoScene.collect(frameState)
+        WorldFrameTimings.end(WorldFrameTimings.VOXELS)
     }
 
     fun collectTerrain() {
@@ -96,6 +101,7 @@ object WorldFrame {
         consuming = producing
         producingIndex = (producingIndex + 1) % payloads.size
         producing = payloads[producingIndex]
+        SvoScene.publish()
     }
 
     fun draw(pass: PassContext) {
@@ -109,6 +115,7 @@ object WorldFrame {
 
     fun discard() {
         payloads.forEach(WorldFramePayload::discard)
+        SvoScene.discard()
     }
 
     fun release() {

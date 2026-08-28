@@ -20,6 +20,8 @@ import re.lilith.kalia.rendering.ui.item.GuiItems
 import re.lilith.kalia.rendering.ui.pip.GuiEntityPreview
 import re.lilith.kalia.rendering.world.WorldFrame
 import re.lilith.kalia.rendering.world.WorldFrameTimings
+import re.lilith.kalia.voxel.build.VoxelizationSink
+import re.lilith.kalia.voxel.render.SvoRenderer
 import re.lilith.kalia.shader.PipelineCache
 
 object KaliaEngine {
@@ -112,6 +114,7 @@ object KaliaEngine {
 
         NametagStage.enabled = running.device.capabilities.supportsBindlessTextures
         EntityCuller.install()
+        VoxelizationSink.install()
         running.device.beginFrame()
         FrameResources.of(running.device).beginFrame(running.device.frameSlot)
         GlBridge.applyDepthBias()
@@ -184,6 +187,7 @@ object KaliaEngine {
                 GuiEntityPreview.release()
                 UI.release()
                 WorldFrame.release()
+                SvoRenderer.release()
                 FrameResources.release()
                 PipelineCache.invalidate()
                 running.device.close()

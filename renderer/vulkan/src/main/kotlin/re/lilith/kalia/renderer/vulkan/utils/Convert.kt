@@ -65,9 +65,24 @@ internal object Convert {
         VertexAttributeFormat.USHORT2_FLOAT -> Format.R16G16_UScaled
     }
 
+    /**
+     * Every aspect the image has. Correct for barriers and copies, which act on the image itself.
+     */
     fun aspect(format: TextureFormat): ImageAspect = when {
         format.isColor -> ImageAspect.Color
         format.hasStencil -> ImageAspect.Depth + ImageAspect.Stencil
+        else -> ImageAspect.Depth
+    }
+
+    /**
+     * The aspect an image *view* should expose.
+     *
+     * A view that carries both depth and stencil cannot legally be sampled, and the renderer wants
+     * to read its depth buffer from shaders. Nothing here uses stencil, so the view drops it and
+     * depth-stencil images stay perfectly usable as attachments.
+     */
+    fun viewAspect(format: TextureFormat): ImageAspect = when {
+        format.isColor -> ImageAspect.Color
         else -> ImageAspect.Depth
     }
 

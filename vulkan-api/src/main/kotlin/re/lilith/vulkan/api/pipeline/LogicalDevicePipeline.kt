@@ -32,16 +32,20 @@ internal object LogicalDevicePipelineSupport {
 }
 
 fun LogicalDevice.createShaderModule(info: ShaderModuleInfo): ShaderModule = pushStack { stack ->
-    val code = stack.malloc(info.spirv.size)
-    code.put(0, info.spirv)
+    // SPIR-V for a non-trivial shader runs well past the stack's default 64 KiB, so the payload is
+    // heap allocated. Only the small structures around it come off the stack.
+    val code = org.lwjgl.system.MemoryUtil.memAlloc(info.spirv.size).put(0, info.spirv)
+    try {
+        val createInfo = VkShaderModuleCreateInfo.calloc(stack)
+            .sType(VK10.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
+            .pCode(code)
 
-    val createInfo = VkShaderModuleCreateInfo.calloc(stack)
-        .sType(VK10.VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO)
-        .pCode(code)
-
-    val pointer = stack.mallocLong(1)
-    checkVulkanResult(VK10.vkCreateShaderModule(handle, createInfo, null, pointer), "Creating shader module")
-    register(ShaderModule(this, pointer[0], info))
+        val pointer = stack.mallocLong(1)
+        checkVulkanResult(VK10.vkCreateShaderModule(handle, createInfo, null, pointer), "Creating shader module")
+        register(ShaderModule(this, pointer[0], info))
+    } finally {
+        org.lwjgl.system.MemoryUtil.memFree(code)
+    }
 }
 
 fun LogicalDevice.createPipelineLayout(

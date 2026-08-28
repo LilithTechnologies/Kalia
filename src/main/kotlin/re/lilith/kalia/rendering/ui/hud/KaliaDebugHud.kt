@@ -16,6 +16,7 @@ import re.lilith.kalia.rendering.ui.UI
 import re.lilith.kalia.rendering.ui.text.Font
 import re.lilith.kalia.rendering.ui.text.Glyphs
 import re.lilith.kalia.rendering.world.WorldFrameTimings
+import re.lilith.kalia.voxel.VoxelDiagnostics
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -79,6 +80,7 @@ object KaliaDebugHud {
             "  graph exec ${millis(RenderStats.graphNanos / NANOS_PER_MILLI)}"
         lines += "passes ${RenderStats.passes}" +
             "  pass setup ${millis(RenderStats.passSetupNanos / NANOS_PER_MILLI)}"
+        VoxelDiagnostics.report(lines)
         lines += "ffp matrix ${FfpStats.matrixPerFrame}" +
             "  state ${FfpStats.statePerFrame}" +
             "  uniform ${FfpStats.uniformPerFrame}"

@@ -64,7 +64,7 @@ internal fun VulkanContext.createTextureResources(description: TextureDescriptio
             },
             format = Convert.format(description.format),
             subresourceRange = ImageSubresourceRange(
-                aspectMask = Convert.aspect(description.format),
+                aspectMask = Convert.viewAspect(description.format),
                 levelCount = description.mipLevels,
                 layerCount = description.layers,
             ),

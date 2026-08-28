@@ -41,7 +41,7 @@ object RenderbufferTable {
                 label = "gl/renderbuffer$boundId",
                 extent = Extent(width, height),
                 format = depthFormat(device, internalFormat),
-                sampled = false,
+                sampled = true,
                 renderTarget = true,
                 transferable = false,
             ),

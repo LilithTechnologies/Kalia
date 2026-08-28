@@ -302,7 +302,9 @@ internal class VulkanContext private constructor(
                     commandPool = device.createCommandPool(graphicsFamily.index),
                     allocator = device.createMemoryAllocator(),
                     pipelineCache = device.createPipelineCache(VulkanPipelineCacheStore.load()),
-                    depthFormat = physicalDevice.findSupportedDepthFormat(),
+                    // Depth-only, in preference to a packed depth-stencil format: nothing here
+                    // uses stencil, and shaders read the depth buffer directly.
+                    depthFormat = physicalDevice.findSupportedDepthFormat(prefer24Bit = false),
                     transferQueue = transferFamily?.let { device.queue(it.index) },
                     transferFamilyIndex = transferFamily?.index ?: -1,
                     transferCommandPool = transferFamily?.let { device.createCommandPool(it.index) },

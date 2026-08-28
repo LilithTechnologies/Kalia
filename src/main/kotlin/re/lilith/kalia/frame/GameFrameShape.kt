@@ -9,6 +9,8 @@ import re.lilith.kalia.rendering.ui.GuiBackgroundBlur
 import re.lilith.kalia.rendering.ui.item.GuiItems
 import re.lilith.kalia.rendering.ui.pip.GuiEntityPreview
 import re.lilith.kalia.rendering.world.WorldFrame
+import re.lilith.kalia.voxel.SvoSettings
+import re.lilith.kalia.voxel.render.SvoScene
 
 object GameFrameShape {
     @Volatile
@@ -71,6 +73,14 @@ object GameFrameShape {
     var worldDownscale = 1f
         private set
 
+    @Volatile
+    var svoEnabled = false
+        private set
+
+    @Volatile
+    var svoTraceScale = 1f
+        private set
+
     fun capture() {
         replaysVanilla = !GuiEntityPreview.isIdle
         worldActive = WorldFrame.isActive
@@ -87,5 +97,7 @@ object GameFrameShape {
         upscaleMode = AaSettings.upscaleMode
         upscaleSharpness = AaSettings.upscaleSharpness
         worldDownscale = AaSettings.worldDownscale.coerceIn(0.1f, 1f)
+        svoEnabled = SvoScene.isActive && SvoSettings.enabled
+        svoTraceScale = SvoSettings.traceScale
     }
 }

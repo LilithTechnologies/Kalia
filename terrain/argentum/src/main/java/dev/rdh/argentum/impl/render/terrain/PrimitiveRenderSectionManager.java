@@ -87,10 +87,24 @@ public class PrimitiveRenderSectionManager extends RenderSectionManager {
         ChunkRenderContext context = ChunkRenderContext.prepare(this.world,
                 new SectionPos(render.getChunkX(), render.getChunkY(), render.getChunkZ()), this.sectionCache);
         if (context == null) {
+            // Nothing left in the section, so whatever the voxel scene holds for it is stale.
+            VoxelizationHook.empty(render.getChunkX(), render.getChunkY(), render.getChunkZ());
             return null;
         }
 
         return new ChunkBuilderMeshingTask(render, context, frame, this.cameraPosition);
+    }
+
+    @Override
+    public void destroy() {
+        VoxelizationHook.reset();
+        super.destroy();
+    }
+
+    @Override
+    public void onSectionRemoved(int x, int y, int z) {
+        VoxelizationHook.empty(x, y, z);
+        super.onSectionRemoved(x, y, z);
     }
 
     @Override

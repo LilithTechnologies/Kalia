@@ -12,9 +12,10 @@ object WorldFrameTimings {
     const val OVERLAYS = 6
     const val PARTICLES = 7
     const val WEATHER_HAND = 8
-    const val GUI_WALK = 9
-    const val GRAPH_BUILD = 10
-    const val DEVICE_RENDER = 11
+    const val VOXELS = 9
+    const val GUI_WALK = 10
+    const val GRAPH_BUILD = 11
+    const val DEVICE_RENDER = 12
 
     const val PART_REPLAY = 0
     const val PART_WORLD_PASS = 1
@@ -31,6 +32,7 @@ object WorldFrameTimings {
         "overlays",
         "particles",
         "weather/hand",
+        "voxels",
         "gui walk",
         "graph build",
         "device render",

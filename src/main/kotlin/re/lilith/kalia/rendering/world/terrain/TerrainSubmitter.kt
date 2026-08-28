@@ -14,6 +14,9 @@ import re.lilith.kalia.rendering.world.WorldMaterial
 import re.lilith.kalia.rendering.world.WorldPhase
 import re.lilith.kalia.rendering.world.WorldSubmission
 import re.lilith.kalia.rendering.world.WorldSubmissions
+import re.lilith.kalia.voxel.SvoSettings
+import re.lilith.kalia.voxel.render.SvoRenderer
+import re.lilith.kalia.voxel.render.SvoScene
 
 object TerrainSubmitter {
     private val origin = Vector3d()
@@ -60,6 +63,18 @@ object TerrainSubmitter {
 
     fun submit(state: WorldFrameState, submissions: WorldSubmissions) {
         if (!state.active || CeleritasWorldRenderer.instanceNullable() == null) {
+            return
+        }
+
+        // Fully traced terrain replaces the chunk meshes outright: one fullscreen draw stands in
+        // for every terrain layer, and it writes depth so entities still sort against it.
+        if (SvoSettings.enabled && SvoScene.isActive) {
+            submissions.submit(
+                WorldSubmission.Custom(
+                    phase = WorldPhase.TERRAIN_SOLID,
+                    material = WorldMaterial.TERRAIN_OPAQUE,
+                ) { pass -> SvoRenderer.primary(pass) },
+            )
             return
         }
 

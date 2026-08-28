@@ -16,6 +16,9 @@ import re.lilith.kalia.rendering.ui.pip.GuiEntityPreview
 import re.lilith.kalia.rendering.world.LightMap
 import re.lilith.kalia.rendering.world.WorldFrame
 import re.lilith.kalia.rendering.world.WorldFrameTimings
+import re.lilith.kalia.voxel.SvoSettings
+import re.lilith.kalia.voxel.render.SvoPasses
+import re.lilith.kalia.voxel.render.SvoRenderer
 
 object GameFrameGraph {
     val clearColor: Color get() = GameFrameShape.clearColor
@@ -29,6 +32,11 @@ object GameFrameGraph {
         val scene = texture("scene", sceneFormat)
 
         val worldScale = GameFrameShape.worldDownscale
+
+        val svoLighting = GameFrameShape.worldActive &&
+            GameFrameShape.svoEnabled &&
+            SvoRenderer.beginFrame(device, device.surfaceExtent.scaled(worldScale * GameFrameShape.svoTraceScale))
+
         val directRender = GameFrameShape.fxaaMode == FxaaMode.OFF && worldScale == 1f
 
         val depth = depthTexture("depth", sceneDepthFormat(device))
@@ -54,11 +62,27 @@ object GameFrameGraph {
                 }
             }
 
+            // The lighting chain traces its own primary rays, so it owes the world pass nothing and
+            // runs ahead of it. The traced terrain then samples the finished result as it draws,
+            // which is the only way to light terrain without also lighting everything in front of it.
+            val lighting = if (svoLighting) {
+                SvoPasses.addLighting(
+                    builder = this,
+                    worldScale = worldScale,
+                    format = sceneFormat,
+                    lightmap = lightmap,
+                )
+            } else {
+                null
+            }
+            SvoRenderer.lighting = lighting
+
             pass("world") {
                 color(worldColorTarget, clear = clearColor)
                 depth(worldDepthTarget, clear = 1f)
                 // Keeps the lightmap pass alive and transitions it back for sampling
                 lightmap?.let(::reads)
+                lighting?.let { reads(setOf(it.light, it.geometry)) }
                 draw { WorldFrameTimings.part(WorldFrameTimings.PART_WORLD_PASS) { WorldFrame.draw(this) } }
             }
 
