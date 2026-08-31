@@ -133,6 +133,7 @@ public final class FastBlockRenderer {
             }
 
             Material selected = (view.getFlags() & ModelQuadFlags.IS_TRUSTED_SPRITE) != 0
+                    && (flags & BakedQuadGroupAnalyzer.USE_RENDER_PASS_OPTIMIZATION) != 0
                     ? this.context.selectMaterial(material, sprite) : material;
             if (sprite != null && sprite.hasMeta()) renderData.animatedSprites.add(sprite);
             this.writeQuad(view, pos, selected, orientation, buffers);

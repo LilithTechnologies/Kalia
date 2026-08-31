@@ -60,7 +60,7 @@ public class BakedQuadGroupAnalyzer {
             // may be triangulated differently from others in the stack, and that will cause z-fighting.
             int flagMask = -1;
 
-            SpriteTransparencyLevel highestSeenLevel = SpriteTransparencyLevel.OPAQUE;
+            SpriteTransparencyLevel groupLevel = null;
 
             // noinspection ForLoopReplaceableByForEach
             for (int i = 0; i < quadsSize; i++) {
@@ -76,11 +76,10 @@ public class BakedQuadGroupAnalyzer {
 
                 SpriteTransparencyLevel level = getQuadTransparencyLevel(quad);
 
-                if (level.ordinal() < highestSeenLevel.ordinal()) {
-                    // Downgrading will result in the quads being rendered in the wrong order, disable
+                if (groupLevel == null) {
+                    groupLevel = level;
+                } else if (level != groupLevel) {
                     quadRenderingFlags &= ~USE_RENDER_PASS_OPTIMIZATION;
-                } else {
-                    highestSeenLevel = level;
                 }
             }
         }

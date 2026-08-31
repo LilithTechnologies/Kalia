@@ -13,6 +13,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.imageio.ImageIO
 import kotlin.collections.iterator
+import kotlin.math.roundToInt
 
 class GlTexture(val id: Int) : AutoCloseable {
     var texture: GpuTexture? = null
@@ -85,6 +86,11 @@ class GlTexture(val id: Int) : AutoCloseable {
         }
         require(level in 0 until target.mipLevels) { "Texture $id has no mip level $level." }
 
+        val ownsMips = format == TextureFormat.BGRA8 && target.mipLevels > 1
+        if (level > 0 && ownsMips) {
+            return
+        }
+
         val converted = PixelFormats.convert(pixels, pixelFormat, pixelType, format, width * height)
 
         val levelExtent = levelExtent(target, level)
@@ -93,10 +99,13 @@ class GlTexture(val id: Int) : AutoCloseable {
         }
         if (xOffset == 0 && yOffset == 0 && width == levelExtent.width && height == levelExtent.height) {
             target.upload(converted, level)
-            return
+        } else {
+            uploadSubRectangle(target, level, levelExtent, xOffset, yOffset, width, height, converted)
         }
 
-        uploadSubRectangle(target, level, levelExtent, xOffset, yOffset, width, height, converted)
+        if (level == 0 && ownsMips) {
+            generateRegionMipmaps(target, xOffset, yOffset, width, height, converted)
+        }
     }
 
     private fun maintainShadow(
@@ -140,7 +149,82 @@ class GlTexture(val id: Int) : AutoCloseable {
     fun ensureAllocated(device: RenderDevice): GpuTexture? = materialize(device)
 
     fun generateMipmaps(device: RenderDevice) {
-        materialize(device)?.generateMipmaps()
+        val target = materialize(device) ?: return
+        if (format != TextureFormat.BGRA8 || target.mipLevels <= 1) {
+            target.generateMipmaps()
+        }
+    }
+
+    private fun generateRegionMipmaps(
+        target: GpuTexture,
+        xOffset: Int,
+        yOffset: Int,
+        width: Int,
+        height: Int,
+        level0: ByteBuffer,
+    ) {
+        var prevX = xOffset
+        var prevY = yOffset
+        var prevW = width
+        var prevH = height
+        var prevBuffer = level0
+        var prevBase = level0.position()
+        var prevStride = width
+
+        for (level in 1 until target.mipLevels) {
+            val curW = (prevW shr 1).coerceAtLeast(1)
+            val curH = (prevH shr 1).coerceAtLeast(1)
+            val curX = prevX shr 1
+            val curY = prevY shr 1
+
+            val current = ByteBuffer.allocateDirect(curW * curH * 4).order(ByteOrder.nativeOrder())
+
+            for (y in 0 until curH) {
+                val y0 = (y * 2).coerceAtMost(prevH - 1)
+                val y1 = (y * 2 + 1).coerceAtMost(prevH - 1)
+                for (x in 0 until curW) {
+                    val x0 = (x * 2).coerceAtMost(prevW - 1)
+                    val x1 = (x * 2 + 1).coerceAtMost(prevW - 1)
+
+                    val o00 = prevBase + (y0 * prevStride + x0) * 4
+                    val o10 = prevBase + (y0 * prevStride + x1) * 4
+                    val o01 = prevBase + (y1 * prevStride + x0) * 4
+                    val o11 = prevBase + (y1 * prevStride + x1) * 4
+
+                    val a00 = (prevBuffer.get(o00 + 3).toInt() and 0xFF).toFloat()
+                    val a10 = (prevBuffer.get(o10 + 3).toInt() and 0xFF).toFloat()
+                    val a01 = (prevBuffer.get(o01 + 3).toInt() and 0xFF).toFloat()
+                    val a11 = (prevBuffer.get(o11 + 3).toInt() and 0xFF).toFloat()
+                    val sumA = a00 + a10 + a01 + a11
+
+                    val outOffset = (y * curW + x) * 4
+                    for (channel in 0 until 3) {
+                        val c00 = (prevBuffer.get(o00 + channel).toInt() and 0xFF).toFloat()
+                        val c10 = (prevBuffer.get(o10 + channel).toInt() and 0xFF).toFloat()
+                        val c01 = (prevBuffer.get(o01 + channel).toInt() and 0xFF).toFloat()
+                        val c11 = (prevBuffer.get(o11 + channel).toInt() and 0xFF).toFloat()
+                        val value = if (sumA > 0f) {
+                            (c00 * a00 + c10 * a10 + c01 * a01 + c11 * a11) / sumA
+                        } else {
+                            (c00 + c10 + c01 + c11) / 4f
+                        }
+                        current.put(outOffset + channel, value.roundToInt().coerceIn(0, 255).toByte())
+                    }
+                    current.put(outOffset + 3, (sumA / 4f).roundToInt().coerceIn(0, 255).toByte())
+                }
+            }
+
+            val curLevelExtent = levelExtent(target, level)
+            uploadSubRectangle(target, level, curLevelExtent, curX, curY, curW, curH, current)
+
+            prevX = curX
+            prevY = curY
+            prevW = curW
+            prevH = curH
+            prevBuffer = current
+            prevBase = 0
+            prevStride = curW
+        }
     }
 
     fun setParameter(name: Int, value: Int) {
