@@ -21,7 +21,6 @@ java {
 repositories {
     maven(url = "https://maven.legacyfabric.net/")
     maven(url = "https://maven.cloverclient.com/releases")
-    maven(url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1")
     mavenCentral()
     exclusiveContent {
         forRepository { mavenCentral() }
