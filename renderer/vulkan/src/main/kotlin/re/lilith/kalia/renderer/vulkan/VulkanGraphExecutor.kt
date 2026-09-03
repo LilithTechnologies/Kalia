@@ -11,8 +11,6 @@ import re.lilith.vulkan.api.command.CommandRecorder
 import re.lilith.vulkan.api.debug.beginDebugLabel
 import re.lilith.vulkan.api.debug.endDebugLabel
 import re.lilith.vulkan.api.command.pipelineBarrier
-import re.lilith.vulkan.api.device.QueueSubmission
-import re.lilith.vulkan.api.device.submit
 import re.lilith.vulkan.api.rendering.RenderingAttachmentInfo
 import re.lilith.vulkan.api.rendering.RenderingInfo
 import re.lilith.vulkan.api.sync.SemaphoreWait
@@ -71,11 +69,7 @@ internal class VulkanGraphExecutor(
         target: VulkanTexture?,
     ): CommandRecorder {
         val recorded = recorder.end()
-        device.context.withQueueLock {
-            device.context.graphicsQueue.submit(
-                submissions = listOf(QueueSubmission(commandBuffers = listOf(recorded), waitSemaphores = earlyWaits)),
-            )
-        }
+        device.submitHudBoundary(frame, recorded, earlyWaits)
 
         device.hudBoundaryTarget = target
         runCatching { device.hudBoundaryHook?.onHudBoundary() }.onFailure { failure ->

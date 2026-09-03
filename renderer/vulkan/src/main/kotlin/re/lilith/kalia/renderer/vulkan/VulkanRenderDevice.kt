@@ -565,6 +565,46 @@ internal class VulkanRenderDevice(
         framePrepared = false
     }
 
+    internal fun submitHudBoundary(
+        frame: VulkanFrameSlot,
+        recorded: CommandBuffer,
+        earlyWaits: List<SemaphoreWait>,
+    ) {
+        val ownsBufferWork = !context.hasDedicatedTransfer && uploads.hasBufferWork
+        var recordedUploads: CommandBuffer? = null
+        if (uploads.hasImageWork || ownsBufferWork) {
+            frame.hudUploadCommandBuffer.reset()
+            val uploadRecorder = frame.hudUploadCommandBuffer.begin()
+            if (ownsBufferWork) {
+                uploads.flushBuffers(uploadRecorder)
+            }
+            uploads.flushImages(uploadRecorder)
+            recordedUploads = uploadRecorder.end()
+        }
+
+        val waits = if (recordedUploads == null) {
+            earlyWaits
+        } else {
+            earlyWaits + SemaphoreWait(frame.hudUploadsFinished, UPLOAD_CONSUMER_STAGES)
+        }
+
+        context.withQueueLock {
+            context.graphicsQueue.submit(
+                submissions = buildList {
+                    if (recordedUploads != null) {
+                        add(
+                            QueueSubmission(
+                                commandBuffers = listOf(recordedUploads),
+                                signalSemaphores = listOf(SemaphoreSignal(frame.hudUploadsFinished)),
+                            ),
+                        )
+                    }
+                    add(QueueSubmission(commandBuffers = listOf(recorded), waitSemaphores = waits))
+                },
+            )
+        }
+    }
+
     private fun encode(graph: RenderGraph, slot: Int): Boolean {
         val frame = frames[slot]
         insideFrame = true
@@ -852,6 +892,10 @@ internal class VulkanRenderDevice(
     }
 
     private companion object {
+        val UPLOAD_CONSUMER_STAGES = PipelineStageMask.DrawIndirect + PipelineStageMask.VertexInput +
+                PipelineStageMask.VertexShader + PipelineStageMask.FragmentShader +
+                PipelineStageMask.Transfer
+
         const val FRAMES_IN_FLIGHT = 3
         const val MAX_PUSH_CONSTANT_BYTES = 256
         const val MAX_DYNAMIC_OFFSETS = 16
