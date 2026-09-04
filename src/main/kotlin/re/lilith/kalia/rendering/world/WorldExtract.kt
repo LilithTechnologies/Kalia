@@ -13,7 +13,6 @@ import re.lilith.kalia.gl.MatrixState
 import re.lilith.kalia.mixins.access.GameRendererAccess
 import re.lilith.kalia.mixins.access.WorldRendererAccess
 import re.lilith.kalia.platform.KaliaMod
-import kotlin.math.floor
 
 object WorldExtract {
     private const val WORLD_ALPHA_CUTOUT = 0.5f
@@ -25,8 +24,6 @@ object WorldExtract {
     private const val MINIMUM_SKY_VIEW_DISTANCE = 4
 
     private const val CLOUD_LAYER_Y = 128.0
-
-    private const val CLOUD_WRAP = 2048.0
 
     private val scratch = FloatArray(3)
     private val viewProjection = Matrix4f()
@@ -193,8 +190,8 @@ object WorldExtract {
                 (ticks + tickDelta).toDouble() * 0.03
         val scrollZ = camera.prevZ + (camera.z - camera.prevZ) * tickDelta
 
-        state.cloudScrollX = wrap(scrollX)
-        state.cloudScrollZ = wrap(scrollZ)
+        state.cloudScrollX = scrollX
+        state.cloudScrollZ = scrollZ
     }
 
     private fun extractOverlays(
@@ -218,6 +215,4 @@ object WorldExtract {
                 camera.z > border.boundNorth + reach
             )
     }
-
-    private fun wrap(value: Double): Double = value - floor(value / CLOUD_WRAP) * CLOUD_WRAP
 }

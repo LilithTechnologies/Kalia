@@ -22,6 +22,8 @@ object CloudSubmitter {
 
     private const val FANCY_Z_BIAS = 0.33
 
+    private const val WRAP = 2048.0
+
     private const val BOTTOM_VISIBLE_ABOVE = -5.0f
     private const val TOP_VISIBLE_BELOW = 5.0f
 
@@ -50,8 +52,10 @@ object CloudSubmitter {
             return
         }
 
-        val scrollX = state.cloudScrollX / FANCY_SCALE
-        val scrollZ = state.cloudScrollZ / FANCY_SCALE + FANCY_Z_BIAS
+        // Vanilla divides by the cloud scale first and only then wraps, so the pattern repeats
+        // every 2048 scaled cells rather than every 2048 blocks
+        val scrollX = wrap(state.cloudScrollX / FANCY_SCALE)
+        val scrollZ = wrap(state.cloudScrollZ / FANCY_SCALE + FANCY_Z_BIAS)
 
         val textureTransform = Matrix4f().translation(
             floor(scrollX).toFloat() * FANCY_UV_SCALE,
@@ -124,8 +128,8 @@ object CloudSubmitter {
         }
 
         val textureTransform = Matrix4f().translation(
-            (state.cloudScrollX * CloudMesh.FLAT_UV_SCALE).toFloat(),
-            (state.cloudScrollZ * CloudMesh.FLAT_UV_SCALE).toFloat(),
+            (wrap(state.cloudScrollX) * CloudMesh.FLAT_UV_SCALE).toFloat(),
+            (wrap(state.cloudScrollZ) * CloudMesh.FLAT_UV_SCALE).toFloat(),
             0f,
         )
         val model = Matrix4f().translation(0f, state.cloudHeight, 0f)
@@ -175,6 +179,8 @@ object CloudSubmitter {
             ),
         )
     }
+
+    private fun wrap(value: Double): Double = value - floor(value / WRAP) * WRAP
 
     private fun resolve(): Pair<GpuTexture, GpuSampler>? {
         val device = KaliaEngine.device ?: return null
